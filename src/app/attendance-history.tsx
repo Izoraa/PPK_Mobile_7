@@ -5,11 +5,17 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import {
   CURRENT_PRAKTIKAN,
-  DUMMY_PRAKTIKAN_HISTORY,
+  DUMMY_ATTENDANCE_RECORDS,
+  getAttendanceHistoryForPraktikan,
 } from '@/features/attendance/data';
 import { AttendanceList } from '@/features/attendance/components/AttendanceList';
 
 export default function AttendanceHistoryScreen() {
+  const history = getAttendanceHistoryForPraktikan(
+    DUMMY_ATTENDANCE_RECORDS,
+    CURRENT_PRAKTIKAN.id,
+  );
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
@@ -20,7 +26,7 @@ export default function AttendanceHistoryScreen() {
           Praktikan aktif: {CURRENT_PRAKTIKAN.name} ({CURRENT_PRAKTIKAN.id})
         </ThemedText>
         <ThemedView style={styles.listContainer}>
-          <AttendanceList records={DUMMY_PRAKTIKAN_HISTORY} />
+          <AttendanceList records={history} />
         </ThemedView>
       </SafeAreaView>
     </ThemedView>

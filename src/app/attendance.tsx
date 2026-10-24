@@ -24,6 +24,8 @@ export default function AttendanceScreen() {
         </ThemedText>
 
         <Pressable
+          accessibilityLabel={hasRecords ? 'Simulasikan data presensi kosong' : 'Tampilkan data presensi dummy'}
+          accessibilityRole="button"
           onPress={() => setRecords(hasRecords ? [] : DUMMY_ATTENDANCE_RECORDS)}
           style={({ pressed }) => [styles.demoButton, pressed && styles.pressed]}>
           <ThemedText type="smallBold">

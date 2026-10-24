@@ -26,6 +26,9 @@ export const DUMMY_ATTENDANCE_RECORDS: AttendanceRecord[] = [
   },
 ];
 
-export const DUMMY_PRAKTIKAN_HISTORY = DUMMY_ATTENDANCE_RECORDS.filter(
-  (record) => record.praktikanId === CURRENT_PRAKTIKAN.id,
-);
+export function getAttendanceHistoryForPraktikan(
+  records: AttendanceRecord[],
+  praktikanId: string,
+) {
+  return records.filter((record) => record.praktikanId === praktikanId);
+}
