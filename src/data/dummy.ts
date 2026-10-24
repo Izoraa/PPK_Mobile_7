@@ -43,7 +43,7 @@ export const SESSIONS: Session[] = [
   {
     id: 'sess3',
     course: 'Jaringan Komputer',
-    room: 'Lab Jaringan',
+    room: 'Lab Jaringan Komputer',
     date: '2026-10-19',
     startTime: '13:00',
     endTime: '15:00',
@@ -56,13 +56,13 @@ export const SESSIONS: Session[] = [
     id: 'sess4',
     course: 'Pemrograman Mobile',
     room: 'Lab Komputer 1',
-    date: '2026-10-27',
+    date: '2026-10-18',
     startTime: '08:00',
     endTime: '10:00',
-    status: 'not_open',
+    status: 'closed',
     assistantId: 'ast2',
-    openedAt: null,
-    closedAt: null,
+    openedAt: '2026-10-18T01:00:00.000Z',
+    closedAt: '2026-10-18T03:00:00.000Z',
   },
   {
     id: 'sess5',
@@ -103,7 +103,7 @@ export const SESSIONS: Session[] = [
   {
     id: 'sess8',
     course: 'Jaringan Komputer',
-    room: 'Lab Jaringan',
+    room: 'Lab Jaringan Komputer',
     date: '2026-10-28',
     startTime: '10:00',
     endTime: '12:00',
@@ -134,4 +134,7 @@ export const ATTENDANCES: Attendance[] = [
   { id: 'att15', sessionId: 'sess7', studentId: 'stu5', checkedInAt: '2026-10-21T01:08:00.000Z' },
   { id: 'att16', sessionId: 'sess7', studentId: 'stu6', checkedInAt: '2026-10-21T01:16:00.000Z' },
   { id: 'att17', sessionId: 'sess7', studentId: 'stu8', checkedInAt: '2026-10-21T01:24:00.000Z' },
+  { id: 'att18', sessionId: 'sess4', studentId: 'stu2', checkedInAt: '2026-10-18T01:07:00.000Z' },
+  { id: 'att19', sessionId: 'sess4', studentId: 'stu7', checkedInAt: '2026-10-18T01:15:00.000Z' },
+  { id: 'att20', sessionId: 'sess4', studentId: 'stu8', checkedInAt: '2026-10-18T01:22:00.000Z' },
 ];

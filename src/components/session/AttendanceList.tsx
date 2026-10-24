@@ -37,6 +37,9 @@ export function AttendanceList({
           <View style={styles.row}>
             <View style={styles.textContainer}>
               <Text style={styles.name}>{student?.name ?? 'Praktikan tidak ditemukan'}</Text>
+              {student?.studentNumber && (
+                <Text style={styles.studentNumber}>NIM {student.studentNumber}</Text>
+              )}
               <Text style={styles.time}>
                 {session ? `${session.course} · ` : ''}
                 {session ? `${formatDate(session.date)} · ` : ''}
@@ -63,7 +66,7 @@ const styles = StyleSheet.create({
   row: {
     padding: spacing.md,
     borderRadius: radius.md,
-    backgroundColor: colors.card,
+    backgroundColor: '#E5E7EB',
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -74,6 +77,10 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     fontWeight: '600',
+  },
+  studentNumber: {
+    color: colors.textMuted,
+    fontSize: 14,
   },
   time: {
     color: colors.textMuted,
