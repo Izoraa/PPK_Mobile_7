@@ -27,6 +27,16 @@ export default function AppTabs() {
           renderingMode="template"
         />
       </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="attendance">
+        <NativeTabs.Trigger.Label>Presensi</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="checklist" md="checklist" />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="attendance-history">
+        <NativeTabs.Trigger.Label>Riwayat</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="clock.arrow.circlepath" md="history" />
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }
