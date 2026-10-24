@@ -1,90 +1,136 @@
-import { useEffect, useState } from 'react';
-import { useLocalSearchParams } from 'expo-router';
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import {
+  FlatList,
+  Modal,
+  Pressable,
+  SafeAreaView,
+  StyleSheet,
+  View,
+} from 'react-native';
 
 import { EmptyState } from '@/components/common/EmptyState';
 import { AttendanceList } from '@/components/session/AttendanceList';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { useApp } from '@/state/AppContext';
 import { colors, spacing } from '@/theme';
-import { formatDate } from '@/utils/format';
+import { useApp } from '@/state/AppContext';
+import { formatDate, formatTime } from '@/utils/format';
+import type { Session } from '@/types';
+
+const STATUS_LABELS: Record<Session['status'], string> = {
+  not_open: 'Belum dibuka',
+  open: 'Sedang berlangsung',
+  closed: 'Selesai',
+};
 
 export default function AttendanceScreen() {
-  const { sessions } = useApp();
-  const { sessionId: sessionIdParam } = useLocalSearchParams<{ sessionId?: string }>();
-  const requestedSessionId = Array.isArray(sessionIdParam) ? sessionIdParam[0] : sessionIdParam;
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
-    requestedSessionId ?? sessions[0]?.id ?? null,
-  );
-
-  useEffect(() => {
-    if (requestedSessionId) {
-      setSelectedSessionId(
-        sessions.some((session) => session.id === requestedSessionId)
-          ? requestedSessionId
-          : null,
-      );
-      return;
-    }
-
-    if (!selectedSessionId || !sessions.some((session) => session.id === selectedSessionId)) {
-      setSelectedSessionId(sessions[0]?.id ?? null);
-    }
-  }, [requestedSessionId, selectedSessionId, sessions]);
-
-  const selectedSession = sessions.find((session) => session.id === selectedSessionId);
+  const { sessions, getAttendancesBySession } = useApp();
+  const [selectedSession, setSelectedSession] = useState<Session | null>(null);
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ThemedText type="title" style={styles.title}>
-          Daftar Presensi
-        </ThemedText>
-        <ThemedText themeColor="textSecondary" style={styles.description}>
-          Pilih sesi untuk melihat praktikan yang sudah melakukan presensi.
-        </ThemedText>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.sessionPicker}>
-          {sessions.map((session) => {
-            const isSelected = session.id === selectedSessionId;
+        <View style={styles.header}>
+          <ThemedText style={styles.appName}>LabCheckIn</ThemedText>
+        </View>
+        <FlatList
+          data={sessions}
+          keyExtractor={(session) => session.id}
+          contentContainerStyle={styles.listContent}
+          ListHeaderComponent={
+            <View style={styles.headerContent}>
+              <ThemedText type="title" style={styles.pageTitle}>
+                Rekap Presensi
+              </ThemedText>
+              <ThemedText themeColor="textSecondary" style={styles.pageDescription}>
+                Pilih sesi untuk melihat mahasiswa yang sudah hadir.
+              </ThemedText>
+            </View>
+          }
+          ListEmptyComponent={
+            <EmptyState
+              title="Belum ada sesi"
+              message="Belum ada sesi praktikum yang tersedia untuk direkap."
+            />
+          }
+          renderItem={({ item }) => {
+            const attendanceCount = getAttendancesBySession(item.id).length;
 
             return (
               <Pressable
-                key={session.id}
                 accessibilityRole="button"
-                accessibilityState={{ selected: isSelected }}
-                onPress={() => setSelectedSessionId(session.id)}
-                style={[styles.sessionButton, isSelected && styles.selectedSessionButton]}>
-                <ThemedText type="smallBold">{session.course}</ThemedText>
-                <ThemedText themeColor="textSecondary" type="small">
-                  {formatDate(session.date)} · {session.id}
+                onPress={() => setSelectedSession(item)}
+                style={({ pressed }) => [styles.sessionCard, pressed && styles.pressed]}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.cardHeading}>
+                    <ThemedText type="subtitle" style={styles.cardText}>
+                      {item.room}
+                    </ThemedText>
+                    <ThemedText type="smallBold" style={styles.cardText}>
+                      {item.course}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.countBadge}>
+                    <ThemedText type="smallBold" style={styles.countText}>
+                      {attendanceCount}
+                    </ThemedText>
+                    <ThemedText type="small" style={styles.countLabel}>
+                      hadir
+                    </ThemedText>
+                  </View>
+                </View>
+                <ThemedText themeColor="textSecondary" style={styles.sessionInfo}>
+                  {formatDate(item.date)} · {item.startTime}–{item.endTime}
+                </ThemedText>
+                <ThemedText themeColor="textSecondary" type="small" style={styles.cardSecondaryText}>
+                  {STATUS_LABELS[item.status]} · Ketuk untuk melihat daftar mahasiswa
                 </ThemedText>
               </Pressable>
             );
-          })}
-        </ScrollView>
-
-        {selectedSession ? (
-          <View style={styles.listContainer}>
-            <ThemedText type="subtitle" style={styles.sessionTitle}>
-              {selectedSession.course}
-            </ThemedText>
-            <ThemedText themeColor="textSecondary" style={styles.sessionDetails}>
-              {formatDate(selectedSession.date)} · {selectedSession.room} · {selectedSession.id}
-            </ThemedText>
-            <AttendanceList sessionId={selectedSession.id} />
-          </View>
-        ) : (
-          <EmptyState
-            title="Sesi belum dipilih"
-            message="Pilih sesi untuk melihat daftar presensinya."
-          />
-        )}
+          }}
+        />
       </SafeAreaView>
+
+      <Modal
+        visible={selectedSession !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSelectedSession(null)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.bottomSheet}>
+            {selectedSession && (
+              <>
+                <View style={styles.sheetHeader}>
+                  <View style={styles.sheetHeading}>
+                    <ThemedText style={styles.sheetRoom}>{selectedSession.room}</ThemedText>
+                    <ThemedText style={styles.sheetCourse}>{selectedSession.course}</ThemedText>
+                    <ThemedText style={styles.sheetDetails}>
+                      {formatDate(selectedSession.date)} · {selectedSession.startTime}–{selectedSession.endTime}
+                    </ThemedText>
+                  </View>
+                  <Pressable
+                    accessibilityLabel="Tutup detail presensi"
+                    accessibilityRole="button"
+                    onPress={() => setSelectedSession(null)}
+                    style={styles.closeButton}>
+                    <ThemedText style={styles.closeButtonText}>×</ThemedText>
+                  </Pressable>
+                </View>
+                <View style={styles.sheetContent}>
+                  <ThemedText type="subtitle" style={styles.sheetListTitle}>
+                    Mahasiswa yang hadir
+                  </ThemedText>
+                  <AttendanceList
+                    sessionId={selectedSession.id}
+                    emptyTitle="Belum ada mahasiswa yang presensi"
+                    emptyMessage="Belum ada kehadiran yang tercatat pada sesi ini."
+                  />
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -92,42 +138,150 @@ export default function AttendanceScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#F3F4F6',
   },
   safeArea: {
     flex: 1,
+  },
+  listContent: {
     gap: spacing.md,
     padding: spacing.md,
+    paddingBottom: spacing.xl,
   },
-  title: {
-    fontSize: 34,
-    lineHeight: 40,
+  headerContent: {
+    paddingTop: spacing.md,
+    marginBottom: spacing.sm,
   },
-  description: {
+  header: {
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+    backgroundColor: '#25D366',
+  },
+  appName: {
+    color: '#FFFFFF',
+    fontSize: 30,
+    fontWeight: '800',
+    lineHeight: 36,
+    textAlign: 'left',
+  },
+  pageTitle: {
+    fontSize: 24,
+    lineHeight: 32,
+    textAlign: 'left',
     marginBottom: spacing.xs,
   },
-  sessionPicker: {
-    gap: spacing.sm,
-    paddingBottom: spacing.xs,
+  pageDescription: {
+    marginTop: spacing.xs,
   },
-  sessionButton: {
-    minWidth: 180,
+  sessionCard: {
     padding: spacing.md,
-    borderRadius: 12,
-    backgroundColor: colors.card,
+    borderRadius: 16,
+    backgroundColor: '#E5E7EB',
     borderWidth: 1,
     borderColor: colors.border,
+    gap: spacing.sm,
+    shadowColor: '#000000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
-  selectedSessionButton: {
-    borderColor: colors.primary,
-    backgroundColor: '#EFF6FF',
+  pressed: {
+    opacity: 0.75,
   },
-  listContainer: {
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  cardHeading: {
     flex: 1,
+    gap: spacing.xs,
   },
-  sessionTitle: {
-    marginBottom: spacing.xs,
+  cardText: {
+    color: colors.text,
   },
-  sessionDetails: {
+  countBadge: {
+    minWidth: 64,
+    alignItems: 'center',
+    borderRadius: 12,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    backgroundColor: '#E8F5EA',
+  },
+  countText: {
+    color: '#2E8B3C',
+    fontSize: 18,
+  },
+  countLabel: {
+    color: '#2E8B3C',
+  },
+  sessionInfo: {
+    color: colors.textMuted,
+    fontSize: 15,
+  },
+  cardSecondaryText: {
+    color: colors.textMuted,
+  },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+  },
+  bottomSheet: {
+    maxHeight: '82%',
+    minHeight: '45%',
+    overflow: 'hidden',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    backgroundColor: '#F3F4F6',
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    padding: spacing.lg,
+    backgroundColor: '#25D366',
+  },
+  sheetHeading: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  sheetRoom: {
+    color: '#FFFFFF',
+    fontSize: 24,
+    fontWeight: '700',
+  },
+  sheetCourse: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  sheetDetails: {
+    color: '#D6DEFA',
+    fontSize: 14,
+  },
+  closeButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 34,
+    fontWeight: '300',
+    lineHeight: 36,
+  },
+  sheetContent: {
+    flex: 1,
+    padding: spacing.md,
+  },
+  sheetListTitle: {
+    color: colors.text,
     marginBottom: spacing.sm,
   },
 });
