@@ -1,11 +1,12 @@
+import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import EmptyState from '../components/common/EmptyState';
-import StatusBadge from '../components/common/StatusBadge';
-import AttendanceList from '../components/session/AttendanceList';
-import CheckInPanel from '../components/session/CheckInPanel';
-import SessionControl from '../components/session/SessionControl';
+import { StatusBadge } from '../components/common/StatusBadge';
+import { AttendanceList } from '../components/session/AttendanceList';
+import { CheckInPanel } from '../components/session/CheckInPanel';
+import { SessionControl } from '../components/session/SessionControl';
 import { useApp } from '../state/AppContext';
 import { colors, radius, spacing } from '../theme';
 import { formatDate } from '../utils/format';
@@ -33,19 +34,21 @@ export default function SessionDetailScreen({ route, navigation }: SessionDetail
   if (!currentUser) return null;
 
   return (
-    <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.screen}>
+    <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.actions}>
           <Pressable
             accessibilityRole="button"
             onPress={returnToSchedule}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             style={({ pressed }) => [styles.button, pressed && styles.pressed]}
           >
             <Text style={styles.buttonLabel}>Kembali ke jadwal</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            onPress={switchRole}
+            onPress={() => switchRole()}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             style={({ pressed }) => [styles.button, pressed && styles.pressed]}
           >
             <Text style={styles.buttonLabel}>Ganti peran</Text>
