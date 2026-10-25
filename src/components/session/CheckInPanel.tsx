@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useState } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useApp } from '../../state/AppContext';
-import { ConfirmModal } from '../common/ConfirmModal';
 import { colors, radius, spacing } from '../../theme';
+import { CheckInError } from '../../types';
 import { formatTime } from '../../utils/format';
 import {
   CHECK_IN_ERROR_MESSAGES,
   CHECK_IN_SUCCESS_MESSAGE,
 } from '../../utils/messages';
-import { CheckInError } from '../../types';
+import { ConfirmModal } from '../common/ConfirmModal';
 
 export interface CheckInPanelProps {
   sessionId: string;
@@ -36,7 +36,7 @@ export function CheckInPanel({ sessionId }: CheckInPanelProps) {
   const session = getSession(sessionId);
 
   // Guard: no session or no current user
-  if (!session || !currentUser) {
+  if (!session || !currentUser || currentUser.role !== 'student') {
     return null;
   }
 
