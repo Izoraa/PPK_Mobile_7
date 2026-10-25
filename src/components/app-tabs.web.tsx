@@ -10,28 +10,38 @@ import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Pressable, useColorScheme, View, StyleSheet } from 'react-native';
 
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
+import { useApp } from '@/state/AppContext';
 
 import { ExternalLink } from './external-link';
 import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
 
 export default function AppTabs() {
+  const { currentUser } = useApp();
+
   return (
     <Tabs>
       <TabSlot style={{ height: '100%' }} />
       <TabList asChild>
-        <CustomTabList>
+        <CustomTabList style={!currentUser ? styles.hiddenTabList : undefined}>
           <TabTrigger name="home" href="/" asChild>
-            <TabButton iconName={{ web: 'home' }}>Home</TabButton>
-          </TabTrigger>
-          <TabTrigger name="explore" href="/explore" asChild>
-            <TabButton iconName={{ web: 'explore' }}>Explore</TabButton>
+            <TabButton hidden={!currentUser} iconName={{ web: 'home' }}>
+              Home
+            </TabButton>
           </TabTrigger>
           <TabTrigger name="attendance" href="/attendance" asChild>
-            <TabButton iconName={{ web: 'checklist' }}>Presensi</TabButton>
+            <TabButton
+              hidden={!currentUser || currentUser.role !== 'assistant'}
+              iconName={{ web: 'checklist' }}>
+              Presensi
+            </TabButton>
           </TabTrigger>
           <TabTrigger name="attendance-history" href="/attendance-history" asChild>
-            <TabButton iconName={{ web: 'history' }}>Riwayat</TabButton>
+            <TabButton
+              hidden={!currentUser || currentUser.role !== 'student'}
+              iconName={{ web: 'history' }}>
+              Riwayat
+            </TabButton>
           </TabTrigger>
         </CustomTabList>
       </TabList>
@@ -41,14 +51,17 @@ export default function AppTabs() {
 
 type TabButtonProps = TabTriggerSlotProps & {
   iconName: SymbolViewProps['name'];
+  hidden?: boolean;
 };
 
-export function TabButton({ children, isFocused, ref: _ref, iconName, ...props }: TabButtonProps) {
+export function TabButton({ children, isFocused, ref: _ref, iconName, hidden, ...props }: TabButtonProps) {
   const scheme = useColorScheme();
   const colors = Colors[scheme === 'dark' ? 'dark' : 'light'];
 
   return (
-    <Pressable {...props} style={({ pressed }) => pressed && styles.pressed}>
+    <Pressable
+      {...props}
+      style={({ pressed }) => [hidden && styles.hiddenTabButton, pressed && styles.pressed]}>
       <ThemedView
         type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
         style={styles.tabButtonView}>
@@ -65,12 +78,12 @@ export function TabButton({ children, isFocused, ref: _ref, iconName, ...props }
   );
 }
 
-export function CustomTabList(props: TabListProps) {
+export function CustomTabList({ style, ...props }: TabListProps) {
   const scheme = useColorScheme();
   const colors = Colors[scheme === 'dark' ? 'dark' : 'light'];
 
   return (
-    <View {...props} style={styles.tabListContainer}>
+    <View {...props} style={[styles.tabListContainer, style]}>
       <ThemedView type="backgroundElement" style={styles.innerContainer}>
         <ThemedText type="smallBold" style={styles.brandText}>
           Expo Starter
@@ -94,6 +107,12 @@ export function CustomTabList(props: TabListProps) {
 }
 
 const styles = StyleSheet.create({
+  hiddenTabList: {
+    display: 'none',
+  },
+  hiddenTabButton: {
+    display: 'none',
+  },
   tabListContainer: {
     position: 'absolute',
     width: '100%',
