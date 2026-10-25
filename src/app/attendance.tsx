@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Redirect } from 'expo-router';
 import {
   FlatList,
   Modal,
@@ -26,11 +25,8 @@ const STATUS_LABELS: Record<Session['status'], string> = {
 };
 
 export default function AttendanceScreen() {
-  const { currentUser, sessions, getAttendancesBySession } = useApp();
+  const { sessions, getAttendancesBySession } = useApp();
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
-
-  if (!currentUser) return <Redirect href="/" />;
-  if (currentUser.role !== 'assistant') return <Redirect href="/attendance-history" />;
 
   return (
     <ThemedView style={styles.container}>
@@ -174,7 +170,6 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   pageTitle: {
-    color: '#000000',
     fontSize: 24,
     lineHeight: 32,
     textAlign: 'left',

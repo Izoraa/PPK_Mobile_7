@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { router } from 'expo-router';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -29,8 +28,8 @@ export default function RolePickerScreen() {
 
   function confirmSelection() {
     if (selectedRole && selectedUser?.role === selectedRole) {
+      // AppProvider and RootNavigator handle the transition after selection.
       selectUser(selectedUser.id);
-      router.replace(selectedUser.role === 'student' ? '/attendance-history' : '/attendance');
     }
   }
 
