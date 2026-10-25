@@ -1,8 +1,4 @@
-<<<<<<< Updated upstream
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { colors, spacing } from '../theme';
-=======
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -11,7 +7,6 @@ import { StatusBadge } from '../components/common/StatusBadge';
 import { AttendanceList } from '../components/session/AttendanceList';
 import { CheckInPanel } from '../components/session/CheckInPanel';
 import { SessionControl } from '../components/session/SessionControl';
-
 import { useApp } from '../state/AppContext';
 import { colors, radius, spacing } from '../theme';
 import { formatDate } from '../utils/format';
@@ -32,22 +27,13 @@ export default function SessionDetailScreen({ route, navigation }: SessionDetail
   const session = typeof sessionId === 'string' ? getSession(sessionId) : undefined;
 
   function returnToSchedule() {
-    navigation.goBack();
-    navigation.navigate('Schedule');
+    if (navigation.canGoBack()) navigation.goBack();
+    else navigation.navigate('Schedule');
   }
 
   if (!currentUser) return null;
->>>>>>> Stashed changes
 
-export function SessionDetailScreen() {
-  // Stub for Maulana (SRS-03, SRS-05)
-  // This screen will mount SessionControl (Jordan), AttendanceList (Hanif), CheckInPanel (Hasta)
   return (
-<<<<<<< Updated upstream
-    <View style={styles.container}>
-      <Text style={styles.title}>SessionDetailScreen Stub</Text>
-    </View>
-=======
     <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.actions}>
@@ -102,19 +88,35 @@ export function SessionDetailScreen() {
         )}
       </ScrollView>
     </SafeAreaView>
->>>>>>> Stashed changes
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
+  screen: { flex: 1, backgroundColor: colors.background },
+  content: { flexGrow: 1, padding: spacing.md, gap: spacing.md },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  button: {
+    minHeight: spacing.xl + spacing.md,
+    justifyContent: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  buttonLabel: { color: colors.primary, fontSize: 16, fontWeight: '600' },
+  pressed: { opacity: 0.7 },
+  details: {
     padding: spacing.md,
+    gap: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.text,
-  },
+  title: { color: colors.text, fontSize: 24, fontWeight: '700', marginBottom: spacing.sm },
+  label: { color: colors.textMuted, fontSize: 14 },
+  value: { color: colors.text, fontSize: 16 },
+  times: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg },
+  time: { gap: spacing.sm },
 });

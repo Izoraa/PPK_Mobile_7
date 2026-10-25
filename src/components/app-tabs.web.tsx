@@ -6,7 +6,7 @@ import {
   TabTriggerSlotProps,
   TabListProps,
 } from 'expo-router/ui';
-import { SymbolView } from 'expo-symbols';
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Pressable, useColorScheme, View, StyleSheet } from 'react-native';
 
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
@@ -22,10 +22,16 @@ export default function AppTabs() {
       <TabList asChild>
         <CustomTabList>
           <TabTrigger name="home" href="/" asChild>
-            <TabButton>Home</TabButton>
+            <TabButton iconName={{ web: 'home' }}>Home</TabButton>
           </TabTrigger>
           <TabTrigger name="explore" href="/explore" asChild>
-            <TabButton>Explore</TabButton>
+            <TabButton iconName={{ web: 'explore' }}>Explore</TabButton>
+          </TabTrigger>
+          <TabTrigger name="attendance" href="/attendance" asChild>
+            <TabButton iconName={{ web: 'checklist' }}>Presensi</TabButton>
+          </TabTrigger>
+          <TabTrigger name="attendance-history" href="/attendance-history" asChild>
+            <TabButton iconName={{ web: 'history' }}>Riwayat</TabButton>
           </TabTrigger>
         </CustomTabList>
       </TabList>
@@ -33,12 +39,24 @@ export default function AppTabs() {
   );
 }
 
-export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
+type TabButtonProps = TabTriggerSlotProps & {
+  iconName: SymbolViewProps['name'];
+};
+
+export function TabButton({ children, isFocused, ref: _ref, iconName, ...props }: TabButtonProps) {
+  const scheme = useColorScheme();
+  const colors = Colors[scheme === 'dark' ? 'dark' : 'light'];
+
   return (
     <Pressable {...props} style={({ pressed }) => pressed && styles.pressed}>
       <ThemedView
         type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
         style={styles.tabButtonView}>
+        <SymbolView
+          name={iconName}
+          tintColor={isFocused ? colors.text : colors.textSecondary}
+          size={18}
+        />
         <ThemedText type="small" themeColor={isFocused ? 'text' : 'textSecondary'}>
           {children}
         </ThemedText>
@@ -101,6 +119,9 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   tabButtonView: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: Spacing.one,
     paddingVertical: Spacing.one,
     paddingHorizontal: Spacing.three,
     borderRadius: Spacing.three,
