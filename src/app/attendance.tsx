@@ -30,8 +30,6 @@ export default function AttendanceScreen() {
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
 
   if (!currentUser) return <Redirect href="/" />;
-  if (currentUser.role !== 'assistant') return <Redirect href="/attendance-history" />;
-
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>

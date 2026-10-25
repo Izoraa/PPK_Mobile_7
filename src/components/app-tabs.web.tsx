@@ -31,7 +31,7 @@ export default function AppTabs() {
           </TabTrigger>
           <TabTrigger name="attendance" href="/attendance" asChild>
             <TabButton
-              hidden={!currentUser || currentUser.role !== 'assistant'}
+              hidden={!currentUser}
               iconName={{ web: 'checklist' }}>
               Presensi
             </TabButton>

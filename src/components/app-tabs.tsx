@@ -25,7 +25,7 @@ export default function AppTabs() {
 
       <NativeTabs.Trigger
         name="attendance"
-        hidden={!currentUser || currentUser.role !== 'assistant'}>
+        hidden={!currentUser}>
         <NativeTabs.Trigger.Label>Presensi</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="checklist" md="checklist" />
       </NativeTabs.Trigger>
