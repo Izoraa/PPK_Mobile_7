@@ -1,5 +1,4 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { colors, spacing } from '../../theme';
 
 export interface EmptyStateProps {
@@ -35,3 +34,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
+
+export default EmptyState;

@@ -10,12 +10,13 @@ import {
 
 import { EmptyState } from '@/components/common/EmptyState';
 import { AttendanceList } from '@/components/session/AttendanceList';
+import { CheckInPanel } from '@/components/session/CheckInPanel';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { colors, spacing } from '@/theme';
 import { useApp } from '@/state/AppContext';
-import { formatDate, formatTime } from '@/utils/format';
+import { colors, spacing } from '@/theme';
 import type { Session } from '@/types';
+import { formatDate } from '@/utils/format';
 
 const STATUS_LABELS: Record<Session['status'], string> = {
   not_open: 'Belum dibuka',
@@ -117,6 +118,8 @@ export default function AttendanceScreen() {
                   </Pressable>
                 </View>
                 <View style={styles.sheetContent}>
+                  <CheckInPanel sessionId={selectedSession.id} />
+
                   <ThemedText type="subtitle" style={styles.sheetListTitle}>
                     Mahasiswa yang hadir
                   </ThemedText>
@@ -233,7 +236,7 @@ const styles = StyleSheet.create({
   },
   bottomSheet: {
     maxHeight: '82%',
-    minHeight: '45%',
+    minHeight: '82%',
     overflow: 'hidden',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
