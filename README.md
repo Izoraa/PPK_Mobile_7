@@ -1,56 +1,63 @@
-# Welcome to your Expo app 👋
+# PPK Mobile 7 – Lab Check‑In App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+## Deskripsi
+Aplikasi Expo/React Native untuk mengelola presensi praktikum di laboratorium. Menggunakan Expo Router (file‑based routing) dan Expo Dev Client (karena menggunakan modul native SDK 58 seperti @expo/ui, expo-glass-effect, react-native-worklets).
 
-## Get started
+## Fitur Utama
+- **Presensi**: menampilkan daftar sesi, jumlah mahasiswa hadir, dan detail sesi.
+- **Riwayat Presensi**: melihat histori kehadiran per sesi.
+- **Manajemen Sesi (asisten)**:
+  - Buka sesi (SRS‑06)
+  - Tutup sesi (SRS‑07)
+  - Tampilkan status terkini (SRS‑08)
+  - Konfirmasi aksi dengan modal (SRS‑09).
+- **Navigasi Tab** menggunakan `expo-router/native-tabs`.
+- **Tema**: dukungan light/dark mode, komponen UI premium (@expo/ui).
 
-1. Install dependencies
+## Prasyarat
+- Node ≥ 20
+- Bun (jika ada `bun.lock`) atau npm/yarn
+- Android Studio (emulator) atau perangkat Android dengan USB‑debugging aktif
+- Expo CLI (`npx expo`) – instal dengan `npm i -g expo-cli`
 
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
+## Instalasi
 ```bash
-npm run reset-project
+# Clone repo
+git clone https://github.com/Izoraa/PPK_Mobile_7.git
+cd PPK_Mobile_7
+
+# Install dependencies (pakai bun jika ada bun.lock)
+# bun
+bun install
+# atau npm
+npm install
 ```
 
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
+## Menjalankan (Development)
+1. **Bangun Development Build** (hanya sekali atau saat menambah native module):
+   ```bash
+   npx expo install expo-dev-client
+   npx eas build --profile development --platform android   # atau ios
+   ```
+   Install APK yang di‑download pada perangkat.
+2. **Mulai Metro Bundler dengan dev client:**
+   ```bash
+   npx expo start --dev-client
+   ```
+   Scan QR code menggunakan aplikasi dev client yang sudah ter‑install.
 
-### Other setup steps
+## Skrip NPM
+| Skrip | Keterangan |
+|------|------------|
+| `start` | `expo start` – untuk Expo Go (tidak cocok dengan native module ini) |
+| `android` | `expo start --android` – membuka di emulator/device (butuh dev client) |
+| `ios` | `expo start --ios` |
+| `web` | `expo start --web` |
+| `lint` | `expo lint` |
+| `typecheck` | `npx tsc --noEmit` |
+| `doctor` | `npx expo-doctor` |
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Menambahkan Screen Baru
+1. Buat komponen di `src/screens/YourScreen.tsx`.
+2. Buat file route di `src/app/your-screen.tsx` yang men‑export komponen tersebut.
+3. Tambahkan tab di [src/components/app-tabs.tsx](file:///d:/CODING/KULIAH/SEMESTER%205/PPK_mobile/LabCheckIn/PPK_Mobile_7/src/components/app-tabs.tsx) (atau ubah [_layout.tsx](file:///d:/CODING/KULIAH/SEMESTER%205/PPK_mobile/LabCheckIn/PPK_Mobile_7/src/app/_layout.tsx)).
