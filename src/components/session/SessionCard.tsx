@@ -1,45 +1,40 @@
-import { Pressable, StyleSheet, Text } from 'react-native';
-
+import React from 'react';
+import { Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Session } from '../../types';
 import { colors, radius, spacing } from '../../theme';
-import type { Session } from '../../types';
-import { formatDate } from '../../utils/format';
-import StatusBadge from '../common/StatusBadge';
 
 export interface SessionCardProps {
   session: Session;
-  onPress: (sessionId: string) => void;
+  onPress?: () => void;
 }
 
-export default function SessionCard({ session, onPress }: SessionCardProps) {
+export function SessionCard({ session, onPress }: SessionCardProps) {
+  // Stub for Maulana (SRS-02, SRS-05)
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityHint="Membuka detail sesi praktikum"
-      onPress={() => onPress(session.id)}
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
-    >
+    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.8}>
       <Text style={styles.course}>{session.course}</Text>
       <Text style={styles.room}>{session.room}</Text>
-      <Text style={styles.date}>{formatDate(session.date)}</Text>
-      <Text style={styles.time}>{session.startTime} – {session.endTime}</Text>
-      <StatusBadge status={session.status} />
-    </Pressable>
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    minHeight: spacing.xl + spacing.md,
+    backgroundColor: colors.card,
     padding: spacing.md,
-    gap: spacing.sm,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.card,
+    marginBottom: spacing.sm,
   },
-  pressed: { borderColor: colors.primary, backgroundColor: colors.background },
-  course: { color: colors.text, fontSize: 18, fontWeight: '700' },
-  room: { color: colors.text, fontSize: 16 },
-  date: { color: colors.textMuted, fontSize: 14 },
-  time: { color: colors.text, fontSize: 16, fontWeight: '500' },
+  course: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.text,
+  },
+  room: {
+    fontSize: 14,
+    color: colors.textMuted,
+    marginTop: spacing.xs,
+  },
 });
