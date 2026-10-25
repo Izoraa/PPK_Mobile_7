@@ -1,17 +1,16 @@
-import { Pressable, SafeAreaView, FlatList, StyleSheet, View } from 'react-native';
+import { FlatList, SafeAreaView, StyleSheet, View } from 'react-native';
 
 import { EmptyState } from '@/components/common/EmptyState';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { colors, spacing } from '@/theme';
 import { useApp } from '@/state/AppContext';
+import { colors, spacing } from '@/theme';
 import { formatDate, formatTime } from '@/utils/format';
 
 export default function AttendanceHistoryScreen() {
-  const { currentUser, users, selectUser, getAttendancesByStudent, getSession } = useApp();
-  const students = users.filter((user) => user.role === 'student');
+  const { currentUser, getAttendancesByStudent, getSession } = useApp();
   const isStudent = currentUser?.role === 'student';
-  const history = isStudent ? getAttendancesByStudent(currentUser.id) : [];
+  const history = isStudent && currentUser ? getAttendancesByStudent(currentUser.id) : [];
 
   return (
     <ThemedView style={styles.container}>
@@ -32,34 +31,7 @@ export default function AttendanceHistoryScreen() {
                 Riwayat kehadiran praktikan aktif.
               </ThemedText>
 
-              <View style={styles.userPicker}>
-                <ThemedText type="smallBold" style={styles.pickerLabel}>
-                  Praktikan aktif untuk demo
-                </ThemedText>
-                <View style={styles.userOptions}>
-                  {students.map((student) => {
-                    const isSelected = student.id === currentUser?.id;
-
-                    return (
-                      <Pressable
-                        key={student.id}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: isSelected }}
-                        onPress={() => selectUser(student.id)}
-                        style={[styles.userButton, isSelected && styles.selectedUserButton]}>
-                        <ThemedText type="smallBold" style={styles.cardText}>
-                          {student.name}
-                        </ThemedText>
-                        <ThemedText themeColor="textSecondary" type="small" style={styles.cardSecondaryText}>
-                          {student.id}
-                        </ThemedText>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {isStudent && (
+              {isStudent && currentUser && (
                 <ThemedText type="subtitle" style={styles.activeUser}>
                   {currentUser.name}
                 </ThemedText>
@@ -72,7 +44,7 @@ export default function AttendanceHistoryScreen() {
               message={
                 isStudent
                   ? 'Belum ada catatan kehadiran untuk praktikan ini.'
-                  : 'Pilih praktikan aktif untuk melihat riwayat miliknya.'
+                  : 'Silakan pilih praktikan terlebih dahulu.'
               }
             />
           }
@@ -145,29 +117,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     marginBottom: spacing.md,
   },
-  userPicker: {
-    marginBottom: spacing.lg,
-  },
-  pickerLabel: {
-    marginBottom: spacing.sm,
-  },
-  userOptions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  userButton: {
-    minWidth: 140,
-    padding: spacing.sm,
-    borderRadius: 12,
-    backgroundColor: '#E5E7EB',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  selectedUserButton: {
-    borderColor: colors.primary,
-    backgroundColor: '#EFF6FF',
-  },
   activeUser: {
     marginBottom: spacing.xs,
   },
@@ -215,8 +164,5 @@ const styles = StyleSheet.create({
   dateTime: {
     color: colors.textMuted,
     fontSize: 15,
-  },
-  cardSecondaryText: {
-    color: colors.textMuted,
   },
 });
