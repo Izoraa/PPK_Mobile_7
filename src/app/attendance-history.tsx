@@ -1,5 +1,4 @@
-import { Redirect } from 'expo-router';
-import { SafeAreaView, FlatList, StyleSheet, View } from 'react-native';
+import { Pressable, SafeAreaView, FlatList, StyleSheet, View } from 'react-native';
 
 import { EmptyState } from '@/components/common/EmptyState';
 import { ThemedText } from '@/components/themed-text';
@@ -9,12 +8,10 @@ import { useApp } from '@/state/AppContext';
 import { formatDate, formatTime } from '@/utils/format';
 
 export default function AttendanceHistoryScreen() {
-  const { currentUser, getAttendancesByStudent, getSession } = useApp();
-
-  if (!currentUser) return <Redirect href="/" />;
-  if (currentUser.role !== 'student') return <Redirect href="/attendance" />;
-
-  const history = getAttendancesByStudent(currentUser.id);
+  const { currentUser, users, selectUser, getAttendancesByStudent, getSession } = useApp();
+  const students = users.filter((user) => user.role === 'student');
+  const isStudent = currentUser?.role === 'student';
+  const history = isStudent ? getAttendancesByStudent(currentUser.id) : [];
 
   return (
     <ThemedView style={styles.container}>
@@ -35,15 +32,48 @@ export default function AttendanceHistoryScreen() {
                 Riwayat kehadiran praktikan aktif.
               </ThemedText>
 
-              <ThemedText type="subtitle" style={styles.activeUser}>
-                {currentUser.name}
-              </ThemedText>
+              <View style={styles.userPicker}>
+                <ThemedText type="smallBold" style={styles.pickerLabel}>
+                  Praktikan aktif untuk demo
+                </ThemedText>
+                <View style={styles.userOptions}>
+                  {students.map((student) => {
+                    const isSelected = student.id === currentUser?.id;
+
+                    return (
+                      <Pressable
+                        key={student.id}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isSelected }}
+                        onPress={() => selectUser(student.id)}
+                        style={[styles.userButton, isSelected && styles.selectedUserButton]}>
+                        <ThemedText type="smallBold" style={styles.cardText}>
+                          {student.name}
+                        </ThemedText>
+                        <ThemedText themeColor="textSecondary" type="small" style={styles.cardSecondaryText}>
+                          {student.id}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {isStudent && (
+                <ThemedText type="subtitle" style={styles.activeUser}>
+                  {currentUser.name}
+                </ThemedText>
+              )}
             </View>
           }
           ListEmptyComponent={
             <EmptyState
-              title="Belum ada riwayat presensi"
-              message="Belum ada catatan kehadiran untuk praktikan ini."
+              title={isStudent ? 'Belum ada riwayat presensi' : 'Praktikan belum dipilih'}
+              message={
+                isStudent
+                  ? 'Belum ada catatan kehadiran untuk praktikan ini.'
+                  : 'Pilih praktikan aktif untuk melihat riwayat miliknya.'
+              }
             />
           }
           renderItem={({ item }) => {
@@ -106,7 +136,6 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   pageTitle: {
-    color: '#000000',
     fontSize: 24,
     lineHeight: 32,
     textAlign: 'left',
@@ -116,8 +145,30 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     marginBottom: spacing.md,
   },
+  userPicker: {
+    marginBottom: spacing.lg,
+  },
+  pickerLabel: {
+    marginBottom: spacing.sm,
+  },
+  userOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  userButton: {
+    minWidth: 140,
+    padding: spacing.sm,
+    borderRadius: 12,
+    backgroundColor: '#E5E7EB',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  selectedUserButton: {
+    borderColor: colors.primary,
+    backgroundColor: '#EFF6FF',
+  },
   activeUser: {
-    color: '#000000',
     marginBottom: spacing.xs,
   },
   attendanceCard: {
@@ -164,5 +215,8 @@ const styles = StyleSheet.create({
   dateTime: {
     color: colors.textMuted,
     fontSize: 15,
+  },
+  cardSecondaryText: {
+    color: colors.textMuted,
   },
 });
