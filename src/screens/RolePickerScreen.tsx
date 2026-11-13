@@ -1,3 +1,4 @@
+import { Link } from 'expo-router';
 import { useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -94,19 +95,22 @@ export default function RolePickerScreen() {
           />
         }
         ListFooterComponent={
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !selectedUser }}
-            disabled={!selectedUser}
-            onPress={confirmSelection}
-            style={({ pressed }) => [
-              styles.confirmButton,
-              !selectedUser && styles.disabledButton,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Text style={styles.confirmLabel}>Masuk</Text>
-          </Pressable>
+          <>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !selectedUser }}
+              disabled={!selectedUser}
+              onPress={confirmSelection}
+              style={({ pressed }) => [
+                styles.confirmButton,
+                !selectedUser && styles.disabledButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.confirmLabel}>Masuk</Text>
+            </Pressable>
+            <Link href="/register" style={styles.registerLink}>Daftar akun</Link>
+          </>
         }
       />
     </SafeAreaView>
@@ -145,5 +149,6 @@ const styles = StyleSheet.create({
   },
   disabledButton: { backgroundColor: colors.neutral },
   confirmLabel: { color: colors.card, fontSize: 16, fontWeight: '700' },
+  registerLink: { color: colors.primary, fontSize: 16, padding: spacing.md, textAlign: 'center' },
   pressed: { opacity: 0.7 },
 });

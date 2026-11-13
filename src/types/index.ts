@@ -1,5 +1,11 @@
 export type Role = 'student' | 'assistant';
 
+export type AppErrorCode = 'VALIDATION_ERROR' | 'NETWORK_ERROR' | 'SERVICE_UNAVAILABLE' | 'CONFLICT';
+
+export type Result<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: { code: AppErrorCode; retryable: boolean } };
+
 export type SessionStatus = 'not_open' | 'open' | 'closed';
 
 export interface User {
