@@ -1,7 +1,8 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
+import { getFirestore, type Firestore } from 'firebase/firestore';
 
-export function getFirebaseAuth(): Auth {
+function getFirebaseApp(): FirebaseApp {
   const apiKey = process.env.EXPO_PUBLIC_FIREBASE_API_KEY?.trim();
   const authDomain = process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN?.trim();
   const projectId = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID?.trim();
@@ -11,5 +12,13 @@ export function getFirebaseAuth(): Auth {
     throw new Error('Firebase client configuration is incomplete.');
   }
 
-  return getAuth(initializeApp({ apiKey, authDomain, projectId, appId }));
+  return initializeApp({ apiKey, authDomain, projectId, appId });
+}
+
+export function getFirebaseAuth(): Auth {
+  return getAuth(getFirebaseApp());
+}
+
+export function getFirebaseFirestore(): Firestore {
+  return getFirestore(getFirebaseApp());
 }

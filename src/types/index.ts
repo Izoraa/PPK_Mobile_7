@@ -1,6 +1,12 @@
 export type Role = 'student' | 'assistant';
 
-export type AppErrorCode = 'VALIDATION_ERROR' | 'NETWORK_ERROR' | 'SERVICE_UNAVAILABLE' | 'CONFLICT';
+export type AppErrorCode =
+  | 'UNAUTHENTICATED'
+  | 'FORBIDDEN'
+  | 'VALIDATION_ERROR'
+  | 'NETWORK_ERROR'
+  | 'SERVICE_UNAVAILABLE'
+  | 'CONFLICT';
 
 export type Result<T> =
   | { ok: true; data: T }
