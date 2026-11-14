@@ -15,9 +15,44 @@ interface RegisterData {
   uid: string;
 }
 
-type LoginData =
+export type AccountIdentity =
   | { status: 'ready'; user: User }
   | { status: 'profileMissing' | 'profileIncomplete' | 'assistantPending' };
+
+async function readAccountIdentity(expectedUid: string): Promise<Result<AccountIdentity>> {
+  const profile = await getActiveProfileAccount(expectedUid);
+  if (!profile.ok) return profile;
+
+  if (profile.data.applicationUser) {
+    return { ok: true, data: { status: 'ready', user: profile.data.applicationUser } };
+  }
+
+  switch (profile.data.profileStatus) {
+    case null:
+      return { ok: true, data: { status: 'profileMissing' } };
+    case 'assistantPending':
+      return { ok: true, data: { status: 'assistantPending' } };
+    default:
+      return { ok: true, data: { status: 'profileIncomplete' } };
+  }
+}
+
+export async function restoreIdentity(): Promise<Result<AccountIdentity | { status: 'signedOut' }>> {
+  try {
+    const auth = getFirebaseAuth();
+    await auth.authStateReady();
+    const uid = auth.currentUser?.uid;
+    if (!uid) return { ok: true, data: { status: 'signedOut' } };
+
+    const result = await readAccountIdentity(uid);
+    if (!result.ok && result.error.code === 'UNAUTHENTICATED' && !auth.currentUser) {
+      return { ok: true, data: { status: 'signedOut' } };
+    }
+    return result;
+  } catch {
+    return { ok: false, error: { code: 'SERVICE_UNAVAILABLE', retryable: true } };
+  }
+}
 
 export async function register({ email, password }: EmailPasswordInput): Promise<Result<RegisterData>> {
   const normalizedEmail = email.trim();
@@ -46,7 +81,7 @@ export async function register({ email, password }: EmailPasswordInput): Promise
   }
 }
 
-export async function login({ email, password }: EmailPasswordInput): Promise<Result<LoginData>> {
+export async function login({ email, password }: EmailPasswordInput): Promise<Result<AccountIdentity>> {
   const normalizedEmail = email.trim();
   if (!normalizedEmail || !password) {
     return { ok: false, error: { code: 'VALIDATION_ERROR', retryable: false } };
@@ -54,21 +89,7 @@ export async function login({ email, password }: EmailPasswordInput): Promise<Re
 
   try {
     const { user } = await signInWithEmailAndPassword(getFirebaseAuth(), normalizedEmail, password);
-    const profile = await getActiveProfileAccount(user.uid);
-    if (!profile.ok) return profile;
-
-    if (profile.data.applicationUser) {
-      return { ok: true, data: { status: 'ready', user: profile.data.applicationUser } };
-    }
-
-    switch (profile.data.profileStatus) {
-      case null:
-        return { ok: true, data: { status: 'profileMissing' } };
-      case 'assistantPending':
-        return { ok: true, data: { status: 'assistantPending' } };
-      default:
-        return { ok: true, data: { status: 'profileIncomplete' } };
-    }
+    return await readAccountIdentity(user.uid);
   } catch (error) {
     const code = error instanceof FirebaseError ? error.code : undefined;
     switch (code) {

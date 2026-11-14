@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, useMemo, ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, useReducer, useMemo, ReactNode } from 'react';
 import { Attendance, Session, CheckInResult, User } from '../types';
 import { USERS, SESSIONS, ATTENDANCES } from '../data/dummy';
 
@@ -76,6 +76,9 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const setAuthenticatedUser = useCallback((user: User) => {
+    dispatch({ type: 'SET_AUTHENTICATED_USER', user });
+  }, []);
 
   const value = useMemo<AppContextValue>(() => {
     const getSession = (id: string) => state.sessions.find((s) => s.id === id);
@@ -88,7 +91,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       currentUser,
       sessions: state.sessions,
 
-      setAuthenticatedUser: (user) => dispatch({ type: 'SET_AUTHENTICATED_USER', user }),
+      setAuthenticatedUser,
       clearAuthenticatedUser: () => dispatch({ type: 'CLEAR_AUTHENTICATED_USER' }),
 
       openSession: (sessionId) => {
@@ -133,7 +136,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       getAttendancesByStudent: (studentId) =>
         state.attendances.filter((a) => a.studentId === studentId),
     };
-  }, [state]);
+  }, [state, setAuthenticatedUser]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

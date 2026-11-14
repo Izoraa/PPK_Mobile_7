@@ -1,6 +1,8 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app';
-import { getAuth, type Auth } from 'firebase/auth';
+import type { Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
+
+import { getPlatformAuth } from './auth';
 
 function getFirebaseApp(): FirebaseApp {
   const apiKey = process.env.EXPO_PUBLIC_FIREBASE_API_KEY?.trim();
@@ -16,7 +18,7 @@ function getFirebaseApp(): FirebaseApp {
 }
 
 export function getFirebaseAuth(): Auth {
-  return getAuth(getFirebaseApp());
+  return getPlatformAuth(getFirebaseApp());
 }
 
 export function getFirebaseFirestore(): Firestore {

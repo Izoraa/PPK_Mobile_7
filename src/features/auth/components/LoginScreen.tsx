@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { login } from '@/features/auth/authService';
+import { useAuthRestoration } from '@/providers/AuthProvider';
 import { useApp } from '@/state/AppContext';
 import { colors, radius, spacing } from '@/theme';
 import type { AppErrorCode } from '@/types';
@@ -33,11 +34,14 @@ const profileNotices = {
 
 export default function LoginScreen() {
   const { currentUser, setAuthenticatedUser } = useApp();
+  const { state: restoration } = useAuthRestoration();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [profileNotice, setProfileNotice] = useState<keyof typeof profileNotices | null>(null);
+  const [profileNotice, setProfileNotice] = useState<keyof typeof profileNotices | null>(
+    restoration.status === 'profileIncomplete' ? restoration.notice : null,
+  );
   const submissionLocked = useRef(false);
 
   async function submitLogin(): Promise<void> {
