@@ -11,6 +11,7 @@ interface State {
 
 type Action =
   | { type: 'SET_AUTHENTICATED_USER'; user: User }
+  | { type: 'CLEAR_AUTHENTICATED_USER' }
   | { type: 'OPEN_SESSION'; sessionId: string; at: string }
   | { type: 'CLOSE_SESSION'; sessionId: string; at: string }
   | { type: 'ADD_ATTENDANCE'; attendance: Attendance };
@@ -25,7 +26,9 @@ const initialState: State = {
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'SET_AUTHENTICATED_USER':
-      return { ...state, currentUser: action.user };
+      return { ...(state.currentUser?.id === action.user.id ? state : initialState), currentUser: action.user };
+    case 'CLEAR_AUTHENTICATED_USER':
+      return initialState;
     case 'OPEN_SESSION':
       return {
         ...state,
@@ -57,6 +60,7 @@ export interface AppContextValue {
   sessions: Session[];
   // actions
   setAuthenticatedUser: (user: User) => void;
+  clearAuthenticatedUser: () => void;
   openSession: (sessionId: string) => boolean; // true jika berhasil
   closeSession: (sessionId: string) => boolean; // true jika berhasil
   checkIn: (sessionId: string) => CheckInResult; // memakai currentUser
@@ -85,6 +89,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       sessions: state.sessions,
 
       setAuthenticatedUser: (user) => dispatch({ type: 'SET_AUTHENTICATED_USER', user }),
+      clearAuthenticatedUser: () => dispatch({ type: 'CLEAR_AUTHENTICATED_USER' }),
 
       openSession: (sessionId) => {
         const s = getSession(sessionId);

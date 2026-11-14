@@ -1,5 +1,5 @@
 import { FirebaseError } from 'firebase/app';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 
 import { getFirebaseAuth } from '@/lib/firebase/client';
 import type { Result, User } from '@/types';
@@ -84,5 +84,14 @@ export async function login({ email, password }: EmailPasswordInput): Promise<Re
       default:
         return { ok: false, error: { code: 'SERVICE_UNAVAILABLE', retryable: code === 'auth/too-many-requests' } };
     }
+  }
+}
+
+export async function logout(): Promise<Result<void>> {
+  try {
+    await signOut(getFirebaseAuth());
+    return { ok: true, data: undefined };
+  } catch {
+    return { ok: false, error: { code: 'SERVICE_UNAVAILABLE', retryable: true } };
   }
 }

@@ -1,3 +1,4 @@
+import { Link } from 'expo-router';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -38,6 +39,7 @@ export default function ScheduleScreen({ navigation }: ScheduleScreenProps) {
           <View style={styles.header}>
             <Text accessibilityRole="header" style={styles.title}>Jadwal praktikum</Text>
             <Text style={styles.userName}>{currentUser.name}</Text>
+            <Link href="../account" style={styles.accountLink}>Akun</Link>
           </View>
         }
         renderItem={({ item }) => (
@@ -59,5 +61,6 @@ const styles = StyleSheet.create({
   header: { gap: spacing.sm, marginBottom: spacing.lg },
   title: { color: colors.text, fontSize: 24, fontWeight: '700' },
   userName: { color: colors.textMuted, fontSize: 16 },
+  accountLink: { alignSelf: 'flex-start', color: colors.primary, fontSize: 16, paddingVertical: spacing.md },
   separator: { height: spacing.md },
 });
