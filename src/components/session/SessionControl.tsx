@@ -1,88 +1,149 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { useApp } from '../../state/AppContext';
-import { ConfirmModal } from '../common/ConfirmModal';
-import { CONFIRM_OPEN_SESSION, CONFIRM_CLOSE_SESSION } from '../../utils/messages';
-import { colors, radius, spacing } from '../../theme';
-import { formatTime } from '../../utils/format';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+
+import { ConfirmModal } from '@/components/common/ConfirmModal';
+import { CONFIRM_OPEN_SESSION, CONFIRM_CLOSE_SESSION } from '@/utils/messages';
+import { colors, radius, spacing } from '@/theme';
+import {
+  openSession as openSessionService,
+  closeSession as closeSessionService,
+  subscribeSession,
+  type SessionDoc,
+  type SessionStatus,
+} from '@/features/practicum';
 
 export interface SessionControlProps {
   sessionId: string;
+  initialSession?: SessionDoc | null;
+  onStatusChanged?: (status: SessionStatus) => void;
 }
 
 type ModalAction = 'open' | 'close' | null;
 
-export function SessionControl({ sessionId }: SessionControlProps) {
-  const { getSession, openSession, closeSession } = useApp();
-  const session = getSession(sessionId);
+export function SessionControl({ sessionId, initialSession, onStatusChanged }: SessionControlProps) {
+  const [session, setSession] = useState<SessionDoc | null>(initialSession ?? null);
   const [pendingAction, setPendingAction] = useState<ModalAction>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialSession) {
+      setSession(initialSession);
+    }
+  }, [initialSession]);
+
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const unsubscribe = subscribeSession(
+      sessionId,
+      (doc) => {
+        if (doc) {
+          setSession(doc);
+          if (onStatusChanged) onStatusChanged(doc.status);
+        }
+      },
+      (err) => console.error('Error listening to session:', err)
+    );
+
+    return () => unsubscribe();
+  }, [sessionId, onStatusChanged]);
 
   if (!session) {
     return null;
   }
 
-  const handleConfirm = () => {
-    if (pendingAction === 'open') {
-      openSession(sessionId);
-    } else if (pendingAction === 'close') {
-      closeSession(sessionId);
-    }
+  const handleConfirm = async () => {
+    const action = pendingAction;
     setPendingAction(null);
+    setErrorMsg(null);
+    setSubmitting(true);
+
+    if (action === 'open') {
+      const res = await openSessionService(sessionId);
+      if (!res.ok) {
+        setErrorMsg(res.error.message || 'Gagal membuka sesi.');
+      }
+    } else if (action === 'close') {
+      const res = await closeSessionService(sessionId);
+      if (!res.ok) {
+        setErrorMsg(res.error.message || 'Gagal menutup sesi.');
+      }
+    }
+    setSubmitting(false);
   };
 
-  const handleCancel = () => {
-    setPendingAction(null);
+  const formatTimestamp = (ts: any) => {
+    if (!ts) return '';
+    const date = ts.toDate ? ts.toDate() : new Date(ts);
+    return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
   };
 
   return (
     <View style={styles.container}>
       <Text style={styles.header}>Pengelolaan Sesi</Text>
 
-      {/* SRS-06: Tombol Buka Sesi hanya muncul saat status not_open */}
+      {errorMsg ? (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>{errorMsg}</Text>
+        </View>
+      ) : null}
+
+      {/* S2-SRS-20: Sesi not_open -> Buka Sesi */}
       {session.status === 'not_open' && (
         <View style={styles.content}>
           <Text style={styles.description}>
             Sesi praktikum belum dibuka. Buka sesi agar praktikan dapat mulai melakukan presensi.
           </Text>
           <TouchableOpacity
-            style={[styles.button, styles.openButton]}
+            style={[styles.button, styles.openButton, submitting && styles.disabledButton]}
             onPress={() => setPendingAction('open')}
+            disabled={submitting}
             activeOpacity={0.8}
           >
-            <Text style={styles.buttonText}>Buka Sesi</Text>
+            {submitting ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Text style={styles.buttonText}>Buka Sesi</Text>
+            )}
           </TouchableOpacity>
         </View>
       )}
 
-      {/* SRS-07: Tombol Tutup Sesi hanya muncul saat status open */}
+      {/* S2-SRS-20: Sesi open -> Tutup Sesi */}
       {session.status === 'open' && (
         <View style={styles.content}>
           <Text style={styles.description}>
             Sesi praktikum sedang berlangsung.
-            {session.openedAt && ` Dibuka pukul ${formatTime(session.openedAt)}.`}
+            {session.openedAt && ` Dibuka pukul ${formatTimestamp(session.openedAt)}.`}
           </Text>
           <TouchableOpacity
-            style={[styles.button, styles.closeButton]}
+            style={[styles.button, styles.closeButton, submitting && styles.disabledButton]}
             onPress={() => setPendingAction('close')}
+            disabled={submitting}
             activeOpacity={0.8}
           >
-            <Text style={styles.buttonText}>Tutup Sesi</Text>
+            {submitting ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Text style={styles.buttonText}>Tutup Sesi</Text>
+            )}
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Status closed: Tidak menampilkan tombol buka/tutup, hanya informasi */}
+      {/* S2-SRS-20: Sesi closed -> Tidak dapat dibuka kembali */}
       {session.status === 'closed' && (
         <View style={styles.closedBanner}>
           <Text style={styles.closedTitle}>Sesi Telah Ditutup</Text>
           <Text style={styles.closedDescription}>
             Kegiatan praktikum telah selesai
-            {session.closedAt && ` pada pukul ${formatTime(session.closedAt)}`}. Sesi yang telah ditutup tidak dapat dibuka kembali.
+            {session.closedAt && ` pada pukul ${formatTimestamp(session.closedAt)}`}. Sesi yang telah ditutup tidak dapat dibuka kembali.
           </Text>
         </View>
       )}
 
-      {/* SRS-09: Konfirmasi modal sebelum membuka atau menutup sesi */}
+      {/* Konfirmasi modal sebelum membuka atau menutup sesi */}
       <ConfirmModal
         visible={pendingAction !== null}
         title={
@@ -99,7 +160,7 @@ export function SessionControl({ sessionId }: SessionControlProps) {
         cancelLabel="Batal"
         isDestructive={pendingAction === 'close'}
         onConfirm={handleConfirm}
-        onCancel={handleCancel}
+        onCancel={() => setPendingAction(null)}
       />
     </View>
   );
@@ -112,29 +173,28 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
-    marginVertical: spacing.sm,
   },
   header: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.text,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
   },
   content: {
-    marginTop: spacing.xs,
+    gap: spacing.sm,
   },
   description: {
     fontSize: 14,
     color: colors.textMuted,
     lineHeight: 20,
-    marginBottom: spacing.md,
   },
   button: {
-    paddingVertical: spacing.sm + 4,
+    paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 44,
   },
   openButton: {
     backgroundColor: colors.success,
@@ -142,31 +202,44 @@ const styles = StyleSheet.create({
   closeButton: {
     backgroundColor: colors.danger,
   },
+  disabledButton: {
+    opacity: 0.6,
+  },
   buttonText: {
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '600',
   },
   closedBanner: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#FECACA',
-    borderWidth: 1,
-    borderRadius: radius.sm,
+    backgroundColor: colors.background,
     padding: spacing.md,
-    marginTop: spacing.xs,
+    borderRadius: radius.sm,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.neutral,
   },
   closedTitle: {
     fontSize: 14,
-    fontWeight: '700',
-    color: colors.danger,
-    marginBottom: 2,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   closedDescription: {
     fontSize: 13,
-    color: '#991B1B',
+    color: colors.textMuted,
     lineHeight: 18,
+  },
+  errorBox: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#F87171',
+    borderRadius: radius.sm,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  errorText: {
+    color: colors.danger,
+    fontSize: 13,
   },
 });
 
 export default SessionControl;
-
