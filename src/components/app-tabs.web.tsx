@@ -10,12 +10,15 @@ import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Pressable, useColorScheme, View, StyleSheet } from 'react-native';
 
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
+import { useApp } from '@/state/AppContext';
 
 import { ExternalLink } from './external-link';
 import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
 
 export default function AppTabs() {
+  const { currentUser } = useApp();
+
   return (
     <Tabs>
       <TabSlot style={{ height: '100%' }} />
@@ -30,9 +33,11 @@ export default function AppTabs() {
           <TabTrigger name="attendance" href="/attendance" asChild>
             <TabButton iconName={{ web: 'checklist' }}>Presensi</TabButton>
           </TabTrigger>
-          <TabTrigger name="attendance-history" href="/attendance-history" asChild>
-            <TabButton iconName={{ web: 'history' }}>Riwayat</TabButton>
-          </TabTrigger>
+          {currentUser?.role === 'student' && (
+            <TabTrigger name="attendance-history" href="/attendance-history" asChild>
+              <TabButton iconName={{ web: 'history' }}>Riwayat</TabButton>
+            </TabTrigger>
+          )}
         </CustomTabList>
       </TabList>
     </Tabs>

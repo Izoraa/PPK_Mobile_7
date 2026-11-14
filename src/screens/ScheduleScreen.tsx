@@ -1,4 +1,4 @@
-import { Link } from 'expo-router';
+import { Link, useRouter, type Href } from 'expo-router';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -9,16 +9,9 @@ import { colors, spacing } from '../theme';
 import type { Session } from '../types';
 import { EMPTY_STATE_TEXT } from '../utils/messages';
 
-// Structural props accept either role's React Navigation stack without assuming
-// a parameter-list export from the foundation navigator, which is not present yet.
-export interface ScheduleScreenProps {
-  navigation: {
-    navigate: (screen: 'SessionDetail', params: { sessionId: string }) => void;
-  };
-}
-
-export default function ScheduleScreen({ navigation }: ScheduleScreenProps) {
+export default function ScheduleScreen() {
   const { currentUser, sessions } = useApp();
+  const router = useRouter();
   const visibleSessions = sessions
     .filter((session) => currentUser && (
       currentUser.role === 'student' || session.assistantId === currentUser.id
@@ -28,6 +21,9 @@ export default function ScheduleScreen({ navigation }: ScheduleScreenProps) {
     );
 
   if (!currentUser) return null;
+  const detailPath = currentUser.role === 'assistant'
+    ? '/(assistant)/assistant/sessions/[sessionId]'
+    : '/(student)/sessions/[sessionId]';
 
   return (
     <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.screen}>
@@ -45,7 +41,7 @@ export default function ScheduleScreen({ navigation }: ScheduleScreenProps) {
         renderItem={({ item }) => (
           <SessionCard
             session={item}
-            onPress={(sessionId) => navigation.navigate('SessionDetail', { sessionId })}
+            onPress={() => router.push({ pathname: detailPath, params: { sessionId: item.id } } as Href)}
           />
         )}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
