@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { login } from '@/features/auth/authService';
+import { login, restoreIdentity } from '@/features/auth/authService';
+import { validateCredentials } from '@/features/auth/validation';
 import { useAuthRestoration } from '@/providers/AuthProvider';
 import { useApp } from '@/state/AppContext';
 import { colors, radius, spacing } from '@/theme';
@@ -29,7 +30,7 @@ const loginErrorMessages: Partial<Record<AppErrorCode, string>> = {
 const profileNotices = {
   profileMissing: 'Profil akun belum dibuat. Lengkapi profil untuk melanjutkan.',
   profileIncomplete: 'Data profil akun belum lengkap. Hubungi pengelola aplikasi.',
-  assistantPending: 'Permintaan akun asisten menunggu aktivasi. Masuk kembali setelah pengelola mengaktifkan akun.',
+  assistantPending: 'Permintaan akun asisten menunggu persetujuan pengelola. Periksa kembali status setelah disetujui.',
 };
 
 export default function LoginScreen() {
@@ -47,6 +48,12 @@ export default function LoginScreen() {
   async function submitLogin(): Promise<void> {
     if (submissionLocked.current) return;
 
+    const validationError = validateCredentials({ email, password });
+    if (validationError) {
+      setErrorMessage(validationError);
+      return;
+    }
+
     submissionLocked.current = true;
     setIsSubmitting(true);
     setErrorMessage(null);
@@ -62,6 +69,34 @@ export default function LoginScreen() {
       setProfileNotice(result.data.status);
     } else {
       setErrorMessage(loginErrorMessages[result.error.code] ?? 'Login gagal. Coba lagi nanti.');
+    }
+
+    setIsSubmitting(false);
+    submissionLocked.current = false;
+  }
+
+  async function checkActivation(): Promise<void> {
+    if (submissionLocked.current) return;
+
+    submissionLocked.current = true;
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    const result = await restoreIdentity();
+    if (result.ok) {
+      if (result.data.status === 'ready') {
+        setPassword('');
+        setAuthenticatedUser(result.data.user);
+        return;
+      }
+      if (result.data.status === 'signedOut') {
+        setProfileNotice(null);
+        setErrorMessage('Sesi sudah berakhir. Masuk kembali untuk memeriksa aktivasi.');
+      } else {
+        setProfileNotice(result.data.status);
+      }
+    } else {
+      setErrorMessage(loginErrorMessages[result.error.code] ?? 'Status aktivasi belum dapat diperiksa. Coba lagi.');
     }
 
     setIsSubmitting(false);
@@ -122,6 +157,12 @@ export default function LoginScreen() {
             <Text style={styles.submitLabel}>{isSubmitting ? 'Memeriksa akun…' : 'Masuk'}</Text>
           </Pressable>
 
+          {profileNotice === 'assistantPending' && (
+            <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={checkActivation} style={styles.link}>
+              <Text style={styles.linkLabel}>Periksa status aktivasi</Text>
+            </Pressable>
+          )}
+
           {!isSubmitting && (profileNotice === null || profileNotice === 'profileMissing') && (
             <Link href="/register" style={styles.link}>
               {profileNotice === 'profileMissing' ? 'Lengkapi profil' : 'Daftar akun'}
@@ -163,4 +204,5 @@ const styles = StyleSheet.create({
   },
   submitLabel: { color: colors.card, fontSize: 16, fontWeight: '700' },
   link: { color: colors.primary, fontSize: 16, paddingVertical: spacing.md, textAlign: 'center' },
+  linkLabel: { color: colors.primary, fontSize: 16, textAlign: 'center' },
 });

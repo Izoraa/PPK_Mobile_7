@@ -1,15 +1,11 @@
 import { FirebaseError } from 'firebase/app';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, validatePassword } from 'firebase/auth';
 
 import { getFirebaseAuth } from '@/lib/firebase/client';
 import type { Result, User } from '@/types';
 
 import { getActiveProfileAccount } from './profileService';
-
-interface EmailPasswordInput {
-  email: string;
-  password: string;
-}
+import { validateCredentials, validateRegistration, type CredentialsInput, type RegistrationCredentialsInput } from './validation';
 
 interface RegisterData {
   uid: string;
@@ -28,12 +24,10 @@ async function readAccountIdentity(expectedUid: string): Promise<Result<AccountI
   }
 
   switch (profile.data.profileStatus) {
-    case null:
-      return { ok: true, data: { status: 'profileMissing' } };
     case 'assistantPending':
       return { ok: true, data: { status: 'assistantPending' } };
     default:
-      return { ok: true, data: { status: 'profileIncomplete' } };
+      return { ok: true, data: { status: profile.data.profileExists ? 'profileIncomplete' : 'profileMissing' } };
   }
 }
 
@@ -54,14 +48,19 @@ export async function restoreIdentity(): Promise<Result<AccountIdentity | { stat
   }
 }
 
-export async function register({ email, password }: EmailPasswordInput): Promise<Result<RegisterData>> {
-  const normalizedEmail = email.trim();
-  if (!normalizedEmail || !password) {
+export async function register(input: RegistrationCredentialsInput): Promise<Result<RegisterData>> {
+  if (validateRegistration(input)) {
     return { ok: false, error: { code: 'VALIDATION_ERROR', retryable: false } };
   }
 
   try {
-    const { user } = await createUserWithEmailAndPassword(getFirebaseAuth(), normalizedEmail, password);
+    const auth = getFirebaseAuth();
+    const policy = await validatePassword(auth, input.password);
+    if (!policy.isValid) {
+      return { ok: false, error: { code: 'PASSWORD_POLICY', retryable: false } };
+    }
+
+    const { user } = await createUserWithEmailAndPassword(auth, input.email.trim(), input.password);
     return { ok: true, data: { uid: user.uid } };
   } catch (error) {
     const code = error instanceof FirebaseError ? error.code : undefined;
@@ -70,9 +69,10 @@ export async function register({ email, password }: EmailPasswordInput): Promise
       case 'auth/email-already-in-use':
         return { ok: false, error: { code: 'CONFLICT', retryable: false } };
       case 'auth/invalid-email':
+        return { ok: false, error: { code: 'VALIDATION_ERROR', retryable: false } };
       case 'auth/weak-password':
       case 'auth/password-does-not-meet-requirements':
-        return { ok: false, error: { code: 'VALIDATION_ERROR', retryable: false } };
+        return { ok: false, error: { code: 'PASSWORD_POLICY', retryable: false } };
       case 'auth/network-request-failed':
         return { ok: false, error: { code: 'NETWORK_ERROR', retryable: true } };
       default:
@@ -81,14 +81,13 @@ export async function register({ email, password }: EmailPasswordInput): Promise
   }
 }
 
-export async function login({ email, password }: EmailPasswordInput): Promise<Result<AccountIdentity>> {
-  const normalizedEmail = email.trim();
-  if (!normalizedEmail || !password) {
+export async function login(input: CredentialsInput): Promise<Result<AccountIdentity>> {
+  if (validateCredentials(input)) {
     return { ok: false, error: { code: 'VALIDATION_ERROR', retryable: false } };
   }
 
   try {
-    const { user } = await signInWithEmailAndPassword(getFirebaseAuth(), normalizedEmail, password);
+    const { user } = await signInWithEmailAndPassword(getFirebaseAuth(), input.email.trim(), input.password);
     return await readAccountIdentity(user.uid);
   } catch (error) {
     const code = error instanceof FirebaseError ? error.code : undefined;

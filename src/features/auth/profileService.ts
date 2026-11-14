@@ -2,28 +2,32 @@ import { FirebaseError } from 'firebase/app';
 import { doc, getDocFromServer, runTransaction, serverTimestamp } from 'firebase/firestore';
 
 import { getFirebaseAuth, getFirebaseFirestore } from '@/lib/firebase/client';
-import type { Result, Role, User } from '@/types';
+import type { Result, User } from '@/types';
+
+import { validateProfile, type RegistrationProfileInput } from './validation';
 
 export type ProfileStatus = 'student' | 'assistantPending' | 'assistant';
 
 interface ProfileAccount {
   uid: string;
   email: string;
+  profileExists: boolean;
   profileStatus: ProfileStatus | null;
   applicationUser: User | null;
 }
 
-interface RegistrationProfileInput {
-  name: string;
-  studentNumber: string;
-  requestedRole: Role;
-}
+function readProfileStatus(data: Record<string, unknown>, uid: string, email: string): ProfileStatus | null {
+  const { uid: profileUid, email: profileEmail, name, studentNumber, role, requestedRole } = data;
+  if (profileUid !== uid || typeof profileEmail !== 'string'
+    || profileEmail.trim().toLowerCase() !== email.toLowerCase()
+    || typeof name !== 'string' || !name.trim()) return null;
 
-function readProfileStatus(role: unknown, requestedRole: unknown): ProfileStatus {
-  if (role === 'student' && requestedRole === 'student') return 'student';
+  if (role === 'student' && requestedRole === 'student' && typeof studentNumber === 'string' && studentNumber.trim()) {
+    return 'student';
+  }
   if (role === 'student' && requestedRole === 'assistant') return 'assistantPending';
   if (role === 'assistant' && requestedRole === 'assistant') return 'assistant';
-  throw new Error('Invalid profile role.');
+  return null;
 }
 
 export async function getActiveProfileAccount(expectedUid?: string): Promise<Result<ProfileAccount>> {
@@ -40,12 +44,12 @@ export async function getActiveProfileAccount(expectedUid?: string): Promise<Res
       return { ok: false, error: { code: 'UNAUTHENTICATED', retryable: false } };
     }
 
-    const data = profile.data();
-    const profileStatus = data ? readProfileStatus(data.role, data.requestedRole) : null;
-    const name: unknown = data?.name;
-    const studentNumber: unknown = data?.studentNumber;
+    const data: Record<string, unknown> | undefined = profile.data();
+    const name = data?.name;
+    const studentNumber = data?.studentNumber;
+    const profileStatus = data ? readProfileStatus(data, user.uid, user.email) : null;
     let applicationUser: User | null = null;
-    if (data?.uid === user.uid && typeof name === 'string' && name.trim()) {
+    if (typeof name === 'string' && name.trim()) {
       if (profileStatus === 'assistant') {
         applicationUser = { id: user.uid, name, role: 'assistant' };
       } else if (profileStatus === 'student' && typeof studentNumber === 'string' && studentNumber.trim()) {
@@ -53,7 +57,10 @@ export async function getActiveProfileAccount(expectedUid?: string): Promise<Res
       }
     }
 
-    return { ok: true, data: { uid: user.uid, email: user.email, profileStatus, applicationUser } };
+    return {
+      ok: true,
+      data: { uid: user.uid, email: user.email, profileExists: profile.exists(), profileStatus, applicationUser },
+    };
   } catch (error) {
     return profileFailure(error);
   }
@@ -63,12 +70,12 @@ export async function saveRegistrationProfile(
   expectedUid: string,
   input: RegistrationProfileInput,
 ): Promise<Result<ProfileStatus>> {
+  if (validateProfile(input)) {
+    return { ok: false, error: { code: 'VALIDATION_ERROR', retryable: false } };
+  }
   const { requestedRole } = input;
   const name = input.name.trim();
   const studentNumber = requestedRole === 'student' ? input.studentNumber.trim() : null;
-  if (!name || (requestedRole !== 'student' && requestedRole !== 'assistant') || studentNumber === '') {
-    return { ok: false, error: { code: 'VALIDATION_ERROR', retryable: false } };
-  }
 
   try {
     const auth = getFirebaseAuth();
@@ -87,7 +94,10 @@ export async function saveRegistrationProfile(
       }
       const existing = snapshot.data();
       if (existing) {
-        return { ok: true, data: readProfileStatus(existing.role, existing.requestedRole) };
+        const status = readProfileStatus(existing, uid, email);
+        return status
+          ? { ok: true, data: status }
+          : { ok: false, error: { code: 'PROFILE_INCOMPLETE', retryable: false } };
       }
 
       transaction.set(profile, {
@@ -100,7 +110,7 @@ export async function saveRegistrationProfile(
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-      return { ok: true, data: readProfileStatus('student', requestedRole) };
+      return { ok: true, data: requestedRole === 'assistant' ? 'assistantPending' : 'student' };
     });
   } catch (error) {
     return profileFailure(error);

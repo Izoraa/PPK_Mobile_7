@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { register } from '@/features/auth/authService';
 import { getActiveProfileAccount, saveRegistrationProfile, type ProfileStatus } from '@/features/auth/profileService';
+import { validateProfile, validateRegistration } from '@/features/auth/validation';
 import { colors, radius, spacing } from '@/theme';
 import type { AppErrorCode, Role } from '@/types';
 
@@ -30,14 +31,16 @@ const profileStatusMessages: Record<ProfileStatus, string> = {
 };
 
 const registrationErrorMessages: Partial<Record<AppErrorCode, string>> = {
-  CONFLICT: 'Email ini sudah terdaftar. Gunakan alamat email lain.',
-  VALIDATION_ERROR: 'Masukkan email yang valid dan kata sandi yang memenuhi kebijakan proyek Firebase.',
+  CONFLICT: 'Email ini sudah terdaftar. Masuk dengan akun tersebut atau gunakan email lain.',
+  VALIDATION_ERROR: 'Periksa alamat email dan data pendaftaran, lalu coba lagi.',
+  PASSWORD_POLICY: 'Kata sandi belum memenuhi kebijakan proyek. Perbaiki kata sandi, lalu coba lagi.',
   NETWORK_ERROR: 'Koneksi bermasalah. Periksa jaringan, lalu coba lagi.',
   SERVICE_UNAVAILABLE: 'Pendaftaran belum tersedia. Coba lagi nanti.',
 };
 
 const profileErrorMessages: Partial<Record<AppErrorCode, string>> = {
   VALIDATION_ERROR: 'Isi nama lengkap dan, jika mendaftar sebagai praktikan, isi NIM.',
+  PROFILE_INCOMPLETE: 'Data profil akun belum lengkap. Hubungi pengelola aplikasi.',
   NETWORK_ERROR: 'Profil belum terkonfirmasi. Periksa jaringan, lalu coba lagi.',
   SERVICE_UNAVAILABLE: 'Penyimpanan profil belum tersedia. Coba lagi nanti.',
   UNAUTHENTICATED: 'Sesi akun sudah berakhir. Masuk kembali untuk melanjutkan profil.',
@@ -53,12 +56,14 @@ export default function RegisterScreen() {
   const [step, setStep] = useState<RegistrationStep>({ kind: 'checking' });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [name, setName] = useState('');
   const [studentNumber, setStudentNumber] = useState('');
   const [requestedRole, setRequestedRole] = useState<Role>('student');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [canRetryProfile, setCanRetryProfile] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [profileCheckAttempt, setProfileCheckAttempt] = useState(0);
   const submissionLocked = useRef(false);
 
   useEffect(() => {
@@ -67,8 +72,15 @@ export default function RegisterScreen() {
       if (!active) return;
 
       if (result.ok) {
-        const { uid, email, profileStatus } = result.data;
-        setStep(profileStatus ? { kind: 'complete', status: profileStatus } : { kind: 'profile', uid, email });
+        const { uid, email, profileExists, profileStatus, applicationUser } = result.data;
+        if (profileStatus === 'assistantPending' || (profileStatus && applicationUser)) {
+          setStep({ kind: 'complete', status: profileStatus });
+        } else if (profileExists) {
+          setErrorMessage(profileErrorMessages.PROFILE_INCOMPLETE ?? 'Hubungi pengelola aplikasi.');
+          setStep({ kind: 'unavailable' });
+        } else {
+          setStep({ kind: 'profile', uid, email });
+        }
       } else if (result.error.code === 'UNAUTHENTICATED') {
         setStep({ kind: 'credentials' });
       } else {
@@ -79,7 +91,7 @@ export default function RegisterScreen() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [profileCheckAttempt]);
 
   useEffect(() => {
     submissionLocked.current = false;
@@ -88,15 +100,24 @@ export default function RegisterScreen() {
   async function submitRegistration(): Promise<void> {
     if (submissionLocked.current || (step.kind !== 'credentials' && step.kind !== 'profile')) return;
 
+    const credentials = { email, password, passwordConfirmation };
+    const profile = { name, studentNumber, requestedRole };
+    const validationError = step.kind === 'credentials' ? validateRegistration(credentials) : validateProfile(profile);
+    if (validationError) {
+      setErrorMessage(validationError);
+      return;
+    }
+
     submissionLocked.current = true;
     setIsSubmitting(true);
     setErrorMessage(null);
 
     if (step.kind === 'credentials') {
-      const result = await register({ email, password });
+      const result = await register(credentials);
       setIsSubmitting(false);
       if (result.ok) {
         setPassword('');
+        setPasswordConfirmation('');
         setStep({ kind: 'profile', uid: result.data.uid, email: email.trim() });
         return;
       }
@@ -105,7 +126,7 @@ export default function RegisterScreen() {
       return;
     }
 
-    const result = await saveRegistrationProfile(step.uid, { name, studentNumber, requestedRole });
+    const result = await saveRegistrationProfile(step.uid, profile);
     setIsSubmitting(false);
     if (result.ok) {
       setStep({ kind: 'complete', status: result.data });
@@ -115,6 +136,12 @@ export default function RegisterScreen() {
     setErrorMessage(profileErrorMessages[result.error.code] ?? 'Profil belum dapat disimpan. Coba lagi.');
     setCanRetryProfile(result.error.retryable);
     submissionLocked.current = false;
+  }
+
+  function checkProfileAgain() {
+    setErrorMessage(null);
+    setStep({ kind: 'checking' });
+    setProfileCheckAttempt((previous) => previous + 1);
   }
 
   const profileSubmitLabel = canRetryProfile ? 'Coba simpan lagi' : 'Simpan profil';
@@ -127,7 +154,7 @@ export default function RegisterScreen() {
             {step.kind === 'profile' ? 'Lengkapi profil' : 'Daftar akun'}
           </Text>
 
-          {step.kind === 'checking' && <ActivityIndicator color={colors.primary} />}
+          {step.kind === 'checking' && <ActivityIndicator accessibilityLabel="Memeriksa profil" color={colors.primary} />}
           {step.kind === 'complete' && (
             <Text accessibilityRole="alert" style={styles.label}>
               {profileStatusMessages[step.status]}
@@ -159,11 +186,26 @@ export default function RegisterScreen() {
                   autoCorrect={false}
                   editable={!isSubmitting}
                   onChangeText={setPassword}
+                  secureTextEntry
+                  style={styles.input}
+                  value={password}
+                />
+              </View>
+
+              <View style={styles.field}>
+                <Text style={styles.label}>Konfirmasi kata sandi</Text>
+                <TextInput
+                  accessibilityLabel="Konfirmasi kata sandi"
+                  autoCapitalize="none"
+                  autoComplete="new-password"
+                  autoCorrect={false}
+                  editable={!isSubmitting}
+                  onChangeText={setPasswordConfirmation}
                   onSubmitEditing={submitRegistration}
                   returnKeyType="go"
                   secureTextEntry
                   style={styles.input}
-                  value={password}
+                  value={passwordConfirmation}
                 />
               </View>
             </>
@@ -220,6 +262,11 @@ export default function RegisterScreen() {
           )}
 
           {errorMessage && <Text accessibilityRole="alert" style={styles.error}>{errorMessage}</Text>}
+          {(step.kind === 'unavailable' || (step.kind === 'complete' && step.status === 'assistantPending')) && (
+            <Pressable accessibilityRole="button" onPress={checkProfileAgain} style={styles.submitButton}>
+              <Text style={styles.submitLabel}>Periksa status profil</Text>
+            </Pressable>
+          )}
           {(step.kind === 'credentials' || step.kind === 'profile') && (
             <Pressable
               accessibilityRole="button"
