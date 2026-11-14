@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { colors, radius, spacing } from '@/theme';
 import type { SessionStatus } from '@/types';
+import { AiSupportNotice } from './AiSupportNotice';
 import { validateLeaveReason } from '../validation';
 
 type Props = {
@@ -72,6 +73,8 @@ export function LeaveRequestForm({
 
       <Text style={styles.label}>Sesi</Text>
       <Text style={styles.session}>{sessionTitle}</Text>
+
+      <AiSupportNotice />
 
       {!sessionAcceptsLeave ? (
         <Text style={styles.error}>Izin tidak dapat diajukan untuk sesi yang sudah ditutup.</Text>
