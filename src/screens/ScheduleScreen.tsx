@@ -36,6 +36,9 @@ export default function ScheduleScreen() {
             <Text accessibilityRole="header" style={styles.title}>Jadwal praktikum</Text>
             <Text style={styles.userName}>{currentUser.name}</Text>
             <Link href="../account" style={styles.accountLink}>Akun</Link>
+            {currentUser.role === 'student' && (
+              <Link href="/(student)/leaves/index" style={styles.accountLink}>Izin saya</Link>
+            )}
           </View>
         }
         renderItem={({ item }) => (
