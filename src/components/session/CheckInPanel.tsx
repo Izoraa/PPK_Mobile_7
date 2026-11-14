@@ -1,14 +1,14 @@
 import { useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useApp } from '../../state/AppContext';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { colors, radius, spacing } from '../../theme';
-import { CheckInError } from '../../types';
 import { formatTime } from '../../utils/format';
 import {
   CHECK_IN_ERROR_MESSAGES,
   CHECK_IN_SUCCESS_MESSAGE,
 } from '../../utils/messages';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { checkIn } from '../../features/attendance/service';
+import { useAttendanceState } from '../../features/attendance/hooks';
 
 export interface CheckInPanelProps {
   sessionId: string;
@@ -26,63 +26,94 @@ export interface CheckInPanelProps {
  *           or the student has already checked in.
  */
 export function CheckInPanel({ sessionId }: CheckInPanelProps) {
-  const { getSession, checkIn, hasCheckedIn, currentUser } = useApp();
-
-  // Local state for the feedback modal
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [retryableError, setRetryableError] = useState(false);
+  const { status, session, participation, error, retry } = useAttendanceState(sessionId);
 
-  const session = getSession(sessionId);
-
-  // Guard: no session or no current user
-  if (!session || !currentUser || currentUser.role !== 'student') {
-    return null;
+  if (status === 'loading') {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.heading}>Presensi</Text>
+        <ActivityIndicator accessibilityLabel="Memuat status presensi" color={colors.primary} />
+      </View>
+    );
   }
 
-  const alreadyCheckedIn = hasCheckedIn(sessionId, currentUser.id);
+  if (status !== 'ready' || error) {
+    const message = error?.code === 'UNAUTHENTICATED'
+      ? 'Sesi login tidak tersedia. Masuk kembali untuk melakukan presensi.'
+      : error?.code === 'FORBIDDEN'
+        ? 'Akun ini tidak memiliki akses ke sesi atau belum terdaftar sebagai anggota kelas.'
+        : 'Status presensi belum dapat dimuat. Periksa koneksi lalu coba lagi.';
+    return (
+      <View style={styles.container}>
+        <Text style={styles.heading}>Presensi</Text>
+        <Text style={styles.infoBannerText}>{message}</Text>
+        {error?.retryable && (
+          <Pressable onPress={retry} style={styles.retryButton} accessibilityRole="button">
+            <Text style={styles.retryButtonText}>Coba lagi</Text>
+          </Pressable>
+        )}
+      </View>
+    );
+  }
+
+  if (!session) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.heading}>Presensi</Text>
+        <Text style={styles.infoBannerText}>Sesi tidak ditemukan.</Text>
+      </View>
+    );
+  }
+
+  const alreadyCheckedIn = participation?.kind === 'attendance';
+  const hasOtherParticipation = participation !== null && !alreadyCheckedIn;
   const isOpen = session.status === 'open';
   const isNotOpen = session.status === 'not_open';
   const isClosed = session.status === 'closed';
 
-  // Determine which info banner to show (SRS-14)
   const getInfoBanner = (): { message: string; color: string } | null => {
-    if (isNotOpen) {
-      return {
-        message: CHECK_IN_ERROR_MESSAGES.SESSION_NOT_OPEN,
-        color: colors.neutral,
-      };
+    if (alreadyCheckedIn) return { message: CHECK_IN_ERROR_MESSAGES.ALREADY_CHECKED_IN, color: colors.success };
+    if (hasOtherParticipation) {
+      return { message: 'Partisipasi untuk sesi ini sudah tercatat. Presensi tidak dapat dibuat.', color: colors.neutral };
     }
-    if (isClosed) {
-      return {
-        message: CHECK_IN_ERROR_MESSAGES.SESSION_CLOSED,
-        color: colors.danger,
-      };
-    }
-    if (isOpen && alreadyCheckedIn) {
-      return {
-        message: CHECK_IN_ERROR_MESSAGES.ALREADY_CHECKED_IN,
-        color: colors.success,
-      };
-    }
+    if (session.isArchived) return { message: 'Sesi sudah diarsipkan. Presensi tidak dapat dilakukan.', color: colors.danger };
+    if (isNotOpen) return { message: CHECK_IN_ERROR_MESSAGES.SESSION_NOT_OPEN, color: colors.neutral };
+    if (isClosed) return { message: CHECK_IN_ERROR_MESSAGES.SESSION_CLOSED, color: colors.danger };
     return null;
   };
 
-  // Handle the check-in action (SRS-10, SRS-11, SRS-12, SRS-13)
-  const handleCheckIn = () => {
-    const result = checkIn(sessionId);
+  const handleCheckIn = async () => {
+    if (!isOpen || alreadyCheckedIn || hasOtherParticipation || isSubmitting) return;
+    setIsSubmitting(true);
+    setRetryableError(false);
+    const result = await checkIn(sessionId);
 
     if (result.ok) {
-      // SRS-11 & SRS-13: success feedback with recorded time
-      const timeFormatted = formatTime(result.attendance.checkedInAt);
       setModalTitle('Presensi Berhasil');
-      setModalMessage(CHECK_IN_SUCCESS_MESSAGE(timeFormatted));
+      setModalMessage(CHECK_IN_SUCCESS_MESSAGE(formatTime(result.data.checkedInAt)));
     } else {
-      // SRS-13: failure feedback
+      const message = result.error.code === 'CONFLICT'
+        ? 'Presensi atau pengajuan untuk sesi ini sudah tercatat.'
+        : result.error.code === 'FORBIDDEN'
+          ? 'Kamu belum terdaftar sebagai anggota aktif kelas ini.'
+          : result.error.code === 'UNAUTHENTICATED'
+            ? 'Sesi login sudah berakhir. Masuk kembali untuk melanjutkan.'
+            : session.status === 'closed'
+              ? CHECK_IN_ERROR_MESSAGES.SESSION_CLOSED
+              : session.status === 'not_open'
+                ? CHECK_IN_ERROR_MESSAGES.SESSION_NOT_OPEN
+                : 'Status presensi belum dapat dipastikan. Periksa koneksi, lalu muat ulang status sebelum mencoba lagi.';
       setModalTitle('Presensi Gagal');
-      setModalMessage(CHECK_IN_ERROR_MESSAGES[result.reason as CheckInError]);
+      setModalMessage(message);
+      setRetryableError(result.error.retryable);
     }
 
+    setIsSubmitting(false);
     setModalVisible(true);
   };
 
@@ -93,7 +124,7 @@ export function CheckInPanel({ sessionId }: CheckInPanelProps) {
   const infoBanner = getInfoBanner();
 
   // Can the student press check-in? Only when session is open AND not already checked in (SRS-10, SRS-12)
-  const canCheckIn = isOpen && !alreadyCheckedIn;
+  const canCheckIn = isOpen && !session.isArchived && !alreadyCheckedIn && !hasOtherParticipation && !isSubmitting;
 
   return (
     <View style={styles.container}>
@@ -115,7 +146,7 @@ export function CheckInPanel({ sessionId }: CheckInPanelProps) {
             styles.checkInButton,
             !canCheckIn && styles.checkInButtonDisabled,
           ]}
-          onPress={handleCheckIn}
+            onPress={() => { void handleCheckIn(); }}
           disabled={!canCheckIn}
           activeOpacity={0.8}
         >
@@ -125,9 +156,22 @@ export function CheckInPanel({ sessionId }: CheckInPanelProps) {
               !canCheckIn && styles.checkInButtonTextDisabled,
             ]}
           >
-            {alreadyCheckedIn ? 'Sudah Tercatat' : 'Presensi'}
+            {isSubmitting ? 'Menyimpan...' : alreadyCheckedIn ? 'Sudah Tercatat' : 'Presensi'}
           </Text>
         </TouchableOpacity>
+      )}
+
+      {retryableError && !isSubmitting && (
+        <Pressable
+          onPress={() => {
+            setRetryableError(false);
+            retry();
+          }}
+          style={styles.retryButton}
+          accessibilityRole="button"
+        >
+          <Text style={styles.retryButtonText}>Periksa status lagi</Text>
+        </Pressable>
       )}
 
       {/* SRS-13: Feedback modal using ConfirmModal */}
@@ -188,5 +232,19 @@ const styles = StyleSheet.create({
   },
   checkInButtonTextDisabled: {
     color: colors.textMuted,
+  },
+  retryButton: {
+    alignSelf: 'flex-start',
+    marginTop: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  retryButtonText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

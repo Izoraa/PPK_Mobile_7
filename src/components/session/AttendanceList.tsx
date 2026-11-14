@@ -1,10 +1,15 @@
 import React from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 
+import { formatAttendanceTimestamp } from '@/features/attendance/format';
+import {
+  useSessionAttendance,
+  useSessionParticipationSummary,
+} from '@/features/attendance/subscriptions';
+import { colors, radius, spacing } from '../../theme';
 import { useApp } from '../../state/AppContext';
 import type { Attendance } from '../../types';
 import { formatDate, formatTime } from '../../utils/format';
-import { colors, radius, spacing } from '../../theme';
 import { EmptyState } from '../common/EmptyState';
 
 export interface AttendanceListProps {
@@ -20,7 +25,78 @@ export function AttendanceList({
   emptyTitle = 'Belum ada praktikan yang presensi',
   emptyMessage = 'Daftar kehadiran masih kosong untuk konteks ini.',
 }: AttendanceListProps) {
-  const { getAttendancesBySession, getSession, getUserById } = useApp();
+  const { currentUser, getAttendancesBySession, getSession, getUserById } = useApp();
+  const remote = useSessionAttendance(attendances ? null : sessionId ?? null);
+  const summary = useSessionParticipationSummary(
+    sessionId ?? null,
+    !attendances && currentUser?.role === 'assistant',
+  );
+
+  if (!attendances && sessionId && remote.status === 'loading') {
+    return <EmptyState title="Memuat rekap presensi" message="Mengambil data kehadiran dari server." />;
+  }
+
+  if (!attendances && sessionId && remote.status === 'error') {
+    return (
+      <View style={styles.emptyList}>
+        <EmptyState title="Rekap presensi gagal dimuat" message="Periksa koneksi atau hak akses sesi ini." />
+        {remote.error?.retryable && (
+          <Text accessibilityRole="button" onPress={remote.retry} style={styles.retryText}>
+            Coba lagi
+          </Text>
+        )}
+      </View>
+    );
+  }
+
+  if (!attendances && sessionId) {
+    return (
+      <View style={styles.remoteContainer}>
+        {currentUser?.role === 'assistant' ? (
+          <View style={styles.summary}>
+            <Text style={styles.summaryTitle}>Ringkasan sesi</Text>
+            {summary.status === 'loading' ? (
+              <Text style={styles.summaryMessage}>Memuat ringkasan...</Text>
+            ) : summary.status === 'error' ? (
+              <View>
+                <Text style={styles.summaryMessage}>Ringkasan izin belum dapat dimuat.</Text>
+                {summary.error?.retryable ? (
+                  <Text accessibilityRole="button" onPress={summary.retry} style={styles.retryText}>
+                    Coba lagi
+                  </Text>
+                ) : null}
+              </View>
+            ) : (
+              <View style={styles.summaryGrid}>
+                <Text style={styles.summaryItem}>Hadir: {summary.records[0]?.attendanceCount ?? 0}</Text>
+                <Text style={styles.summaryItem}>Izin pending: {summary.records[0]?.pendingLeaveCount ?? 0}</Text>
+                <Text style={styles.summaryItem}>Izin disetujui: {summary.records[0]?.approvedLeaveCount ?? 0}</Text>
+                <Text style={styles.summaryItem}>Izin ditolak: {summary.records[0]?.rejectedLeaveCount ?? 0}</Text>
+              </View>
+            )}
+          </View>
+        ) : null}
+        <FlatList
+          data={remote.records}
+          keyExtractor={(record) => record.id}
+          contentContainerStyle={remote.records.length === 0 ? styles.emptyList : styles.list}
+          ListEmptyComponent={<EmptyState title={emptyTitle} message={emptyMessage} />}
+          renderItem={({ item }) => (
+            <View style={styles.row}>
+              <View style={styles.textContainer}>
+                <Text style={styles.name}>{item.studentName}</Text>
+                {item.studentNumber && <Text style={styles.studentNumber}>NIM {item.studentNumber}</Text>}
+                <Text style={styles.time}>
+                  {formatAttendanceTimestamp(item.checkedInAt ?? item.createdAt ?? '')}
+                </Text>
+              </View>
+            </View>
+          )}
+        />
+      </View>
+    );
+  }
+
   const records = attendances ?? (sessionId ? getAttendancesBySession(sessionId) : []);
 
   return (
@@ -63,6 +139,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingBottom: spacing.lg,
   },
+  remoteContainer: { flex: 1 },
+  summary: {
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  summaryTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
+  summaryMessage: { color: colors.textMuted, fontSize: 14 },
+  summaryGrid: { gap: spacing.xs },
+  summaryItem: { color: colors.text, fontSize: 14 },
   row: {
     padding: spacing.md,
     borderRadius: radius.md,
@@ -85,5 +175,12 @@ const styles = StyleSheet.create({
   time: {
     color: colors.textMuted,
     fontSize: 14,
+  },
+  retryText: {
+    alignSelf: 'center',
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: spacing.sm,
   },
 });
