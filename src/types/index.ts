@@ -1,5 +1,19 @@
 export type Role = 'student' | 'assistant';
 
+export type AppErrorCode =
+  | 'UNAUTHENTICATED'
+  | 'FORBIDDEN'
+  | 'VALIDATION_ERROR'
+  | 'PASSWORD_POLICY'
+  | 'PROFILE_INCOMPLETE'
+  | 'NETWORK_ERROR'
+  | 'SERVICE_UNAVAILABLE'
+  | 'CONFLICT';
+
+export type Result<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: { code: AppErrorCode; retryable: boolean } };
+
 export type SessionStatus = 'not_open' | 'open' | 'closed';
 
 export interface User {

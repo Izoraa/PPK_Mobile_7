@@ -50,8 +50,8 @@ export default function AttendanceScreen() {
           }
           ListEmptyComponent={
             <EmptyState
-              title="Belum ada sesi"
-              message="Belum ada sesi praktikum yang tersedia untuk direkap."
+              title="Rekap presensi belum terhubung"
+              message="Sesi dan presensi belum dimuat dari server."
             />
           }
           renderItem={({ item }) => {

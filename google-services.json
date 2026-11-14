@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "920448952744",
+    "project_id": "labcheckin-58c73",
+    "storage_bucket": "labcheckin-58c73.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:920448952744:android:37fcc6f181a571bad3159d",
+        "android_client_info": {
+          "package_name": "com.izzatukhoirulfata.myapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAiHVlq1hSuDFB2PPHaWuQpfi0r5dctFf8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

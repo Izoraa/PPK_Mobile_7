@@ -1,3 +1,4 @@
+import { Redirect } from 'expo-router';
 import { FlatList, SafeAreaView, StyleSheet, View } from 'react-native';
 
 import { EmptyState } from '@/components/common/EmptyState';
@@ -9,8 +10,9 @@ import { formatDate, formatTime } from '@/utils/format';
 
 export default function AttendanceHistoryScreen() {
   const { currentUser, getAttendancesByStudent, getSession } = useApp();
-  const isStudent = currentUser?.role === 'student';
-  const history = isStudent && currentUser ? getAttendancesByStudent(currentUser.id) : [];
+  if (currentUser?.role !== 'student') return <Redirect href="/" />;
+
+  const history = getAttendancesByStudent(currentUser.id);
 
   return (
     <ThemedView style={styles.container}>
@@ -31,21 +33,15 @@ export default function AttendanceHistoryScreen() {
                 Riwayat kehadiran praktikan aktif.
               </ThemedText>
 
-              {isStudent && currentUser && (
-                <ThemedText type="subtitle" style={styles.activeUser}>
-                  {currentUser.name}
-                </ThemedText>
-              )}
+              <ThemedText type="subtitle" style={styles.activeUser}>
+                {currentUser.name}
+              </ThemedText>
             </View>
           }
           ListEmptyComponent={
             <EmptyState
-              title={isStudent ? 'Belum ada riwayat presensi' : 'Praktikan belum dipilih'}
-              message={
-                isStudent
-                  ? 'Belum ada catatan kehadiran untuk praktikan ini.'
-                  : 'Silakan pilih praktikan terlebih dahulu.'
-              }
+              title="Riwayat presensi belum terhubung"
+              message="Riwayat presensi belum dimuat dari server."
             />
           }
           renderItem={({ item }) => {

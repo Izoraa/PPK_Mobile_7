@@ -1,4 +1,4 @@
-import React from 'react';
+import { Link, useLocalSearchParams } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -11,48 +11,25 @@ import { useApp } from '../state/AppContext';
 import { colors, radius, spacing } from '../theme';
 import { formatDate } from '../utils/format';
 
-export interface SessionDetailScreenProps {
-  route: { params: { sessionId: string } };
-  navigation: {
-    canGoBack: () => boolean;
-    goBack: () => void;
-    navigate: (screen: 'Schedule') => void;
-  };
-}
-
-export default function SessionDetailScreen({ route, navigation }: SessionDetailScreenProps) {
-  const { currentUser, getSession, switchRole } = useApp();
-  // Resolve on every Context render so session controls update these details.
-  const sessionId = route?.params?.sessionId;
-  const session = typeof sessionId === 'string' ? getSession(sessionId) : undefined;
-
-  function returnToSchedule() {
-    if (navigation.canGoBack()) navigation.goBack();
-    else navigation.navigate('Schedule');
-  }
+export default function SessionDetailScreen() {
+  const { currentUser, getSession } = useApp();
+  const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
 
   if (!currentUser) return null;
+  const candidate = typeof sessionId === 'string' ? getSession(sessionId) : undefined;
+  const session = currentUser.role === 'assistant' && candidate?.assistantId !== currentUser.id
+    ? undefined
+    : candidate;
 
   return (
     <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.actions}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={returnToSchedule}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={({ pressed }) => [styles.button, pressed && styles.pressed]}
-          >
-            <Text style={styles.buttonLabel}>Kembali ke jadwal</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => switchRole()}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={({ pressed }) => [styles.button, pressed && styles.pressed]}
-          >
-            <Text style={styles.buttonLabel}>Ganti peran</Text>
-          </Pressable>
+          <Link href="/" dismissTo asChild>
+            <Pressable style={styles.button}>
+              <Text style={styles.buttonLabel}>Kembali ke jadwal</Text>
+            </Pressable>
+          </Link>
         </View>
         {!session ? (
           <EmptyState title="Sesi tidak ditemukan" message="Silakan kembali ke jadwal untuk memilih sesi yang tersedia." />
@@ -105,7 +82,6 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   buttonLabel: { color: colors.primary, fontSize: 16, fontWeight: '600' },
-  pressed: { opacity: 0.7 },
   details: {
     padding: spacing.md,
     gap: spacing.sm,

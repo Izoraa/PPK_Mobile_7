@@ -1,34 +1,31 @@
-import React, { createContext, useContext, useReducer, useMemo, ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, useReducer, useMemo, ReactNode } from 'react';
 import { Attendance, Session, CheckInResult, User } from '../types';
-import { USERS, SESSIONS, ATTENDANCES } from '../data/dummy';
 
 interface State {
-  users: User[];
   sessions: Session[];
   attendances: Attendance[];
-  currentUserId: string | null;
+  currentUser: User | null;
 }
 
 type Action =
-  | { type: 'SELECT_USER'; userId: string }
-  | { type: 'SWITCH_ROLE' }
+  | { type: 'SET_AUTHENTICATED_USER'; user: User }
+  | { type: 'CLEAR_AUTHENTICATED_USER' }
   | { type: 'OPEN_SESSION'; sessionId: string; at: string }
   | { type: 'CLOSE_SESSION'; sessionId: string; at: string }
   | { type: 'ADD_ATTENDANCE'; attendance: Attendance };
 
 const initialState: State = {
-  users: USERS,
-  sessions: SESSIONS,
-  attendances: ATTENDANCES,
-  currentUserId: null,
+  sessions: [],
+  attendances: [],
+  currentUser: null,
 };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
-    case 'SELECT_USER':
-      return { ...state, currentUserId: action.userId };
-    case 'SWITCH_ROLE':
-      return { ...state, currentUserId: null };
+    case 'SET_AUTHENTICATED_USER':
+      return { ...(state.currentUser?.id === action.user.id ? state : initialState), currentUser: action.user };
+    case 'CLEAR_AUTHENTICATED_USER':
+      return initialState;
     case 'OPEN_SESSION':
       return {
         ...state,
@@ -57,11 +54,10 @@ function reducer(state: State, action: Action): State {
 export interface AppContextValue {
   // data
   currentUser: User | null;
-  users: User[];
   sessions: Session[];
   // actions
-  selectUser: (userId: string) => void;
-  switchRole: () => void; // kembali ke RolePicker tanpa reset data
+  setAuthenticatedUser: (user: User) => void;
+  clearAuthenticatedUser: () => void;
   openSession: (sessionId: string) => boolean; // true jika berhasil
   closeSession: (sessionId: string) => boolean; // true jika berhasil
   checkIn: (sessionId: string) => CheckInResult; // memakai currentUser
@@ -77,21 +73,23 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const setAuthenticatedUser = useCallback((user: User) => {
+    dispatch({ type: 'SET_AUTHENTICATED_USER', user });
+  }, []);
 
   const value = useMemo<AppContextValue>(() => {
     const getSession = (id: string) => state.sessions.find((s) => s.id === id);
-    const getUserById = (id: string) => state.users.find((u) => u.id === id);
+    const { currentUser } = state;
+    const getUserById = (id: string) => currentUser?.id === id ? currentUser : undefined;
     const hasCheckedIn = (sessionId: string, studentId: string) =>
       state.attendances.some((a) => a.sessionId === sessionId && a.studentId === studentId);
-    const currentUser = state.currentUserId ? getUserById(state.currentUserId) ?? null : null;
 
     return {
       currentUser,
-      users: state.users,
       sessions: state.sessions,
 
-      selectUser: (userId) => dispatch({ type: 'SELECT_USER', userId }),
-      switchRole: () => dispatch({ type: 'SWITCH_ROLE' }),
+      setAuthenticatedUser,
+      clearAuthenticatedUser: () => dispatch({ type: 'CLEAR_AUTHENTICATED_USER' }),
 
       openSession: (sessionId) => {
         const s = getSession(sessionId);
@@ -135,7 +133,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       getAttendancesByStudent: (studentId) =>
         state.attendances.filter((a) => a.studentId === studentId),
     };
-  }, [state]);
+  }, [state, setAuthenticatedUser]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
