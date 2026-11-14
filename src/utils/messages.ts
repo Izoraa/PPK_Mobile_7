@@ -21,7 +21,7 @@ export const CONFIRM_CLOSE_SESSION = {
 };
 
 export const EMPTY_STATE_TEXT = {
-  schedule: { title: 'Belum ada jadwal', message: 'Jadwal praktikum belum tersedia.' },
+  schedule: { title: 'Jadwal belum terhubung', message: 'Jadwal praktikum belum dimuat dari server.' },
   attendees: { title: 'Belum ada yang presensi', message: 'Daftar kehadiran masih kosong.' },
   history: { title: 'Belum ada riwayat', message: 'Kamu belum melakukan presensi pada sesi mana pun.' },
 };

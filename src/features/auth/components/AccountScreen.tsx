@@ -43,6 +43,7 @@ export default function AccountScreen() {
           <>
             <Text style={styles.label}>{currentUser.name}</Text>
             <Text style={styles.label}>{currentUser.role === 'assistant' ? 'Asisten praktikum' : 'Praktikan'}</Text>
+            {currentUser.studentNumber && <Text style={styles.label}>NIM {currentUser.studentNumber}</Text>}
           </>
         )}
         {logoutFailed && (

@@ -40,8 +40,8 @@ export default function AttendanceHistoryScreen() {
           }
           ListEmptyComponent={
             <EmptyState
-              title="Belum ada riwayat presensi"
-              message="Belum ada catatan kehadiran untuk praktikan ini."
+              title="Riwayat presensi belum terhubung"
+              message="Riwayat presensi belum dimuat dari server."
             />
           }
           renderItem={({ item }) => {

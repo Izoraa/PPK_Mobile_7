@@ -1,9 +1,7 @@
 import React, { createContext, useCallback, useContext, useReducer, useMemo, ReactNode } from 'react';
 import { Attendance, Session, CheckInResult, User } from '../types';
-import { USERS, SESSIONS, ATTENDANCES } from '../data/dummy';
 
 interface State {
-  users: User[];
   sessions: Session[];
   attendances: Attendance[];
   currentUser: User | null;
@@ -17,9 +15,8 @@ type Action =
   | { type: 'ADD_ATTENDANCE'; attendance: Attendance };
 
 const initialState: State = {
-  users: USERS,
-  sessions: SESSIONS,
-  attendances: ATTENDANCES,
+  sessions: [],
+  attendances: [],
   currentUser: null,
 };
 
@@ -83,7 +80,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppContextValue>(() => {
     const getSession = (id: string) => state.sessions.find((s) => s.id === id);
     const { currentUser } = state;
-    const getUserById = (id: string) => currentUser?.id === id ? currentUser : state.users.find((u) => u.id === id);
+    const getUserById = (id: string) => currentUser?.id === id ? currentUser : undefined;
     const hasCheckedIn = (sessionId: string, studentId: string) =>
       state.attendances.some((a) => a.sessionId === sessionId && a.studentId === studentId);
 

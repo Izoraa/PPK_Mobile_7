@@ -1,7 +1,8 @@
 import { FirebaseError } from 'firebase/app';
-import { doc, getDocFromServer, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
 
 import { getFirebaseAuth, getFirebaseFirestore } from '@/lib/firebase/client';
+import { getConfirmedDocument } from '@/lib/firebase/serverRead';
 import type { Result, User } from '@/types';
 
 import { validateProfile, type RegistrationProfileInput } from './validation';
@@ -39,7 +40,7 @@ export async function getActiveProfileAccount(expectedUid?: string): Promise<Res
       return { ok: false, error: { code: 'UNAUTHENTICATED', retryable: false } };
     }
 
-    const profile = await getDocFromServer(doc(getFirebaseFirestore(), 'users', user.uid));
+    const profile = await getConfirmedDocument(doc(getFirebaseFirestore(), 'users', user.uid));
     if (auth.currentUser?.uid !== user.uid) {
       return { ok: false, error: { code: 'UNAUTHENTICATED', retryable: false } };
     }
