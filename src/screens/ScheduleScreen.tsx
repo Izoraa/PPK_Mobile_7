@@ -120,29 +120,11 @@ export default function ScheduleScreen() {
         contentContainerStyle={styles.content}
         ListHeaderComponent={
           <View style={styles.header}>
-            <View style={styles.headerTop}>
-              <View>
-                <Text accessibilityRole="header" style={styles.title}>
-                  Jadwal Praktikum
-                </Text>
-                <Text style={styles.userName}>
-                  {currentUser.name} ({currentUser.role === 'assistant' ? 'Asisten' : 'Praktikan'})
-                </Text>
-              </View>
-              <Link href="../account" style={styles.accountLink}>
-                Akun
-              </Link>
-            </View>
-
-            {/* S2-SRS-11..15 Quick CTA for Assistant */}
-            {currentUser.role === 'assistant' && (
-              <TouchableOpacity
-                style={styles.manageClassBtn}
-                onPress={() => router.push('/(assistant)/classes' as any)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.manageClassText}>Kelola Kelas & Peserta →</Text>
-              </TouchableOpacity>
+            <Text accessibilityRole="header" style={styles.title}>Jadwal praktikum</Text>
+            <Text style={styles.userName}>{currentUser.name}</Text>
+            <Link href="../account" style={styles.accountLink}>Akun</Link>
+            {currentUser.role === 'student' && (
+              <Link href="/(student)/leaves/index" style={styles.accountLink}>Izin saya</Link>
             )}
           </View>
         }
