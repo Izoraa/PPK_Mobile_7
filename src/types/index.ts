@@ -8,7 +8,15 @@ export type AppErrorCode =
   | 'PROFILE_INCOMPLETE'
   | 'NETWORK_ERROR'
   | 'SERVICE_UNAVAILABLE'
-  | 'CONFLICT';
+  | 'CONFLICT'
+  | 'NOT_FOUND'
+  | 'CLASS_ARCHIVED'
+  | 'SESSION_ARCHIVED'
+  | 'SESSION_CLOSED'
+  | 'NOT_ENROLLED'
+  | 'ALREADY_CHECKED_IN'
+  | 'ALREADY_SUBMITTED'
+  | 'PARTICIPATION_CONFLICT';
 
 export type Result<T> =
   | { ok: true; data: T }

@@ -2,8 +2,11 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { colors, radius, spacing } from '@/theme';
-import type { SessionStatus } from '@/types';
+import type { Result, SessionStatus } from '@/types';
+import { getErrorMessage } from '@/utils/errors';
+
 import { AiSupportNotice } from './AiSupportNotice';
+import type { LeaveSubmissionRef } from '../leaveService';
 import { validateLeaveReason } from '../validation';
 
 type Props = {
@@ -11,7 +14,7 @@ type Props = {
   sessionStatus: SessionStatus;
   isEligible: boolean;
   eligibilityMessage?: string;
-  onSubmit: (reason: string) => Promise<void>;
+  onSubmit: (reason: string) => Promise<Result<LeaveSubmissionRef>>;
 };
 
 export function LeaveRequestForm({
@@ -56,10 +59,14 @@ export function LeaveRequestForm({
 
     setIsSubmitting(true);
     try {
-      await onSubmit(validation.value);
-      setIsSubmitted(true);
+      const result = await onSubmit(validation.value);
+      if (result.ok) {
+        setIsSubmitted(true);
+      } else {
+        setSubmitError(getErrorMessage(result.error.code));
+      }
     } catch {
-      setSubmitError('Pengajuan belum berhasil dikirim. Periksa koneksi lalu coba lagi.');
+      setSubmitError(getErrorMessage('SERVICE_UNAVAILABLE'));
     } finally {
       setIsSubmitting(false);
     }
