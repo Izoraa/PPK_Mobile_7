@@ -27,6 +27,22 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($accessToken)) {
 }
 
 $headers = @{ Authorization = "Bearer $accessToken" }
+$lookupUri = "https://identitytoolkit.googleapis.com/v1/projects/$ProjectId/accounts:lookup"
+$lookupBody = @{ localId = @($Uid) } | ConvertTo-Json
+
+try {
+    $lookup = Invoke-RestMethod -Method Post -Uri $lookupUri -Headers $headers -ContentType 'application/json' -Body $lookupBody
+}
+catch {
+    throw 'Could not verify the account in Firebase Authentication. Check the project and Firebase Auth IAM permissions.'
+}
+
+$accounts = @($lookup.users)
+if ($accounts.Count -ne 1 -or $accounts[0].localId -cne $Uid -or
+    $accounts[0].email -cne $ApprovedEmail -or $accounts[0].disabled -eq $true) {
+    throw 'Firebase Authentication does not have an enabled account matching the approved UID and email.'
+}
+
 $database = "projects/$ProjectId/databases/(default)"
 $document = "$database/documents/users/$Uid"
 $api = 'https://firestore.googleapis.com/v1'

@@ -1,6 +1,53 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function callerProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasRole(role) {
+      return isSignedIn() && callerProfile().role == role;
+    }
+
+    function isStudent() {
+      return hasRole('student') && callerProfile().requestedRole == 'student';
+    }
+
+    function classData(classId) {
+      return get(/databases/$(database)/documents/classes/$(classId)).data;
+    }
+
+    function isDocumentId(value) {
+      return value is string && value.matches('[^/]{1,128}') && !(value in ['.', '..']);
+    }
+
+    function classIsActiveAfterWrite(classId) {
+      return getAfter(/databases/$(database)/documents/classes/$(classId)).data.isArchived == false;
+    }
+
+    function membershipData(classId) {
+      let membershipId = classId + '_' + request.auth.uid;
+      return get(/databases/$(database)/documents/memberships/$(membershipId)).data;
+    }
+
+    function isActiveMember(classId) {
+      let membership = membershipData(classId);
+      return membership.classId == classId && membership.studentId == request.auth.uid
+        && membership.isActive == true;
+    }
+
+    function hasExactFields(data, fields) {
+      return data.keys().hasAll(fields) && data.keys().hasOnly(fields);
+    }
+
+    function validText(value, minimum, maximum) {
+      return value is string && value.trim().size() >= minimum && value.size() <= maximum;
+    }
+
     match /users/{uid} {
       function isOwner() {
         return request.auth != null && request.auth.uid == uid;
@@ -9,18 +56,157 @@ service cloud.firestore {
       function isInitialProfile() {
         let profile = request.resource.data;
         let fields = ['uid', 'email', 'name', 'studentNumber', 'role', 'requestedRole', 'createdAt', 'updatedAt'];
-        return profile.keys().hasAll(fields) && profile.keys().hasOnly(fields)
+        return hasExactFields(profile, fields)
           && profile.uid == uid
           && profile.email is string && profile.email == request.auth.token.email
-          && profile.name is string && profile.name.size() > 0
+          && profile.name is string && profile.name.trim().size() > 0
           && profile.role == 'student'
-          && ((profile.requestedRole == 'student' && profile.studentNumber is string && profile.studentNumber.size() > 0)
+          && ((profile.requestedRole == 'student'
+              && profile.studentNumber is string && profile.studentNumber.trim().size() > 0)
             || (profile.requestedRole == 'assistant' && profile.studentNumber == null))
           && profile.createdAt == request.time && profile.updatedAt == request.time;
       }
 
       allow get: if isOwner();
       allow create: if isOwner() && isInitialProfile();
+    }
+
+    match /classes/{classId} {
+      function validClassDetails(data) {
+        return validText(data.name, 1, 200) && validText(data.code, 1, 64)
+          && validText(data.course, 1, 200) && validText(data.timeZone, 1, 100);
+      }
+
+      allow get: if (hasRole('assistant') && resource.data.assistantId == request.auth.uid)
+        || (isStudent() && isActiveMember(classId));
+      allow list: if hasRole('assistant') && resource.data.assistantId == request.auth.uid;
+      allow create: if hasRole('assistant')
+        && hasExactFields(request.resource.data,
+          ['name', 'code', 'course', 'timeZone', 'assistantId', 'isArchived', 'createdAt', 'updatedAt'])
+        && request.resource.data.assistantId == request.auth.uid && request.resource.data.isArchived == false
+        && request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time
+        && validClassDetails(request.resource.data);
+      allow update: if hasRole('assistant') && resource.data.assistantId == request.auth.uid
+        && resource.data.isArchived == false && request.resource.data.isArchived is bool
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['name', 'code', 'course', 'timeZone', 'isArchived', 'updatedAt'])
+        && request.resource.data.updatedAt == request.time && validClassDetails(request.resource.data);
+    }
+
+    match /memberships/{membershipId} {
+      // Membership writes run in a trusted backend.
+      allow read: if (isStudent() && resource.data.studentId == request.auth.uid)
+        || (hasRole('assistant') && resource.data.assistantId == request.auth.uid
+          && classData(resource.data.classId).assistantId == request.auth.uid);
+    }
+
+    match /sessions/{sessionId} {
+      function validSessionDetails(data) {
+        return validText(data.title, 1, 200) && validText(data.room, 1, 200)
+          && validText(data.timeZone, 1, 100)
+          && data.startsAt is timestamp && data.endsAt is timestamp && data.startsAt < data.endsAt;
+      }
+
+      function isSessionOwner() {
+        return hasRole('assistant') && classData(resource.data.classId).assistantId == request.auth.uid;
+      }
+
+      function validSessionUpdate() {
+        let next = request.resource.data;
+        let previous = resource.data;
+        let changed = next.diff(previous).affectedKeys();
+        return next.updatedAt == request.time && (
+          (previous.isArchived == false && previous.status == 'open' && next.status == 'closed'
+            && next.closedAt == request.time && changed.hasOnly(['status', 'closedAt', 'updatedAt']))
+          || (previous.isArchived == false && previous.status == 'not_open'
+            && classIsActiveAfterWrite(previous.classId) && (
+              (next.status == 'open' && next.openedAt == request.time
+                && changed.hasOnly(['status', 'openedAt', 'updatedAt']))
+              || (next.isArchived == true && changed.hasOnly(['isArchived', 'updatedAt']))
+              || (changed.hasOnly(['title', 'room', 'timeZone', 'startsAt', 'endsAt', 'updatedAt'])
+                && validSessionDetails(next))
+            ))
+        );
+      }
+
+      allow get: if isSessionOwner() || (isStudent() && (
+        isActiveMember(resource.data.classId)
+        || exists(/databases/$(database)/documents/sessions/$(sessionId)/participations/$(request.auth.uid))
+      ));
+      allow list: if isSessionOwner() || (isStudent() && isActiveMember(resource.data.classId));
+      allow create: if hasRole('assistant')
+        && hasExactFields(request.resource.data, ['classId', 'assistantId', 'title', 'room', 'startsAt',
+          'endsAt', 'timeZone', 'status', 'isArchived', 'openedAt', 'closedAt', 'createdAt', 'updatedAt'])
+        && isDocumentId(request.resource.data.classId)
+        && request.resource.data.assistantId == request.auth.uid
+        && classData(request.resource.data.classId).assistantId == request.auth.uid
+        && classIsActiveAfterWrite(request.resource.data.classId)
+        && request.resource.data.status == 'not_open' && request.resource.data.isArchived == false
+        && request.resource.data.openedAt == null && request.resource.data.closedAt == null
+        && request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time
+        && validSessionDetails(request.resource.data);
+      allow update: if isSessionOwner() && validSessionUpdate();
+
+      match /participations/{studentId} {
+        function parentSession() {
+          return get(/databases/$(database)/documents/sessions/$(sessionId)).data;
+        }
+
+        function ownsParentClass() {
+          return hasRole('assistant') && classData(parentSession().classId).assistantId == request.auth.uid;
+        }
+
+        function isInitialAi(ai) {
+          return ai == {
+            'status': 'pending', 'category': null, 'confidence': null, 'modelVersion': null,
+            'classifiedAt': null, 'errorCode': null, 'requestId': null, 'startedAt': null, 'attemptCount': 0
+          } && ai.attemptCount is int;
+        }
+
+        function validParticipation(data) {
+          let session = parentSession();
+          let course = classData(session.classId);
+          let membership = membershipData(session.classId);
+          let fields = ['sessionId', 'classId', 'assistantId', 'studentId', 'studentName',
+            'studentNumber', 'kind', 'createdAt', 'updatedAt'];
+          return data.studentId == studentId && data.sessionId == sessionId && data.classId == session.classId
+            && data.assistantId == session.assistantId && session.assistantId == course.assistantId
+            && membership.classId == session.classId && membership.studentId == studentId
+            && membership.assistantId == course.assistantId && membership.isActive == true
+            && data.studentName == membership.studentName && data.studentNumber == membership.studentNumber
+            && data.createdAt == request.time && data.updatedAt == request.time
+            && session.isArchived == false && course.isArchived == false
+            && (
+              (data.kind == 'attendance' && session.status == 'open'
+                && hasExactFields(data, fields.concat(['checkedInAt'])) && data.checkedInAt == request.time)
+              || (data.kind == 'leave' && session.status in ['not_open', 'open']
+                && hasExactFields(data, fields.concat(['reason', 'status', 'reviewedBy', 'reviewedAt', 'reviewNote', 'ai']))
+                && validText(data.reason, 10, 1000) && data.reason == data.reason.trim()
+                && data.status == 'pending' && data.reviewedBy == null && data.reviewedAt == null
+                && data.reviewNote == null && isInitialAi(data.ai))
+            );
+        }
+
+        function validReview() {
+          let next = request.resource.data;
+          return resource.data.kind == 'leave' && resource.data.status == 'pending'
+            && next.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedBy', 'reviewedAt', 'reviewNote', 'updatedAt'])
+            && next.reviewedBy == request.auth.uid && next.reviewedAt == request.time && next.updatedAt == request.time
+            && ((next.status == 'approved' && (next.reviewNote == null || validText(next.reviewNote, 0, 500)))
+              || (next.status == 'rejected' && validText(next.reviewNote, 5, 500)));
+        }
+
+        allow get: if (isStudent() && request.auth.uid == studentId) || ownsParentClass();
+        allow list: if ownsParentClass();
+        allow create: if isStudent() && request.auth.uid == studentId && validParticipation(request.resource.data);
+        allow update: if ownsParentClass() && validReview();
+      }
+    }
+
+    match /{path=**}/participations/{participationId} {
+      // These fields are fixed at creation and protected from client updates.
+      allow list: if (isStudent() && resource.data.studentId == request.auth.uid)
+        || (hasRole('assistant') && resource.data.assistantId == request.auth.uid && resource.data.kind == 'leave');
     }
   }
 }
