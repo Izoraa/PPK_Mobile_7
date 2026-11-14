@@ -1,0 +1,26 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid} {
+      function isOwner() {
+        return request.auth != null && request.auth.uid == uid;
+      }
+
+      function isInitialProfile() {
+        let profile = request.resource.data;
+        let fields = ['uid', 'email', 'name', 'studentNumber', 'role', 'requestedRole', 'createdAt', 'updatedAt'];
+        return profile.keys().hasAll(fields) && profile.keys().hasOnly(fields)
+          && profile.uid == uid
+          && profile.email is string && profile.email == request.auth.token.email
+          && profile.name is string && profile.name.size() > 0
+          && profile.role == 'student'
+          && ((profile.requestedRole == 'student' && profile.studentNumber is string && profile.studentNumber.size() > 0)
+            || (profile.requestedRole == 'assistant' && profile.studentNumber == null))
+          && profile.createdAt == request.time && profile.updatedAt == request.time;
+      }
+
+      allow get: if isOwner();
+      allow create: if isOwner() && isInitialProfile();
+    }
+  }
+}

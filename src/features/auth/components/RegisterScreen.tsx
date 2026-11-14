@@ -14,9 +14,20 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { register } from '@/features/auth/authService';
-import { getActiveProfileAccount, saveStudentProfile } from '@/features/auth/profileService';
+import { getActiveProfileAccount, saveRegistrationProfile, type ProfileStatus } from '@/features/auth/profileService';
 import { colors, radius, spacing } from '@/theme';
-import type { AppErrorCode } from '@/types';
+import type { AppErrorCode, Role } from '@/types';
+
+const roleOptions: { value: Role; label: string }[] = [
+  { value: 'student', label: 'Praktikan' },
+  { value: 'assistant', label: 'Asisten praktikum' },
+];
+
+const profileStatusMessages: Record<ProfileStatus, string> = {
+  student: 'Profil praktikan sudah tersimpan.',
+  assistantPending: 'Permintaan akun asisten menunggu aktivasi oleh pengelola.',
+  assistant: 'Akun asisten sudah aktif.',
+};
 
 const registrationErrorMessages: Partial<Record<AppErrorCode, string>> = {
   CONFLICT: 'Email ini sudah terdaftar. Gunakan alamat email lain.',
@@ -26,7 +37,7 @@ const registrationErrorMessages: Partial<Record<AppErrorCode, string>> = {
 };
 
 const profileErrorMessages: Partial<Record<AppErrorCode, string>> = {
-  VALIDATION_ERROR: 'Nama lengkap dan NIM wajib diisi.',
+  VALIDATION_ERROR: 'Isi nama lengkap dan, jika mendaftar sebagai praktikan, isi NIM.',
   NETWORK_ERROR: 'Profil belum terkonfirmasi. Periksa jaringan, lalu coba lagi.',
   SERVICE_UNAVAILABLE: 'Penyimpanan profil belum tersedia. Coba lagi nanti.',
   UNAUTHENTICATED: 'Sesi akun sudah berakhir. Masuk kembali untuk melanjutkan profil.',
@@ -36,7 +47,7 @@ const profileErrorMessages: Partial<Record<AppErrorCode, string>> = {
 type RegistrationStep =
   | { kind: 'checking' | 'credentials' | 'unavailable' }
   | { kind: 'profile'; uid: string; email: string }
-  | { kind: 'complete'; outcome: 'created' | 'existing' };
+  | { kind: 'complete'; status: ProfileStatus };
 
 export default function RegisterScreen() {
   const [step, setStep] = useState<RegistrationStep>({ kind: 'checking' });
@@ -44,6 +55,7 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [studentNumber, setStudentNumber] = useState('');
+  const [requestedRole, setRequestedRole] = useState<Role>('student');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [canRetryProfile, setCanRetryProfile] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -55,11 +67,12 @@ export default function RegisterScreen() {
       if (!active) return;
 
       if (result.ok) {
-        setStep({ kind: 'profile', ...result.data });
+        const { uid, email, profileStatus } = result.data;
+        setStep(profileStatus ? { kind: 'complete', status: profileStatus } : { kind: 'profile', uid, email });
       } else if (result.error.code === 'UNAUTHENTICATED') {
         setStep({ kind: 'credentials' });
       } else {
-        setErrorMessage('Pendaftaran belum tersedia. Coba lagi nanti.');
+        setErrorMessage(profileErrorMessages[result.error.code] ?? 'Pendaftaran belum tersedia. Coba lagi nanti.');
         setStep({ kind: 'unavailable' });
       }
     });
@@ -92,10 +105,10 @@ export default function RegisterScreen() {
       return;
     }
 
-    const result = await saveStudentProfile(step.uid, { name, studentNumber });
+    const result = await saveRegistrationProfile(step.uid, { name, studentNumber, requestedRole });
     setIsSubmitting(false);
     if (result.ok) {
-      setStep({ kind: 'complete', outcome: result.data });
+      setStep({ kind: 'complete', status: result.data });
       return;
     }
 
@@ -111,13 +124,13 @@ export default function RegisterScreen() {
       <KeyboardAvoidingView style={styles.body} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Text accessibilityRole="header" style={styles.title}>
-            {step.kind === 'profile' ? 'Lengkapi profil praktikan' : 'Daftar akun'}
+            {step.kind === 'profile' ? 'Lengkapi profil' : 'Daftar akun'}
           </Text>
 
           {step.kind === 'checking' && <ActivityIndicator color={colors.primary} />}
           {step.kind === 'complete' && (
             <Text accessibilityRole="alert" style={styles.label}>
-              {step.outcome === 'created' ? 'Profil praktikan berhasil disimpan.' : 'Profil akun sudah tersimpan.'}
+              {profileStatusMessages[step.status]}
             </Text>
           )}
           {step.kind === 'credentials' && (
@@ -158,6 +171,24 @@ export default function RegisterScreen() {
           {step.kind === 'profile' && (
             <>
               <Text style={styles.label}>{step.email}</Text>
+              <View accessibilityRole="radiogroup" accessibilityLabel="Jenis akun" style={styles.field}>
+                <Text style={styles.label}>Jenis akun</Text>
+                {roleOptions.map(({ value, label }) => (
+                  <Pressable
+                    key={value}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: requestedRole === value, disabled: isSubmitting }}
+                    disabled={isSubmitting}
+                    onPress={() => setRequestedRole(value)}
+                    style={[styles.roleOption, requestedRole === value && styles.selectedRoleOption]}
+                  >
+                    <Text style={styles.label}>{label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              {requestedRole === 'assistant' && (
+                <Text style={styles.description}>Akun asisten memerlukan persetujuan pengelola.</Text>
+              )}
               <View style={styles.field}>
                 <Text style={styles.label}>Nama lengkap</Text>
                 <TextInput
@@ -169,20 +200,22 @@ export default function RegisterScreen() {
                   value={name}
                 />
               </View>
-              <View style={styles.field}>
-                <Text style={styles.label}>NIM</Text>
-                <TextInput
-                  accessibilityLabel="NIM"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!isSubmitting}
-                  onChangeText={setStudentNumber}
-                  onSubmitEditing={submitRegistration}
-                  returnKeyType="go"
-                  style={styles.input}
-                  value={studentNumber}
-                />
-              </View>
+              {requestedRole === 'student' && (
+                <View style={styles.field}>
+                  <Text style={styles.label}>NIM</Text>
+                  <TextInput
+                    accessibilityLabel="NIM"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    editable={!isSubmitting}
+                    onChangeText={setStudentNumber}
+                    onSubmitEditing={submitRegistration}
+                    returnKeyType="go"
+                    style={styles.input}
+                    value={studentNumber}
+                  />
+                </View>
+              )}
             </>
           )}
 
@@ -216,6 +249,17 @@ const styles = StyleSheet.create({
   title: { color: colors.text, fontSize: 28, fontWeight: '700' },
   field: { gap: spacing.sm },
   label: { color: colors.text, fontSize: 16, fontWeight: '600' },
+  description: { color: colors.textMuted, fontSize: 16 },
+  roleOption: {
+    minHeight: 48,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    backgroundColor: colors.card,
+  },
+  selectedRoleOption: { borderColor: colors.primary },
   input: {
     minHeight: 48,
     paddingHorizontal: spacing.md,
