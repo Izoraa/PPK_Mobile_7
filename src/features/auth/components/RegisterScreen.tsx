@@ -235,7 +235,7 @@ export default function RegisterScreen() {
             </Pressable>
           )}
 
-          {!isSubmitting && <Link href="/" dismissTo style={styles.backLink}>Kembali ke beranda</Link>}
+          {!isSubmitting && <Link href="./login" dismissTo style={styles.backLink}>Kembali ke login</Link>}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

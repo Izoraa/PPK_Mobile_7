@@ -2,7 +2,7 @@ import { FirebaseError } from 'firebase/app';
 import { doc, getDocFromServer, runTransaction, serverTimestamp } from 'firebase/firestore';
 
 import { getFirebaseAuth, getFirebaseFirestore } from '@/lib/firebase/client';
-import type { Result, Role } from '@/types';
+import type { Result, Role, User } from '@/types';
 
 export type ProfileStatus = 'student' | 'assistantPending' | 'assistant';
 
@@ -10,6 +10,7 @@ interface ProfileAccount {
   uid: string;
   email: string;
   profileStatus: ProfileStatus | null;
+  applicationUser: User | null;
 }
 
 interface RegistrationProfileInput {
@@ -25,12 +26,12 @@ function readProfileStatus(role: unknown, requestedRole: unknown): ProfileStatus
   throw new Error('Invalid profile role.');
 }
 
-export async function getActiveProfileAccount(): Promise<Result<ProfileAccount>> {
+export async function getActiveProfileAccount(expectedUid?: string): Promise<Result<ProfileAccount>> {
   try {
     const auth = getFirebaseAuth();
     await auth.authStateReady();
     const user = auth.currentUser;
-    if (!user?.email) {
+    if (!user?.email || (expectedUid !== undefined && user.uid !== expectedUid)) {
       return { ok: false, error: { code: 'UNAUTHENTICATED', retryable: false } };
     }
 
@@ -41,7 +42,18 @@ export async function getActiveProfileAccount(): Promise<Result<ProfileAccount>>
 
     const data = profile.data();
     const profileStatus = data ? readProfileStatus(data.role, data.requestedRole) : null;
-    return { ok: true, data: { uid: user.uid, email: user.email, profileStatus } };
+    const name: unknown = data?.name;
+    const studentNumber: unknown = data?.studentNumber;
+    let applicationUser: User | null = null;
+    if (data?.uid === user.uid && typeof name === 'string' && name.trim()) {
+      if (profileStatus === 'assistant') {
+        applicationUser = { id: user.uid, name, role: 'assistant' };
+      } else if (profileStatus === 'student' && typeof studentNumber === 'string' && studentNumber.trim()) {
+        applicationUser = { id: user.uid, name, studentNumber, role: 'student' };
+      }
+    }
+
+    return { ok: true, data: { uid: user.uid, email: user.email, profileStatus, applicationUser } };
   } catch (error) {
     return profileFailure(error);
   }

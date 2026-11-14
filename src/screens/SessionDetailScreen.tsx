@@ -21,7 +21,7 @@ export interface SessionDetailScreenProps {
 }
 
 export default function SessionDetailScreen({ route, navigation }: SessionDetailScreenProps) {
-  const { currentUser, getSession, switchRole } = useApp();
+  const { currentUser, getSession } = useApp();
   // Resolve on every Context render so session controls update these details.
   const sessionId = route?.params?.sessionId;
   const session = typeof sessionId === 'string' ? getSession(sessionId) : undefined;
@@ -44,14 +44,6 @@ export default function SessionDetailScreen({ route, navigation }: SessionDetail
             style={({ pressed }) => [styles.button, pressed && styles.pressed]}
           >
             <Text style={styles.buttonLabel}>Kembali ke jadwal</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => switchRole()}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={({ pressed }) => [styles.button, pressed && styles.pressed]}
-          >
-            <Text style={styles.buttonLabel}>Ganti peran</Text>
           </Pressable>
         </View>
         {!session ? (
