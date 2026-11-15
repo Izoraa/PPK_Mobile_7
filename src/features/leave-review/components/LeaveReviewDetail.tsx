@@ -3,6 +3,8 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { leaveAiStatusLabels, type LeaveReviewMetadata, type LeaveReviewRecord } from '../types';
 import { colors, radius, spacing } from '@/theme';
 import { LeaveReviewActions } from './LeaveReviewActions';
+import { AiSupportNotice } from '@/features/leave/components/AiSupportNotice';
+import { ClassificationRetryButton } from '@/features/leave/components/ClassificationRetryButton';
 
 export interface LeaveReviewDetailProps {
   record: LeaveReviewRecord | null;
@@ -14,6 +16,17 @@ export interface LeaveReviewDetailProps {
 
 function formatDate(value: string | null) {
   return value ? new Date(value).toLocaleString('id-ID') : 'Belum tersedia';
+}
+
+function failureMessage(code: string | null) {
+  switch (code) {
+    case 'AI_TIMEOUT': return 'Klasifikasi melewati batas waktu.';
+    case 'AI_INVALID_RESPONSE': return 'Respons klasifikasi tidak dapat divalidasi.';
+    case 'AI_UNAVAILABLE_PERMANENT': return 'Konfigurasi layanan AI perlu diperiksa.';
+    case 'AI_UNAVAILABLE': return 'Layanan AI sedang tidak tersedia.';
+    case 'CONFLICT': return 'Klasifikasi tidak dapat diulang untuk data ini.';
+    default: return 'Klasifikasi AI belum tersedia.';
+  }
 }
 
 export function LeaveReviewDetail({ record, metadata, onClose, onSuccess, onError }: LeaveReviewDetailProps) {
@@ -48,11 +61,17 @@ export function LeaveReviewDetail({ record, metadata, onClose, onSuccess, onErro
               <Text style={styles.value}>Confidence: {record.ai.confidence}</Text>
             ) : null}
             {record.ai.status === 'failed' && record.ai.errorCode ? (
-              <Text style={styles.meta}>Detail kegagalan: {record.ai.errorCode}</Text>
+              <Text style={styles.meta}>{failureMessage(record.ai.errorCode)}</Text>
             ) : null}
             {record.ai.modelVersion ? <Text style={styles.meta}>Model: {record.ai.modelVersion}</Text> : null}
             {record.ai.attemptCount > 0 ? <Text style={styles.meta}>Percobaan: {record.ai.attemptCount}</Text> : null}
             {record.ai.classifiedAt ? <Text style={styles.meta}>Diklasifikasikan: {formatDate(record.ai.classifiedAt)}</Text> : null}
+            <ClassificationRetryButton
+              sessionId={record.sessionId}
+              studentId={record.studentId}
+              ai={record.ai}
+            />
+            <AiSupportNotice />
             <LeaveReviewActions record={record} onError={onError} onSuccess={onSuccess} />
           </ScrollView>
         </View>

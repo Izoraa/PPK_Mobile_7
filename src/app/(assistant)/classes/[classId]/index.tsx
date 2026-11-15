@@ -5,7 +5,6 @@ import {
   Text,
   TouchableOpacity,
   View,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -19,7 +18,9 @@ import {
 } from '@/features/practicum';
 import { colors, radius, spacing } from '@/theme';
 import { StatusBadge } from '@/components/common/StatusBadge';
+import { AsyncState } from '@/components/common/AsyncState';
 import EmptyState from '@/components/common/EmptyState';
+import type { AppErrorCode } from '@/types';
 
 export default function AssistantClassDetailScreen() {
   const router = useRouter();
@@ -27,15 +28,43 @@ export default function AssistantClassDetailScreen() {
 
   const [classData, setClassData] = useState<ClassDoc | null>(null);
   const [sessions, setSessions] = useState<SessionDoc[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [attempt, setAttempt] = useState(0);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [error, setError] = useState<{ code: AppErrorCode; retryable: boolean } | null>(null);
+  const [metadata, setMetadata] = useState({ fromCache: false, hasPendingWrites: false });
 
   useEffect(() => {
-    if (!classId) return;
+    if (!classId || typeof classId !== 'string') {
+      setClassData(null);
+      setStatus('ready');
+      return;
+    }
 
+    let active = true;
+    let failed = false;
+    let classLoaded = false;
+    let sessionsLoaded = false;
+    setStatus('loading');
+    setError(null);
     const db = getFirebaseFirestore();
+    const fail = (loadError: Error) => {
+      if (!active || failed) return;
+      failed = true;
+      const code = 'code' in loadError ? String(loadError.code) : '';
+      const mapped = code === 'permission-denied'
+        ? { code: 'FORBIDDEN' as const, retryable: false }
+        : code === 'unauthenticated'
+          ? { code: 'UNAUTHENTICATED' as const, retryable: false }
+          : code === 'unavailable' || code === 'deadline-exceeded'
+            ? { code: 'NETWORK_ERROR' as const, retryable: true }
+            : { code: 'SERVICE_UNAVAILABLE' as const, retryable: true };
+      setError(mapped);
+      setStatus('error');
+    };
     const fetchClass = async () => {
       try {
         const snap = await getDoc(doc(db, 'classes', classId));
+        if (!active || failed) return;
         if (snap.exists()) {
           const d = snap.data();
           setClassData({
@@ -49,37 +78,56 @@ export default function AssistantClassDetailScreen() {
             createdAt: d.createdAt ?? null,
             updatedAt: d.updatedAt ?? null,
           });
+        } else {
+          setClassData(null);
         }
-      } catch (err) {
-        console.error('Error fetching class:', err);
-      } finally {
-        setLoading(false);
+        setMetadata((previous) => ({
+          fromCache: previous.fromCache || snap.metadata.fromCache,
+          hasPendingWrites: previous.hasPendingWrites || snap.metadata.hasPendingWrites,
+        }));
+        classLoaded = true;
+        if (sessionsLoaded) setStatus('ready');
+      } catch (loadError) {
+        fail(loadError instanceof Error ? loadError : new Error('SERVICE_UNAVAILABLE'));
       }
     };
 
-    fetchClass();
-
     const unsubscribe = subscribeSessions(
       classId,
-      (list) => setSessions(list),
-      (err) => console.error('Error subscribing sessions:', err)
+      (list) => {
+        if (!active || failed) return;
+        setSessions(list);
+        sessionsLoaded = true;
+        if (classLoaded) setStatus('ready');
+      },
+      fail,
+      (snapshotMetadata) => {
+        if (!active || failed) return;
+        setMetadata((previous) => ({
+          fromCache: previous.fromCache || snapshotMetadata.fromCache,
+          hasPendingWrites: previous.hasPendingWrites || snapshotMetadata.hasPendingWrites,
+        }));
+      },
     );
+    void fetchClass();
 
-    return () => unsubscribe();
-  }, [classId]);
+    return () => { active = false; unsubscribe(); };
+  }, [classId, attempt]);
 
-  if (loading) {
+  if (status !== 'ready' || !classData) {
     return (
       <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </SafeAreaView>
-    );
-  }
-
-  if (!classData) {
-    return (
-      <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.centerContainer}>
-        <Text style={styles.errorText}>Kelas tidak ditemukan.</Text>
+        <AsyncState
+          status={status === 'ready' ? 'empty' : status}
+          error={error}
+          fromCache={metadata.fromCache}
+          hasPendingWrites={metadata.hasPendingWrites}
+          onRetry={() => setAttempt((value) => value + 1)}
+          emptyTitle="Kelas tidak ditemukan"
+          emptyMessage="Kelas ini tidak tersedia di akun Anda."
+        >
+          <View />
+        </AsyncState>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Text style={styles.backText}>← Kembali ke Daftar Kelas</Text>
         </TouchableOpacity>
@@ -100,6 +148,12 @@ export default function AssistantClassDetailScreen() {
           </View>
         </View>
         <Text style={styles.courseSubtitle}>{classData.course}</Text>
+        {metadata.fromCache ? (
+          <Text style={styles.metadataNotice}>Menampilkan data tersimpan; belum terverifikasi dari server.</Text>
+        ) : null}
+        {metadata.hasPendingWrites ? (
+          <Text style={styles.metadataNotice}>Perubahan sedang disinkronkan.</Text>
+        ) : null}
 
         <View style={styles.actionsRow}>
           <TouchableOpacity
@@ -222,6 +276,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.textMuted,
     marginTop: 2,
+  },
+  metadataNotice: {
+    color: colors.textMuted,
+    fontSize: 13,
+    marginTop: spacing.xs,
   },
   actionsRow: {
     flexDirection: 'row',

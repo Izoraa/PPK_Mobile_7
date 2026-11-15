@@ -289,17 +289,22 @@ export function rejectLeave(
 }
 
 export function subscribePendingLeaveReviews(
-  onChange: (records: LeaveReviewRecord[]) => void,
+  onChange: (records: LeaveReviewRecord[], metadata: { fromCache: boolean; hasPendingWrites: boolean }) => void,
   onError: (error: LeaveReviewError) => void,
 ): Unsubscribe {
   try {
     return onSnapshot(
       createPendingLeaveReviewQuery(),
+      { includeMetadataChanges: true },
       (snapshot) => {
         const records = snapshot.docs
           .map(parseLeaveReviewRecord)
           .filter((record): record is LeaveReviewRecord => record !== null);
-        onChange(records);
+        onChange(records, {
+          fromCache: snapshot.metadata.fromCache,
+          hasPendingWrites: snapshot.metadata.hasPendingWrites
+            || snapshot.docs.some((document) => document.metadata.hasPendingWrites),
+        });
       },
       (error: FirestoreError) => onError(mapListenerError(error)),
     );

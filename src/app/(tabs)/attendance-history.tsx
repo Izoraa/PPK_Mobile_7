@@ -7,7 +7,7 @@ import {
   useAttendanceSessionMetadata,
   useMyAttendanceHistory,
 } from '@/features/attendance/subscriptions';
-import { EmptyState } from '@/components/common/EmptyState';
+import { AsyncState } from '@/components/common/AsyncState';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useApp } from '@/state/AppContext';
@@ -24,88 +24,65 @@ export default function AttendanceHistoryScreen() {
 
   if (currentUser?.role !== 'student') return <Redirect href="/" />;
 
-  if (historyState.status === 'loading') {
-    return (
-      <ThemedView style={styles.container}>
-        <SafeAreaView style={styles.safeArea}>
-          <ThemedText style={styles.appName}>LabCheckIn</ThemedText>
-          <ThemedText type="title" style={styles.pageTitle}>Riwayat Presensi</ThemedText>
-          <ThemedText themeColor="textSecondary">Memuat riwayat dari server...</ThemedText>
-        </SafeAreaView>
-      </ThemedView>
-    );
-  }
-
-  if (historyState.status === 'error') {
-    return (
-      <ThemedView style={styles.container}>
-        <SafeAreaView style={styles.safeArea}>
-          <ThemedText style={styles.appName}>LabCheckIn</ThemedText>
-          <ThemedText type="title" style={styles.pageTitle}>Riwayat Presensi</ThemedText>
-          <ThemedText themeColor="textSecondary">Riwayat presensi gagal dimuat.</ThemedText>
-          {historyState.error?.retryable && (
-            <ThemedText type="link" onPress={historyState.retry}>Coba lagi</ThemedText>
-          )}
-        </SafeAreaView>
-      </ThemedView>
-    );
-  }
-
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
           <ThemedText style={styles.appName}>LabCheckIn</ThemedText>
         </View>
-        <FlatList
-          data={historyState.records}
-          keyExtractor={(attendance) => attendance.id}
-          contentContainerStyle={styles.listContent}
-          ListHeaderComponent={
-            <View>
-              <ThemedText type="title" style={styles.pageTitle}>Riwayat Presensi</ThemedText>
-              <ThemedText themeColor="textSecondary" style={styles.description}>
-                Riwayat kehadiran akun mahasiswa yang sedang login.
-              </ThemedText>
-              <ThemedText type="subtitle" style={styles.activeUser}>
-                {currentUser.name}
-              </ThemedText>
-            </View>
-          }
-          ListEmptyComponent={
-            <EmptyState
-              title="Belum ada riwayat presensi"
-              message="Belum ada presensi yang tercatat untuk akun ini."
+        <View style={styles.historyContent}>
+          <View style={styles.historyHeader}>
+            <ThemedText type="title" style={styles.pageTitle}>Riwayat Presensi</ThemedText>
+            <ThemedText themeColor="textSecondary" style={styles.description}>
+              Riwayat kehadiran akun mahasiswa yang sedang login.
+            </ThemedText>
+            <ThemedText type="subtitle" style={styles.activeUser}>
+              {currentUser.name}
+            </ThemedText>
+          </View>
+          <AsyncState
+            status={historyState.status === 'ready' && historyState.records.length === 0 ? 'empty' : historyState.status}
+            error={historyState.error}
+            fromCache={historyState.fromCache}
+            hasPendingWrites={historyState.hasPendingWrites}
+            onRetry={historyState.retry}
+            emptyTitle="Belum ada riwayat presensi"
+            emptyMessage="Belum ada presensi yang tercatat untuk akun ini."
+          >
+            <FlatList
+              data={historyState.records}
+              keyExtractor={(attendance) => attendance.id}
+              contentContainerStyle={styles.listContent}
+              renderItem={({ item }) => (
+                <View style={styles.attendanceCard}>
+                  <View style={styles.cardTopRow}>
+                    <View style={styles.cardHeading}>
+                      <ThemedText type="subtitle" style={styles.cardText}>
+                        {sessionMetadata[item.sessionId]?.title ?? `Sesi ${item.sessionId}`}
+                      </ThemedText>
+                      <ThemedText themeColor="textSecondary" style={styles.roomText}>
+                        {sessionMetadata[item.sessionId]
+                          ? `${sessionMetadata[item.sessionId]?.room} · Kelas ${item.classId}`
+                          : `Kelas ${item.classId} · Detail sesi belum tersedia`}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.statusBadge}>
+                      <ThemedText type="smallBold" style={styles.statusText}>Hadir</ThemedText>
+                    </View>
+                  </View>
+                  <ThemedText themeColor="textSecondary" style={styles.dateTime}>
+                    {formatAttendanceTimestamp(item.checkedInAt ?? item.createdAt ?? '')}
+                  </ThemedText>
+                  {sessionMetadata[item.sessionId]?.startsAt ? (
+                    <ThemedText themeColor="textSecondary" style={styles.sessionTime}>
+                      Jadwal: {formatAttendanceTimestamp(sessionMetadata[item.sessionId]?.startsAt ?? '')}
+                    </ThemedText>
+                  ) : null}
+                </View>
+              )}
             />
-          }
-          renderItem={({ item }) => (
-            <View style={styles.attendanceCard}>
-              <View style={styles.cardTopRow}>
-                <View style={styles.cardHeading}>
-                  <ThemedText type="subtitle" style={styles.cardText}>
-                    {sessionMetadata[item.sessionId]?.title ?? `Sesi ${item.sessionId}`}
-                  </ThemedText>
-                  <ThemedText themeColor="textSecondary" style={styles.roomText}>
-                    {sessionMetadata[item.sessionId]
-                      ? `${sessionMetadata[item.sessionId]?.room} · Kelas ${item.classId}`
-                      : `Kelas ${item.classId} · Detail sesi belum tersedia`}
-                  </ThemedText>
-                </View>
-                <View style={styles.statusBadge}>
-                  <ThemedText type="smallBold" style={styles.statusText}>Hadir</ThemedText>
-                </View>
-              </View>
-              <ThemedText themeColor="textSecondary" style={styles.dateTime}>
-                {formatAttendanceTimestamp(item.checkedInAt ?? item.createdAt ?? '')}
-              </ThemedText>
-              {sessionMetadata[item.sessionId]?.startsAt ? (
-                <ThemedText themeColor="textSecondary" style={styles.sessionTime}>
-                  Jadwal: {formatAttendanceTimestamp(sessionMetadata[item.sessionId]?.startsAt ?? '')}
-                </ThemedText>
-              ) : null}
-            </View>
-          )}
-        />
+          </AsyncState>
+        </View>
       </SafeAreaView>
     </ThemedView>
   );
@@ -114,6 +91,8 @@ export default function AttendanceHistoryScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F3F4F6' },
   safeArea: { flex: 1 },
+  historyContent: { flex: 1 },
+  historyHeader: { paddingHorizontal: spacing.md, paddingTop: spacing.md },
   listContent: { gap: spacing.md, padding: spacing.md, paddingBottom: spacing.xl },
   header: {
     paddingHorizontal: spacing.md,

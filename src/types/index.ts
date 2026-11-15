@@ -16,7 +16,10 @@ export type AppErrorCode =
   | 'NOT_ENROLLED'
   | 'ALREADY_CHECKED_IN'
   | 'ALREADY_SUBMITTED'
-  | 'PARTICIPATION_CONFLICT';
+  | 'PARTICIPATION_CONFLICT'
+  | 'AI_TIMEOUT'
+  | 'AI_UNAVAILABLE'
+  | 'AI_INVALID_RESPONSE';
 
 export type Result<T> =
   | { ok: true; data: T }

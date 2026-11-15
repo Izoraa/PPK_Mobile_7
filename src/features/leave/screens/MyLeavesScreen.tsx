@@ -106,6 +106,12 @@ export default function MyLeavesScreen() {
               <Text numberOfLines={2} style={styles.reason}>{item.reason}</Text>
               <Text style={styles.decision}>Keputusan: {decisionLabel(item.status)}</Text>
               <Text style={styles.ai}>Klasifikasi AI: {aiLabel(item.ai.status)}</Text>
+              {item.ai.status === 'succeeded' ? (
+                <Text style={styles.ai}>Hasil AI: {item.ai.category ?? 'Kategori tidak tersedia'}</Text>
+              ) : null}
+              {item.reviewNote ? (
+                <Text numberOfLines={2} style={styles.ai}>Catatan pemeriksa: {item.reviewNote}</Text>
+              ) : null}
             </Pressable>
           )}
         />

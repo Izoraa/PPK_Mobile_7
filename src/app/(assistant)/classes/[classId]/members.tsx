@@ -19,7 +19,20 @@ import {
   type MembershipDoc,
 } from '@/features/practicum';
 import { colors, radius, spacing } from '@/theme';
-import EmptyState from '@/components/common/EmptyState';
+import { AsyncState } from '@/components/common/AsyncState';
+import type { AppErrorCode } from '@/types';
+
+function membershipErrorMessage(code: string): string {
+  switch (code) {
+    case 'UNAUTHENTICATED': return 'Sesi login berakhir. Masuk kembali lalu coba lagi.';
+    case 'FORBIDDEN': return 'Anda tidak memiliki izin untuk mengelola peserta kelas ini.';
+    case 'NOT_FOUND': return 'Kelas atau akun praktikan tidak ditemukan.';
+    case 'CLASS_ARCHIVED': return 'Kelas sudah diarsipkan dan tidak dapat diubah.';
+    case 'VALIDATION_ERROR': return 'UID tidak valid atau akun tersebut bukan praktikan.';
+    case 'NETWORK_ERROR': return 'Koneksi terganggu. Periksa internet lalu coba lagi.';
+    default: return 'Perubahan peserta belum berhasil. Coba lagi beberapa saat.';
+  }
+}
 
 export default function ClassMembersScreen() {
   const router = useRouter();
@@ -27,28 +40,53 @@ export default function ClassMembersScreen() {
 
   const [members, setMembers] = useState<MembershipDoc[]>([]);
   const [studentUid, setStudentUid] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [attempt, setAttempt] = useState(0);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [loadError, setLoadError] = useState<{ code: AppErrorCode; retryable: boolean } | null>(null);
+  const [metadata, setMetadata] = useState({ fromCache: false, hasPendingWrites: false });
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!classId) return;
+    if (!classId || typeof classId !== 'string') {
+      setLoadError({ code: 'NOT_FOUND', retryable: false });
+      setStatus('error');
+      return;
+    }
+
+    let active = true;
+    setStatus('loading');
+    setLoadError(null);
 
     const unsubscribe = subscribeMembers(
       classId,
       (list) => {
+        if (!active) return;
         setMembers(list);
-        setLoading(false);
       },
       (err) => {
-        console.error('Error subscribing members:', err);
-        setLoading(false);
-      }
+        if (!active) return;
+        const code = 'code' in err ? String(err.code) : '';
+        const mapped = code === 'permission-denied'
+          ? { code: 'FORBIDDEN' as const, retryable: false }
+          : code === 'unauthenticated'
+            ? { code: 'UNAUTHENTICATED' as const, retryable: false }
+            : code === 'unavailable' || code === 'deadline-exceeded'
+              ? { code: 'NETWORK_ERROR' as const, retryable: true }
+              : { code: 'SERVICE_UNAVAILABLE' as const, retryable: true };
+        setLoadError(mapped);
+        setStatus('error');
+      },
+      (snapshotMetadata) => {
+        if (!active) return;
+        setMetadata(snapshotMetadata);
+        setStatus('ready');
+      },
     );
 
-    return () => unsubscribe();
-  }, [classId]);
+    return () => { active = false; unsubscribe(); };
+  }, [classId, attempt]);
 
   const handleAddMember = async () => {
     if (!classId) return;
@@ -73,7 +111,7 @@ export default function ClassMembersScreen() {
       setStudentUid('');
       setSuccessMsg('Praktikan berhasil ditambahkan ke kelas.');
     } else {
-      setErrorMsg(res.error.message || 'Gagal menambahkan praktikan.');
+      setErrorMsg(membershipErrorMessage(res.error.code));
     }
   };
 
@@ -89,7 +127,7 @@ export default function ClassMembersScreen() {
     });
 
     if (!res.ok) {
-      setErrorMsg(res.error.message || 'Gagal mengubah status peserta.');
+      setErrorMsg(membershipErrorMessage(res.error.code));
     }
   };
 
@@ -148,11 +186,15 @@ export default function ClassMembersScreen() {
           ) : null}
         </View>
 
-        {loading ? (
-          <View style={styles.centerContainer}>
-            <ActivityIndicator size="large" color={colors.primary} />
-          </View>
-        ) : (
+        <AsyncState
+          status={status === 'ready' && members.length === 0 ? 'empty' : status}
+          error={loadError}
+          fromCache={metadata.fromCache}
+          hasPendingWrites={metadata.hasPendingWrites}
+          onRetry={() => setAttempt((value) => value + 1)}
+          emptyTitle="Belum ada peserta"
+          emptyMessage="Minta praktikan menyalin UID mereka dari menu Akun dan masukkan di formulir atas."
+        >
           <FlatList
             data={members}
             keyExtractor={(item) => item.id}
@@ -204,14 +246,8 @@ export default function ClassMembersScreen() {
                 </TouchableOpacity>
               </View>
             )}
-            ListEmptyComponent={
-              <EmptyState
-                title="Belum ada peserta"
-                message="Minta praktikan menyalin UID mereka dari menu Akun dan masukkan di formulir atas."
-              />
-            }
           />
-        )}
+        </AsyncState>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

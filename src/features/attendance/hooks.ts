@@ -9,7 +9,7 @@ import {
   parseAttendanceSession,
 } from './service';
 
-type AttendanceState = {
+export type AttendanceState = {
   status: 'loading' | 'ready' | 'error';
   session: AttendanceSession | null;
   participation: AttendanceParticipation | null;
@@ -40,7 +40,7 @@ function parseParticipation(id: string, value: unknown): AttendanceParticipation
   return { id, kind: data.kind, checkedInAt };
 }
 
-export function useAttendanceState(sessionId: string): AttendanceState {
+export function useAttendanceState(sessionId: string, enabled = true): AttendanceState {
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<Omit<AttendanceState, 'retry'>>({
     status: 'loading',
@@ -58,6 +58,11 @@ export function useAttendanceState(sessionId: string): AttendanceState {
     let participation: AttendanceParticipation | null = null;
     let unsubscribeSession = () => {};
     let unsubscribeParticipation = () => {};
+
+    if (!enabled) {
+      setState({ status: 'loading', session: null, participation: null, error: null });
+      return () => { active = false; };
+    }
 
     const publish = () => {
       if (!active || listenerFailed) return;
@@ -114,9 +119,16 @@ export function useAttendanceState(sessionId: string): AttendanceState {
         getAttendanceParticipationReference(sessionId, uid),
         (snapshot: DocumentSnapshot) => {
           participationInitialSnapshotReceived = true;
-          participation = snapshot.exists()
-            ? parseParticipation(snapshot.id, snapshot.data())
-            : null;
+          if (!snapshot.exists()) {
+            participation = null;
+          } else {
+            const parsedParticipation = parseParticipation(snapshot.id, snapshot.data());
+            if (!parsedParticipation) {
+              fail({ code: 'VALIDATION_ERROR', retryable: false });
+              return;
+            }
+            participation = parsedParticipation;
+          }
           publish();
         },
         (error: FirestoreError) => {
@@ -137,7 +149,7 @@ export function useAttendanceState(sessionId: string): AttendanceState {
         unsubscribeParticipation();
       };
     }
-  }, [sessionId, attempt]);
+  }, [sessionId, attempt, enabled]);
 
   const retry = useCallback(() => {
     setState({ status: 'loading', session: null, participation: null, error: null });

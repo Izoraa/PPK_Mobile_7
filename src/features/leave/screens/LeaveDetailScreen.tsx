@@ -6,6 +6,7 @@ import { AsyncState } from '@/components/common/AsyncState';
 import { colors, radius, spacing } from '@/theme';
 
 import { AiSupportNotice } from '../components/AiSupportNotice';
+import { ClassificationRetryButton } from '../components/ClassificationRetryButton';
 import { subscribeMyLeave } from '../leaveSubscriptions';
 import type { LeaveListenerError, LeaveRequestRecord } from '../types';
 
@@ -81,7 +82,7 @@ export default function LeaveDetailScreen() {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
-        <Link href="/(student)/leaves/index" asChild>
+        <Link href="/(student)/leaves" asChild>
           <Pressable style={styles.backButton}>
             <Text style={styles.backText}>Kembali ke izin saya</Text>
           </Pressable>
@@ -110,12 +111,8 @@ export default function LeaveDetailScreen() {
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Keputusan asisten</Text>
               <Text style={styles.value}>{decisionLabel(request.status)}</Text>
-              {request.reviewNote ? (
-                <>
-                  <Text style={styles.sectionTitle}>Catatan pemeriksa</Text>
-                  <Text style={styles.value}>{request.reviewNote}</Text>
-                </>
-              ) : null}
+              <Text style={styles.sectionTitle}>Catatan pemeriksa</Text>
+              <Text style={styles.value}>{request.reviewNote || 'Belum ada catatan pemeriksa.'}</Text>
               {formatTimestamp(request.reviewedAt) ? (
                 <Text style={styles.muted}>Diperiksa pada {formatTimestamp(request.reviewedAt)}</Text>
               ) : null}
@@ -127,6 +124,14 @@ export default function LeaveDetailScreen() {
               {request.ai.status === 'succeeded' && request.ai.category ? (
                 <Text style={styles.value}>Kategori: {request.ai.category}</Text>
               ) : null}
+              {request.ai.status !== 'succeeded' ? (
+                <Text style={styles.muted}>Pengajuan tetap tersimpan; asisten dapat memeriksa meski klasifikasi AI belum tersedia.</Text>
+              ) : null}
+              <ClassificationRetryButton
+                sessionId={request.sessionId}
+                studentId={request.studentId}
+                ai={request.ai}
+              />
               <AiSupportNotice />
             </View>
           </ScrollView>

@@ -51,6 +51,8 @@ export type LeaveReviewQueueState = {
   status: 'loading' | 'ready' | 'error';
   records: LeaveReviewRecord[];
   error: LeaveReviewError | null;
+  fromCache: boolean;
+  hasPendingWrites: boolean;
   retry: () => void;
 };
 

@@ -5,7 +5,6 @@ import {
   Text,
   TouchableOpacity,
   View,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -13,31 +12,56 @@ import { useRouter } from 'expo-router';
 import { useApp } from '@/state/AppContext';
 import { subscribeClasses, type ClassDoc } from '@/features/practicum';
 import { colors, radius, spacing } from '@/theme';
-import EmptyState from '@/components/common/EmptyState';
+import { AsyncState } from '@/components/common/AsyncState';
+import type { AppErrorCode } from '@/types';
 
 export default function AssistantClassesScreen() {
   const router = useRouter();
   const { currentUser } = useApp();
   const [classes, setClasses] = useState<ClassDoc[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [attempt, setAttempt] = useState(0);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [error, setError] = useState<{ code: AppErrorCode; retryable: boolean } | null>(null);
+  const [metadata, setMetadata] = useState({ fromCache: false, hasPendingWrites: false });
 
   useEffect(() => {
     if (!currentUser || currentUser.role !== 'assistant') {
-      setLoading(false);
+      setClasses([]);
+      setStatus('ready');
       return;
     }
 
+    let active = true;
+    setStatus('loading');
+    setError(null);
     const unsubscribe = subscribeClasses(
       { assistantId: currentUser.id, includeArchived: false },
       (list) => {
+        if (!active) return;
         setClasses(list);
-        setLoading(false);
       },
-      () => setLoading(false)
+      (loadError) => {
+        if (!active) return;
+        const code = 'code' in loadError ? String(loadError.code) : '';
+        const mapped = code === 'permission-denied'
+          ? { code: 'FORBIDDEN' as const, retryable: false }
+          : code === 'unauthenticated'
+            ? { code: 'UNAUTHENTICATED' as const, retryable: false }
+            : code === 'unavailable' || code === 'deadline-exceeded'
+              ? { code: 'NETWORK_ERROR' as const, retryable: true }
+              : { code: 'SERVICE_UNAVAILABLE' as const, retryable: true };
+        setError(mapped);
+        setStatus('error');
+      },
+      (snapshotMetadata) => {
+        if (!active) return;
+        setMetadata(snapshotMetadata);
+        setStatus('ready');
+      },
     );
 
-    return () => unsubscribe();
-  }, [currentUser]);
+    return () => { active = false; unsubscribe(); };
+  }, [currentUser, attempt]);
 
   return (
     <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.container}>
@@ -55,12 +79,15 @@ export default function AssistantClassesScreen() {
         </TouchableOpacity>
       </View>
 
-      {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Memuat kelas...</Text>
-        </View>
-      ) : (
+      <AsyncState
+        status={status === 'ready' && classes.length === 0 ? 'empty' : status}
+        error={error}
+        fromCache={metadata.fromCache}
+        hasPendingWrites={metadata.hasPendingWrites}
+        onRetry={() => setAttempt((value) => value + 1)}
+        emptyTitle="Belum ada kelas aktif"
+        emptyMessage="Buat kelas pertama Anda untuk memulai pengelolaan jadwal dan peserta praktikum."
+      >
         <FlatList
           data={classes}
           keyExtractor={(item) => item.id}
@@ -81,14 +108,8 @@ export default function AssistantClassesScreen() {
               <Text style={styles.cardHint}>Ketuk untuk detail, sesi, dan peserta →</Text>
             </TouchableOpacity>
           )}
-          ListEmptyComponent={
-            <EmptyState
-              title="Belum ada kelas aktif"
-              message="Buat kelas pertama Anda untuk memulai pengelolaan jadwal dan peserta praktikum."
-            />
-          }
         />
-      )}
+      </AsyncState>
     </SafeAreaView>
   );
 }
@@ -126,16 +147,6 @@ const styles = StyleSheet.create({
   addButtonText: {
     color: '#FFFFFF',
     fontWeight: '600',
-    fontSize: 14,
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: spacing.sm,
-    color: colors.textMuted,
     fontSize: 14,
   },
   listContent: {
