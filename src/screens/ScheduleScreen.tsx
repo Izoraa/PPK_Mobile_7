@@ -126,6 +126,15 @@ export default function ScheduleScreen() {
             {currentUser.role === 'student' && (
               <Link href="/(student)/leaves/index" style={styles.accountLink}>Izin saya</Link>
             )}
+            {currentUser.role === 'assistant' && (
+              <TouchableOpacity
+                style={styles.manageClassBtn}
+                onPress={() => router.push('/(assistant)/classes' as any)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.manageClassText}>Kelola Kelas & Peserta →</Text>
+              </TouchableOpacity>
+            )}
           </View>
         }
         renderItem={({ item }) => (
