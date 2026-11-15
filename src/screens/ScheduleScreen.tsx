@@ -1,206 +1,201 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useRouter } from 'expo-router';
-import {
-  FlatList,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  ActivityIndicator,
-} from 'react-native';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import EmptyState from '../components/common/EmptyState';
+import { AsyncState } from '@/components/common/AsyncState';
+import { subscribeClasses, subscribeSessions, type SessionDoc } from '@/features/practicum';
+import { useApp } from '@/state/AppContext';
+import { colors, spacing } from '@/theme';
+import type { AppErrorCode } from '@/types';
 import SessionCard from '../components/session/SessionCard';
-import { useApp } from '../state/AppContext';
-import { colors, radius, spacing } from '../theme';
-import { EMPTY_STATE_TEXT } from '../utils/messages';
-import {
-  subscribeClasses,
-  subscribeSessions,
-  type ClassDoc,
-  type SessionDoc,
-} from '@/features/practicum';
+
+type LoadStatus = 'loading' | 'ready' | 'error';
+type DataMetadata = { fromCache: boolean; hasPendingWrites: boolean };
+
+function safeError(error: Error): { code: AppErrorCode; retryable: boolean } {
+  const code = 'code' in error ? String(error.code) : '';
+  if (code === 'permission-denied') return { code: 'FORBIDDEN', retryable: false };
+  if (code === 'unauthenticated') return { code: 'UNAUTHENTICATED', retryable: false };
+  if (code === 'unavailable' || code === 'deadline-exceeded') {
+    return { code: 'NETWORK_ERROR', retryable: true };
+  }
+  return { code: 'SERVICE_UNAVAILABLE', retryable: true };
+}
 
 export default function ScheduleScreen() {
-  const { currentUser, sessions: dummySessions } = useApp();
+  const { currentUser } = useApp();
   const router = useRouter();
-
-  const [liveSessions, setLiveSessions] = useState<SessionDoc[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [attempt, setAttempt] = useState(0);
+  const [sessions, setSessions] = useState<SessionDoc[]>([]);
+  const [status, setStatus] = useState<LoadStatus>('loading');
+  const [error, setError] = useState<{ code: AppErrorCode; retryable: boolean } | null>(null);
+  const [metadata, setMetadata] = useState<DataMetadata>({ fromCache: false, hasPendingWrites: false });
 
   useEffect(() => {
     if (!currentUser) {
-      setLoading(false);
+      setSessions([]);
+      setStatus('ready');
       return;
     }
 
-    let unsubSessions: (() => void)[] = [];
+    let active = true;
+    let failed = false;
+    let unsubSessions: Array<() => void> = [];
+    const sessionLists = new Map<string, SessionDoc[]>();
+    const sessionMetadata = new Map<string, DataMetadata>();
+    let classesMetadata: DataMetadata = { fromCache: false, hasPendingWrites: false };
 
-    // Subscribe to user's classes (either assistant classes or student enrolled classes)
-    const scope =
-      currentUser.role === 'assistant'
-        ? { assistantId: currentUser.id }
-        : { studentId: currentUser.id };
+    setStatus('loading');
+    setError(null);
+
+    const onFailure = (loadError: Error) => {
+      if (!active || failed) return;
+      failed = true;
+      setError(safeError(loadError));
+      setStatus('error');
+    };
+
+    const scope = currentUser.role === 'assistant'
+      ? { assistantId: currentUser.id }
+      : { studentId: currentUser.id };
 
     const unsubClasses = subscribeClasses(
       scope,
-      (classList: ClassDoc[]) => {
-        // Clean up previous session listeners
-        unsubSessions.forEach((unsub) => unsub());
+      (classList) => {
+        if (!active) return;
+        unsubSessions.forEach((unsubscribe) => unsubscribe());
         unsubSessions = [];
+        sessionLists.clear();
+        sessionMetadata.clear();
+        setSessions([]);
+        setStatus('loading');
 
         if (classList.length === 0) {
-          setLiveSessions([]);
-          setLoading(false);
+          setStatus('ready');
           return;
         }
 
-        const sessionMap = new Map<string, SessionDoc>();
-        let completed = 0;
-
-        classList.forEach((cls) => {
-          const unsub = subscribeSessions(
-            cls.id,
-            (sessionsForClass) => {
-              sessionsForClass.forEach((s) => {
-                sessionMap.set(s.id, s);
-              });
-              setLiveSessions(Array.from(sessionMap.values()));
-              completed++;
-              if (completed >= classList.length) {
-                setLoading(false);
-              }
+        const loadedClassIds = new Set<string>();
+        classList.forEach((practicumClass) => {
+          const unsubscribe = subscribeSessions(
+            practicumClass.id,
+            (classSessions) => {
+              if (!active || failed) return;
+              sessionLists.set(practicumClass.id, classSessions);
+              loadedClassIds.add(practicumClass.id);
+              setSessions([...sessionLists.values()].flat());
+              if (loadedClassIds.size === classList.length) setStatus('ready');
             },
-            (err) => {
-              console.error('Error listening to sessions for class:', cls.id, err);
-              setLoading(false);
-            }
+            onFailure,
+            (snapshotMetadata) => {
+              if (!active || failed) return;
+              sessionMetadata.set(practicumClass.id, snapshotMetadata);
+              setMetadata({
+                fromCache: classesMetadata.fromCache
+                  || [...sessionMetadata.values()].some((item) => item.fromCache),
+                hasPendingWrites: classesMetadata.hasPendingWrites
+                  || [...sessionMetadata.values()].some((item) => item.hasPendingWrites),
+              });
+            },
           );
-          unsubSessions.push(unsub);
+          unsubSessions.push(unsubscribe);
         });
       },
-      (err) => {
-        console.error('Error listening to classes:', err);
-        setLoading(false);
-      }
+      onFailure,
+      (snapshotMetadata) => {
+        if (!active || failed) return;
+        classesMetadata = snapshotMetadata;
+        setMetadata({
+          fromCache: snapshotMetadata.fromCache || [...sessionMetadata.values()].some((item) => item.fromCache),
+          hasPendingWrites: snapshotMetadata.hasPendingWrites
+            || [...sessionMetadata.values()].some((item) => item.hasPendingWrites),
+        });
+      },
     );
 
     return () => {
+      active = false;
       unsubClasses();
-      unsubSessions.forEach((unsub) => unsub());
+      unsubSessions.forEach((unsubscribe) => unsubscribe());
     };
-  }, [currentUser]);
+  }, [currentUser, attempt]);
 
   if (!currentUser) return null;
 
-  // Use live sessions if available, otherwise fallback to local AppContext dummy sessions
-  const displaySessions = liveSessions.length > 0 ? liveSessions : dummySessions;
-
-  const sortedSessions = [...displaySessions].sort((a: any, b: any) => {
-    const aDate = a.startsAt?.toDate ? a.startsAt.toDate().getTime() : 0;
-    const bDate = b.startsAt?.toDate ? b.startsAt.toDate().getTime() : 0;
-    if (aDate && bDate) return aDate - bDate;
-    if (a.date && b.date) {
-      return a.date.localeCompare(b.date) || (a.startTime || '').localeCompare(b.startTime || '');
-    }
-    return 0;
-  });
-
-  const detailPath =
-    currentUser.role === 'assistant'
-      ? '/(assistant)/assistant/sessions/[sessionId]'
-      : '/(student)/sessions/[sessionId]';
+  const sortedSessions = [...sessions].sort((first, second) => (
+    first.startsAt.toMillis() - second.startsAt.toMillis()
+  ));
+  const detailPath = currentUser.role === 'assistant'
+    ? '/(assistant)/assistant/sessions/[sessionId]'
+    : '/(student)/sessions/[sessionId]';
 
   return (
-    <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.screen}>
-      <FlatList
-        data={sortedSessions}
-        keyExtractor={(session) => session.id}
-        contentContainerStyle={styles.content}
-        ListHeaderComponent={
-          <View style={styles.header}>
-            <Text accessibilityRole="header" style={styles.title}>Jadwal praktikum</Text>
-            <Text style={styles.userName}>{currentUser.name}</Text>
-            <Link href="../account" style={styles.accountLink}>Akun</Link>
-            {currentUser.role === 'student' && (
-              <Link href="/(student)/leaves/index" style={styles.accountLink}>Izin saya</Link>
+    return (
+      <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.screen}>
+        <View style={styles.header}>
+          <Text accessibilityRole="header" style={styles.title}>
+            Jadwal praktikum
+          </Text>
+
+          <Text style={styles.userName}>{currentUser.name}</Text>
+
+          <Link href="../account" style={styles.accountLink}>
+            Akun
+          </Link>
+
+          {currentUser.role === 'student' ? (
+            <Link href="/(student)/leaves" style={styles.accountLink}>
+              Izin saya
+            </Link>
+          ) : null}
+
+          {currentUser.role === 'assistant' ? (
+            <Link href="/(assistant)/classes" style={styles.accountLink}>
+              Kelola Kelas & Peserta →
+            </Link>
+          ) : null}
+        </View>
+
+        <AsyncState
+          status={status === 'ready' && sessions.length === 0 ? 'empty' : status}
+          error={error}
+          fromCache={metadata.fromCache}
+          hasPendingWrites={metadata.hasPendingWrites}
+          onRetry={() => setAttempt((value) => value + 1)}
+          emptyTitle="Belum ada sesi praktikum"
+          emptyMessage={
+            currentUser.role === 'assistant'
+              ? 'Belum ada sesi praktikum aktif. Gunakan menu "Kelola Kelas & Peserta" di atas untuk membuat kelas dan sesi.'
+              : 'Sesi praktikum dari kelas yang Anda ikuti akan muncul di sini.'
+          }
+        >
+          <FlatList
+            data={sortedSessions}
+            keyExtractor={(session) => session.id}
+            contentContainerStyle={styles.content}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            renderItem={({ item }) => (
+              <SessionCard
+                session={item as never}
+                onPress={() =>
+                  router.push(detailPath.replace('[sessionId]', item.id) as never)
+                }
+              />
             )}
-            {currentUser.role === 'assistant' && (
-              <TouchableOpacity
-                style={styles.manageClassBtn}
-                onPress={() => router.push('/(assistant)/classes' as any)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.manageClassText}>Kelola Kelas & Peserta →</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        }
-        renderItem={({ item }) => (
-          <SessionCard
-            session={item as any}
-            onPress={() => {
-              const target = detailPath.replace('[sessionId]', item.id);
-              router.push(target as any);
-            }}
           />
-        )}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        ListEmptyComponent={
-          loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator color={colors.primary} />
-              <Text style={styles.loadingText}>Memuat jadwal praktikum...</Text>
-            </View>
-          ) : (
-            <EmptyState
-              title={EMPTY_STATE_TEXT.schedule.title}
-              message={
-                currentUser.role === 'assistant'
-                  ? 'Belum ada sesi praktikum aktif. Gunakan menu "Kelola Kelas & Peserta" di atas untuk membuat kelas dan sesi.'
-                  : EMPTY_STATE_TEXT.schedule.message
-              }
-            />
-          )
-        }
-      />
-    </SafeAreaView>
+        </AsyncState>
+      </SafeAreaView>
+    );
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  content: { flexGrow: 1, padding: spacing.md },
-  header: { gap: spacing.sm, marginBottom: spacing.md },
-  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  header: { gap: spacing.sm, padding: spacing.md },
+  content: { flexGrow: 1, paddingHorizontal: spacing.md, paddingBottom: spacing.md },
   title: { color: colors.text, fontSize: 24, fontWeight: '700' },
   userName: { color: colors.textMuted, fontSize: 15, marginTop: 2 },
   accountLink: { color: colors.primary, fontSize: 16, paddingVertical: spacing.xs },
-  manageClassBtn: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    alignItems: 'center',
-    marginTop: spacing.xs,
-  },
-  manageClassText: {
-    color: colors.primary,
-    fontSize: 14,
-    fontWeight: '600',
-  },
   separator: { height: spacing.sm },
-  loadingContainer: {
-    padding: spacing.xl,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingText: {
-    marginTop: spacing.sm,
-    color: colors.textMuted,
-    fontSize: 14,
-  },
 });

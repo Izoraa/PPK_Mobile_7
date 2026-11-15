@@ -8,7 +8,6 @@ import {
   View,
 } from 'react-native';
 
-import { EmptyState } from '@/components/common/EmptyState';
 import { AttendanceList } from '@/components/session/AttendanceList';
 import { CheckInPanel } from '@/components/session/CheckInPanel';
 import { useSessionParticipationSummaries } from '@/features/attendance/subscriptions';
@@ -18,6 +17,7 @@ import { useApp } from '@/state/AppContext';
 import { colors, spacing } from '@/theme';
 import type { Session } from '@/types';
 import { formatDate } from '@/utils/format';
+import { getErrorMessage } from '@/utils/errors';
 
 const STATUS_LABELS: Record<Session['status'], string> = {
   not_open: 'Belum dibuka',
@@ -40,6 +40,24 @@ export default function AttendanceScreen() {
         <View style={styles.header}>
           <ThemedText style={styles.appName}>LabCheckIn</ThemedText>
         </View>
+        {currentUser?.role === 'assistant' && summaryState.fromCache ? (
+          <ThemedText themeColor="textSecondary" style={styles.dataNotice}>
+            Menampilkan ringkasan tersimpan. Data ini belum terverifikasi dari server.
+          </ThemedText>
+        ) : null}
+        {currentUser?.role === 'assistant' && summaryState.hasPendingWrites ? (
+          <ThemedText themeColor="textSecondary" style={styles.dataNotice}>
+            Perubahan ringkasan sedang disinkronkan.
+          </ThemedText>
+        ) : null}
+        {currentUser?.role === 'assistant' && summaryState.status === 'error' ? (
+          <View style={styles.errorNotice}>
+            <ThemedText themeColor="textSecondary">
+              {getErrorMessage(Object.values(summaryState.errors)[0]?.code ?? 'SERVICE_UNAVAILABLE')}
+            </ThemedText>
+            <ThemedText type="link" onPress={summaryState.retry}>Coba lagi</ThemedText>
+          </View>
+        ) : null}
         <FlatList
           data={sessions}
           keyExtractor={(session) => session.id}
@@ -53,12 +71,6 @@ export default function AttendanceScreen() {
                 Pilih sesi untuk melihat mahasiswa yang sudah hadir.
               </ThemedText>
             </View>
-          }
-          ListEmptyComponent={
-            <EmptyState
-              title="Rekap presensi belum terhubung"
-              message="Sesi dan presensi belum dimuat dari server."
-            />
           }
           renderItem={({ item }) => {
             return (
@@ -170,6 +182,8 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     backgroundColor: '#25D366',
   },
+  dataNotice: { paddingHorizontal: spacing.md, paddingTop: spacing.sm },
+  errorNotice: { gap: spacing.xs, paddingHorizontal: spacing.md, paddingTop: spacing.sm },
   appName: {
     color: '#FFFFFF',
     fontSize: 30,

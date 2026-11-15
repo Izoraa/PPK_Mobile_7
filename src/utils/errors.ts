@@ -17,6 +17,9 @@ const ERROR_MESSAGES: Record<AppErrorCode, string> = {
   ALREADY_CHECKED_IN: 'Presensi untuk sesi ini sudah tercatat.',
   ALREADY_SUBMITTED: 'Pengajuan izin untuk sesi ini sudah tercatat.',
   PARTICIPATION_CONFLICT: 'Anda sudah memiliki partisipasi untuk sesi ini.',
+  AI_TIMEOUT: 'Pengajuan tetap tersimpan. Klasifikasi AI belum tersedia; asisten tetap dapat memeriksa.',
+  AI_UNAVAILABLE: 'Pengajuan tetap tersimpan. Klasifikasi AI belum tersedia; asisten tetap dapat memeriksa.',
+  AI_INVALID_RESPONSE: 'Pengajuan tetap tersimpan. Klasifikasi AI belum tersedia; asisten tetap dapat memeriksa.',
 };
 
 export function getErrorMessage(code: AppErrorCode): string {

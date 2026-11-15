@@ -198,7 +198,8 @@ export async function archiveClass(classId: string): Promise<Result<void>> {
 export function subscribeClasses(
   scope: { assistantId?: string; studentId?: string; includeArchived?: boolean },
   onChange: (classes: ClassDoc[]) => void,
-  onError?: (err: Error) => void
+  onError?: (err: Error) => void,
+  onMetadata?: (metadata: { fromCache: boolean; hasPendingWrites: boolean }) => void,
 ): Unsubscribe {
   const db = getFirebaseFirestore();
   const classesRef = collection(db, 'classes');
@@ -212,9 +213,15 @@ export function subscribeClasses(
 
     return onSnapshot(
       q,
+      { includeMetadataChanges: true },
       (snapshot) => {
         const list = snapshot.docs.map((docSnap) => toClassDoc(docSnap.id, docSnap.data()));
         onChange(list);
+        onMetadata?.({
+          fromCache: snapshot.metadata.fromCache,
+          hasPendingWrites: snapshot.metadata.hasPendingWrites
+            || snapshot.docs.some((document) => document.metadata.hasPendingWrites),
+        });
       },
       (err) => {
         if (onError) onError(err);
@@ -232,18 +239,28 @@ export function subscribeClasses(
 
     return onSnapshot(
       memQuery,
+      { includeMetadataChanges: true },
       async (memSnap) => {
         const classIds = memSnap.docs.map((d) => d.data().classId).filter(Boolean);
         if (classIds.length === 0) {
           onChange([]);
+          onMetadata?.({
+            fromCache: memSnap.metadata.fromCache,
+            hasPendingWrites: memSnap.metadata.hasPendingWrites
+              || memSnap.docs.some((document) => document.metadata.hasPendingWrites),
+          });
           return;
         }
 
         // Fetch the corresponding classes
         try {
           const classDocs: ClassDoc[] = [];
+          let classDocsFromCache = false;
+          let classDocsHavePendingWrites = false;
           for (const cid of classIds) {
             const cSnap = await getDoc(doc(db, 'classes', cid));
+            classDocsFromCache ||= cSnap.metadata.fromCache;
+            classDocsHavePendingWrites ||= cSnap.metadata.hasPendingWrites;
             if (cSnap.exists()) {
               const cData = cSnap.data();
               if (scope.includeArchived || !cData.isArchived) {
@@ -252,6 +269,12 @@ export function subscribeClasses(
             }
           }
           onChange(classDocs);
+          onMetadata?.({
+            fromCache: memSnap.metadata.fromCache || classDocsFromCache,
+            hasPendingWrites: memSnap.metadata.hasPendingWrites
+              || memSnap.docs.some((document) => document.metadata.hasPendingWrites)
+              || classDocsHavePendingWrites,
+          });
         } catch (e: any) {
           if (onError) onError(e);
         }
@@ -346,16 +369,23 @@ export async function upsertMembership(input: UpsertMembershipInput): Promise<Re
 export function subscribeMembers(
   classId: string,
   onChange: (members: MembershipDoc[]) => void,
-  onError?: (err: Error) => void
+  onError?: (err: Error) => void,
+  onMetadata?: (metadata: { fromCache: boolean; hasPendingWrites: boolean }) => void,
 ): Unsubscribe {
   const db = getFirebaseFirestore();
   const q = query(collection(db, 'memberships'), where('classId', '==', classId));
 
   return onSnapshot(
     q,
+    { includeMetadataChanges: true },
     (snapshot) => {
       const list = snapshot.docs.map((docSnap) => toMembershipDoc(docSnap.id, docSnap.data()));
       onChange(list);
+      onMetadata?.({
+        fromCache: snapshot.metadata.fromCache,
+        hasPendingWrites: snapshot.metadata.hasPendingWrites
+          || snapshot.docs.some((document) => document.metadata.hasPendingWrites),
+      });
     },
     (err) => {
       if (onError) onError(err);
@@ -616,7 +646,8 @@ export async function closeSession(sessionId: string): Promise<Result<void>> {
 export function subscribeSessions(
   classId: string,
   onChange: (sessions: SessionDoc[]) => void,
-  onError?: (err: Error) => void
+  onError?: (err: Error) => void,
+  onMetadata?: (metadata: { fromCache: boolean; hasPendingWrites: boolean }) => void,
 ): Unsubscribe {
   const db = getFirebaseFirestore();
   const q = query(
@@ -627,9 +658,15 @@ export function subscribeSessions(
 
   return onSnapshot(
     q,
+    { includeMetadataChanges: true },
     (snapshot) => {
       const list = snapshot.docs.map((docSnap) => toSessionDoc(docSnap.id, docSnap.data()));
       onChange(list);
+      onMetadata?.({
+        fromCache: snapshot.metadata.fromCache,
+        hasPendingWrites: snapshot.metadata.hasPendingWrites
+          || snapshot.docs.some((document) => document.metadata.hasPendingWrites),
+      });
     },
     (err) => {
       if (onError) onError(err);
@@ -640,19 +677,25 @@ export function subscribeSessions(
 export function subscribeSession(
   sessionId: string,
   onChange: (session: SessionDoc | null) => void,
-  onError?: (err: Error) => void
+  onError?: (err: Error) => void,
+  onMetadata?: (metadata: { fromCache: boolean; hasPendingWrites: boolean }) => void,
 ): Unsubscribe {
   const db = getFirebaseFirestore();
   const sessionRef = doc(db, 'sessions', sessionId);
 
   return onSnapshot(
     sessionRef,
+    { includeMetadataChanges: true },
     (snap) => {
       if (!snap.exists()) {
         onChange(null);
       } else {
         onChange(toSessionDoc(snap.id, snap.data()));
       }
+      onMetadata?.({
+        fromCache: snap.metadata.fromCache,
+        hasPendingWrites: snap.metadata.hasPendingWrites,
+      });
     },
     (err) => {
       if (onError) onError(err);

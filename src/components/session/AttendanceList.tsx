@@ -55,6 +55,12 @@ export function AttendanceList({
         {currentUser?.role === 'assistant' ? (
           <View style={styles.summary}>
             <Text style={styles.summaryTitle}>Ringkasan sesi</Text>
+            {summary.fromCache ? (
+              <Text style={styles.summaryMessage}>Menampilkan data tersimpan; belum terverifikasi dari server.</Text>
+            ) : null}
+            {summary.hasPendingWrites ? (
+              <Text style={styles.summaryMessage}>Perubahan sedang disinkronkan.</Text>
+            ) : null}
             {summary.status === 'loading' ? (
               <Text style={styles.summaryMessage}>Memuat ringkasan...</Text>
             ) : summary.status === 'error' ? (
@@ -76,6 +82,10 @@ export function AttendanceList({
             )}
           </View>
         ) : null}
+        {remote.fromCache ? (
+          <Text style={styles.dataNotice}>Menampilkan daftar tersimpan; belum terverifikasi dari server.</Text>
+        ) : null}
+        {remote.hasPendingWrites ? <Text style={styles.dataNotice}>Perubahan sedang disinkronkan.</Text> : null}
         <FlatList
           data={remote.records}
           keyExtractor={(record) => record.id}
@@ -140,6 +150,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.lg,
   },
   remoteContainer: { flex: 1 },
+  dataNotice: { paddingVertical: spacing.xs, color: colors.textMuted, fontSize: 13 },
   summary: {
     gap: spacing.xs,
     marginBottom: spacing.sm,

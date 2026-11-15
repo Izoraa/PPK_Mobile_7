@@ -8,10 +8,12 @@ import {
 } from '../../utils/messages';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { checkIn } from '../../features/attendance/service';
+import type { AttendanceState } from '../../features/attendance/hooks';
 import { useAttendanceState } from '../../features/attendance/hooks';
 
 export interface CheckInPanelProps {
   sessionId: string;
+  attendanceState?: AttendanceState;
 }
 
 /**
@@ -25,13 +27,14 @@ export interface CheckInPanelProps {
  * - SRS-14: Shows contextual info when session is not_open, closed,
  *           or the student has already checked in.
  */
-export function CheckInPanel({ sessionId }: CheckInPanelProps) {
+export function CheckInPanel({ sessionId, attendanceState: sharedAttendanceState }: CheckInPanelProps) {
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [retryableError, setRetryableError] = useState(false);
-  const { status, session, participation, error, retry } = useAttendanceState(sessionId);
+  const localAttendanceState = useAttendanceState(sessionId, !sharedAttendanceState);
+  const { status, session, participation, error, retry } = sharedAttendanceState ?? localAttendanceState;
 
   if (status === 'loading') {
     return (

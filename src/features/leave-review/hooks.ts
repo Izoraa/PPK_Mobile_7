@@ -16,6 +16,8 @@ export function usePendingLeaveReviews(enabled = true): LeaveReviewQueueState {
     status: enabled ? 'loading' : 'ready',
     records: [],
     error: null,
+    fromCache: false,
+    hasPendingWrites: false,
   });
 
   useEffect(() => {
@@ -23,17 +25,25 @@ export function usePendingLeaveReviews(enabled = true): LeaveReviewQueueState {
 
     if (!enabled) {
       deferStateUpdate(() => {
-        if (active) setState({ status: 'ready', records: [], error: null });
+        if (!active) return;
+
+        setState({
+          status: 'ready',
+          records: [],
+          error: null,
+          fromCache: false,
+          hasPendingWrites: false,
+        });
       });
       return () => { active = false; };
     }
 
     const unsubscribe = subscribePendingLeaveReviews(
-      (records) => {
-        if (active) setState({ status: 'ready', records, error: null });
+      (records, metadata) => {
+        if (active) setState({ status: 'ready', records, error: null, ...metadata });
       },
       (error) => {
-        if (active) setState({ status: 'error', records: [], error });
+        if (active) setState((previous) => ({ ...previous, status: 'error', error }));
       },
     );
 
@@ -44,7 +54,7 @@ export function usePendingLeaveReviews(enabled = true): LeaveReviewQueueState {
   }, [enabled, attempt]);
 
   const retry = useCallback(() => {
-    setState({ status: 'loading', records: [], error: null });
+    setState((previous) => ({ ...previous, status: 'loading', error: null }));
     setAttempt((value) => value + 1);
   }, []);
 

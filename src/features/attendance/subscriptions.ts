@@ -28,6 +28,8 @@ type SubscriptionState<T> = {
   status: 'loading' | 'ready' | 'error';
   records: T[];
   error: AttendanceError | null;
+  fromCache: boolean;
+  hasPendingWrites: boolean;
   retry: () => void;
 };
 
@@ -91,6 +93,8 @@ function useAttendanceSubscription(
     status: enabled ? 'loading' : 'ready',
     records: [],
     error: null,
+    fromCache: false,
+    hasPendingWrites: false,
   });
 
   useEffect(() => {
@@ -98,41 +102,60 @@ function useAttendanceSubscription(
     let unsubscribe = () => {};
 
     if (!enabled) {
-      deferStateUpdate(() => {
-        if (active) setState({ status: 'ready', records: [], error: null });
+        deferStateUpdate(() => {
+        if (!active) return;
+
+        setState({
+          status: 'ready',
+          records: [],
+          error: null,
+          fromCache: false,
+          hasPendingWrites: false,
+        });
       });
+
       return () => { active = false; };
     }
 
     try {
       unsubscribe = onSnapshot(
         buildQuery(),
+        { includeMetadataChanges: true },
         (snapshot) => {
           const records = snapshot.docs
             .map(readAttendanceRecord)
             .filter((record): record is FirestoreAttendanceRecord => record !== null);
-          if (active) setState({ status: 'ready', records, error: null });
+          if (active) setState({
+            status: 'ready',
+            records,
+            error: null,
+            fromCache: snapshot.metadata.fromCache,
+            hasPendingWrites: snapshot.metadata.hasPendingWrites
+              || snapshot.docs.some((document) => document.metadata.hasPendingWrites),
+          });
         },
         (error: FirestoreError) => {
-          if (active) setState({ status: 'error', records: [], error: mapListenerError(error) });
+          if (active) setState((previous) => ({ ...previous, status: 'error', error: mapListenerError(error) }));
         },
       );
     } catch (error) {
-      if (active) {
-        deferStateUpdate(() => {
-          if (!active) return;
-          setState({
-            status: 'error',
-            records: [],
-            error: {
-              code: error instanceof Error && error.message.toLowerCase().includes('permission')
-                ? 'FORBIDDEN'
-                : 'SERVICE_UNAVAILABLE',
-              retryable: true,
-            },
-          });
+      deferStateUpdate(() => {
+        if (!active) return;
+
+        setState({
+          status: 'error',
+          records: [],
+          fromCache: false,
+          hasPendingWrites: false,
+          error: {
+            code: error instanceof Error
+              && error.message.toLowerCase().includes('permission')
+              ? 'FORBIDDEN'
+              : 'SERVICE_UNAVAILABLE',
+            retryable: true,
+          },
         });
-      }
+      });
     }
 
     return () => {
@@ -142,7 +165,7 @@ function useAttendanceSubscription(
   }, [buildQuery, enabled, attempt]);
 
   const retry = useCallback(() => {
-    setState({ status: 'loading', records: [], error: null });
+    setState((previous) => ({ ...previous, status: 'loading', error: null }));
     setAttempt((value) => value + 1);
   }, []);
 
@@ -238,12 +261,13 @@ export function useAttendanceSessionMetadata(
 
 export function subscribeSessionParticipationSummary(
   sessionId: string,
-  onChange: (summary: SessionParticipationSummary) => void,
+  onChange: (summary: SessionParticipationSummary, metadata: { fromCache: boolean; hasPendingWrites: boolean }) => void,
   onError: (error: AttendanceError) => void,
 ): () => void {
   try {
     return onSnapshot(
       collection(getAttendanceFirestore(), 'sessions', sessionId, 'participations'),
+      { includeMetadataChanges: true },
       (snapshot) => {
         const summary: SessionParticipationSummary = {
           attendanceCount: 0,
@@ -267,7 +291,11 @@ export function subscribeSessionParticipationSummary(
           }
         });
 
-        onChange(summary);
+        onChange(summary, {
+          fromCache: snapshot.metadata.fromCache,
+          hasPendingWrites: snapshot.metadata.hasPendingWrites
+            || snapshot.docs.some((document) => document.metadata.hasPendingWrites),
+        });
       },
       (error: FirestoreError) => onError(mapListenerError(error)),
     );
@@ -291,7 +319,7 @@ export type SessionParticipationSummaryMapError = {
 
 export function subscribeSessionParticipationSummaries(
   sessionIds: string[],
-  onChange: (summaries: SessionParticipationSummaryMap) => void,
+  onChange: (summaries: SessionParticipationSummaryMap, metadata: { fromCache: boolean; hasPendingWrites: boolean }) => void,
   onError: (error: SessionParticipationSummaryMapError) => void,
   enabled = true,
 ): () => void {
@@ -299,12 +327,17 @@ export function subscribeSessionParticipationSummaries(
 
   const uniqueSessionIds = [...new Set(sessionIds)];
   const summaries: SessionParticipationSummaryMap = {};
+  const metadataBySession = new Map<string, { fromCache: boolean; hasPendingWrites: boolean }>();
   const unsubscribers = uniqueSessionIds.map((sessionId) => (
     subscribeSessionParticipationSummary(
       sessionId,
-      (summary) => {
+      (summary, metadata) => {
         summaries[sessionId] = summary;
-        onChange({ ...summaries });
+        metadataBySession.set(sessionId, metadata);
+        onChange({ ...summaries }, {
+          fromCache: [...metadataBySession.values()].some((item) => item.fromCache),
+          hasPendingWrites: [...metadataBySession.values()].some((item) => item.hasPendingWrites),
+        });
       },
       (error) => onError({ sessionId, error }),
     )
@@ -319,6 +352,8 @@ export type SessionParticipationSummaryMapState = {
   status: 'loading' | 'ready' | 'error';
   summaries: SessionParticipationSummaryMap;
   errors: Record<string, AttendanceError>;
+  fromCache: boolean;
+  hasPendingWrites: boolean;
   retry: () => void;
 };
 
@@ -331,6 +366,8 @@ export function useSessionParticipationSummaries(
     status: enabled && sessionIds.length > 0 ? 'loading' : 'ready',
     summaries: {},
     errors: {},
+    fromCache: false,
+    hasPendingWrites: false,
   });
   const sessionIdsKey = [...new Set(sessionIds)].sort().join('|');
 
@@ -338,20 +375,37 @@ export function useSessionParticipationSummaries(
     let active = true;
     const uniqueSessionIds = sessionIdsKey ? sessionIdsKey.split('|') : [];
 
-    if (!enabled || uniqueSessionIds.length === 0) {
+   if (!enabled || uniqueSessionIds.length === 0) {
       deferStateUpdate(() => {
-        if (active) setState({ status: 'ready', summaries: {}, errors: {} });
+        if (!active) return;
+
+        setState({
+          status: 'ready',
+          summaries: {},
+          errors: {},
+          fromCache: false,
+          hasPendingWrites: false,
+        });
       });
+
       return () => { active = false; };
     }
 
     deferStateUpdate(() => {
-      if (active) setState({ status: 'loading', summaries: {}, errors: {} });
+      if (!active) return;
+
+      setState({
+        status: 'loading',
+        summaries: {},
+        errors: {},
+        fromCache: false,
+        hasPendingWrites: false,
+      });
     });
     const unsubscribe = subscribeSessionParticipationSummaries(
       uniqueSessionIds,
-      (summaries) => {
-        if (active) setState({ status: 'ready', summaries, errors: {} });
+      (summaries, metadata) => {
+        if (active) setState({ status: 'ready', summaries, errors: {}, ...metadata });
       },
       ({ sessionId, error }) => {
         if (!active) return;
@@ -359,6 +413,8 @@ export function useSessionParticipationSummaries(
           status: 'error',
           summaries: previous.summaries,
           errors: { ...previous.errors, [sessionId]: error },
+          fromCache: previous.fromCache,
+          hasPendingWrites: previous.hasPendingWrites,
         }));
       },
       enabled,
@@ -371,7 +427,7 @@ export function useSessionParticipationSummaries(
   }, [enabled, sessionIdsKey, attempt]);
 
   const retry = useCallback(() => {
-    setState({ status: 'loading', summaries: {}, errors: {} });
+    setState((previous) => ({ ...previous, status: 'loading', summaries: {}, errors: {} }));
     setAttempt((value) => value + 1);
   }, []);
 
@@ -387,6 +443,8 @@ export function useSessionParticipationSummary(
     status: enabled && sessionId ? 'loading' : 'ready',
     records: [],
     error: null,
+    fromCache: false,
+    hasPendingWrites: false,
   });
 
   useEffect(() => {
@@ -395,21 +453,38 @@ export function useSessionParticipationSummary(
 
     if (!enabled || !sessionId) {
       deferStateUpdate(() => {
-        if (active) setState({ status: 'ready', records: [], error: null });
+        if (!active) return;
+
+        setState({
+          status: 'ready',
+          records: [],
+          error: null,
+          fromCache: false,
+          hasPendingWrites: false,
+        });
       });
+
       return () => { active = false; };
     }
 
     deferStateUpdate(() => {
-      if (active) setState({ status: 'loading', records: [], error: null });
+      if (!active) return;
+
+      setState({
+        status: 'loading',
+        records: [],
+        error: null,
+        fromCache: false,
+        hasPendingWrites: false,
+      });
     });
     unsubscribe = subscribeSessionParticipationSummary(
       sessionId,
-      (summary) => {
-        if (active) setState({ status: 'ready', records: [summary], error: null });
+      (summary, metadata) => {
+        if (active) setState({ status: 'ready', records: [summary], error: null, ...metadata });
       },
       (error) => {
-        if (active) setState({ status: 'error', records: [], error });
+        if (active) setState((previous) => ({ ...previous, status: 'error', records: [], error }));
       },
     );
 
@@ -420,7 +495,7 @@ export function useSessionParticipationSummary(
   }, [enabled, sessionId, attempt]);
 
   const retry = useCallback(() => {
-    setState({ status: 'loading', records: [], error: null });
+    setState((previous) => ({ ...previous, status: 'loading', records: [], error: null }));
     setAttempt((value) => value + 1);
   }, []);
 
@@ -428,6 +503,8 @@ export function useSessionParticipationSummary(
     status: state.status,
     records: state.records,
     error: state.error,
+    fromCache: state.fromCache,
+    hasPendingWrites: state.hasPendingWrites,
     retry,
   };
 }

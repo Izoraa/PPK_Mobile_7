@@ -3,40 +3,62 @@ import { Link, useLocalSearchParams, useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import EmptyState from '../components/common/EmptyState';
+import { AsyncState } from '../components/common/AsyncState';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { AttendanceList } from '../components/session/AttendanceList';
-import { CheckInPanel } from '../components/session/CheckInPanel';
 import { SessionControl } from '../components/session/SessionControl';
+import { StudentSessionActions } from './StudentSessionActions';
 import { useApp } from '../state/AppContext';
 import { colors, radius, spacing } from '../theme';
 import { formatDate } from '../utils/format';
 import { subscribeSession, type SessionDoc } from '@/features/practicum';
+import type { AppErrorCode } from '@/types';
 
 export default function SessionDetailScreen() {
   const router = useRouter();
-  const { currentUser, getSession } = useApp();
+  const { currentUser } = useApp();
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
 
   const [liveSession, setLiveSession] = useState<SessionDoc | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [error, setError] = useState<{ code: AppErrorCode; retryable: boolean } | null>(null);
+  const [metadata, setMetadata] = useState({ fromCache: false, hasPendingWrites: false });
 
   useEffect(() => {
-    if (!sessionId || typeof sessionId !== 'string') return;
+    if (!sessionId || typeof sessionId !== 'string') {
+      setLiveSession(null);
+      setStatus('ready');
+      return;
+    }
 
     const unsubscribe = subscribeSession(
       sessionId,
-      (doc) => setLiveSession(doc),
-      (err) => console.error('Error listening to session detail:', err)
+      (doc) => {
+        setLiveSession(doc);
+        setStatus('ready');
+        setError(null);
+      },
+      (loadError) => {
+        const code = 'code' in loadError ? String(loadError.code) : '';
+        const mapped = code === 'permission-denied'
+          ? { code: 'FORBIDDEN' as const, retryable: false }
+          : code === 'unauthenticated'
+            ? { code: 'UNAUTHENTICATED' as const, retryable: false }
+            : code === 'unavailable' || code === 'deadline-exceeded'
+              ? { code: 'NETWORK_ERROR' as const, retryable: true }
+              : { code: 'SERVICE_UNAVAILABLE' as const, retryable: true };
+        setError(mapped);
+        setStatus('error');
+      },
+      setMetadata,
     );
 
     return () => unsubscribe();
-  }, [sessionId]);
+  }, [sessionId, attempt]);
 
   if (!currentUser) return null;
 
-  // Prefer live Firestore session, fallback to dummy
-  const dummyCandidate = typeof sessionId === 'string' ? getSession(sessionId) : undefined;
-  
   let sessionData: {
     id: string;
     course: string;
@@ -72,8 +94,6 @@ export default function SessionDetailScreen() {
       status: liveSession.status,
       assistantId: liveSession.assistantId,
     };
-  } else if (dummyCandidate) {
-    sessionData = dummyCandidate;
   }
 
   const session = currentUser.role === 'assistant' && sessionData?.assistantId !== currentUser.id
@@ -101,9 +121,16 @@ export default function SessionDetailScreen() {
           )}
         </View>
 
-        {!session ? (
-          <EmptyState title="Sesi tidak ditemukan" message="Silakan kembali ke jadwal untuk memilih sesi yang tersedia." />
-        ) : (
+        <AsyncState
+          status={status === 'ready' && !session ? 'empty' : status}
+          error={error}
+          fromCache={metadata.fromCache}
+          hasPendingWrites={metadata.hasPendingWrites}
+          onRetry={() => { setStatus('loading'); setAttempt((value) => value + 1); }}
+          emptyTitle="Sesi tidak ditemukan"
+          emptyMessage="Silakan kembali ke jadwal untuk memilih sesi yang tersedia."
+        >
+          {session ? (
           <>
             <View style={styles.details}>
               <Text accessibilityRole="header" style={styles.title}>{session.course}</Text>
@@ -131,9 +158,16 @@ export default function SessionDetailScreen() {
                 <AttendanceList sessionId={session.id} />
               </>
             )}
-            {currentUser.role === 'student' && <CheckInPanel sessionId={session.id} />}
+            {currentUser.role === 'student' && (
+              <StudentSessionActions
+                sessionId={session.id}
+                sessionTitle={liveSession?.title ?? session.course}
+                sessionIsLive={liveSession?.id === session.id}
+              />
+            )}
           </>
-        )}
+          ) : null}
+        </AsyncState>
       </ScrollView>
     </SafeAreaView>
   );
