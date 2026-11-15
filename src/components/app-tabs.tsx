@@ -9,8 +9,6 @@ export default function AppTabs() {
   const colors = Colors[scheme === 'dark' ? 'dark' : 'light'];
   const { currentUser } = useApp();
 
-  const isAssistant = currentUser?.role === 'assistant';
-
   return (
     <NativeTabs
       backgroundColor={colors.background}
@@ -18,17 +16,9 @@ export default function AppTabs() {
       labelStyle={{ selected: { color: colors.text } }}
     >
       <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>Beranda</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
           src={require('@/assets/images/tabIcons/home.png')}
-          renderingMode="template"
-        />
-      </NativeTabs.Trigger>
-
-      <NativeTabs.Trigger name="explore">
-        <NativeTabs.Trigger.Label>Explore</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/explore.png')}
           renderingMode="template"
         />
       </NativeTabs.Trigger>
@@ -38,7 +28,7 @@ export default function AppTabs() {
         <NativeTabs.Trigger.Icon sf="checklist" md="checklist" />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="attendance-history" hidden={isAssistant}>
+      <NativeTabs.Trigger name="attendance-history" hidden={currentUser?.role !== 'student'}>
         <NativeTabs.Trigger.Label>Riwayat</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
           sf="clock.arrow.circlepath"
