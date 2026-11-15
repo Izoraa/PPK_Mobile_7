@@ -45,6 +45,10 @@ function mapListenerError(error: FirestoreError): AttendanceError {
   }
 }
 
+function deferStateUpdate(update: () => void): void {
+  void Promise.resolve().then(update);
+}
+
 function timestampToIso(value: unknown): string | null {
   if (value && typeof value === 'object' && 'toDate' in value) {
     return (value as { toDate: () => Date }).toDate().toISOString();
@@ -62,7 +66,8 @@ function readAttendanceRecord(
     || typeof data.studentId !== 'string'
     || typeof data.studentName !== 'string'
     || (typeof data.studentNumber !== 'string' && data.studentNumber !== null)
-    || data.kind !== 'attendance'
+    || (data.kind !== 'attendance'
+      && !(data.kind === 'leave' && data.status === 'rejected' && data.attendanceCheckedInAt))
   ) return null;
 
   return {
@@ -72,8 +77,8 @@ function readAttendanceRecord(
     studentId: data.studentId,
     studentName: data.studentName,
     studentNumber: data.studentNumber,
-    checkedInAt: timestampToIso(data.checkedInAt),
-    createdAt: timestampToIso(data.createdAt),
+    checkedInAt: timestampToIso(data.kind === 'attendance' ? data.checkedInAt : data.attendanceCheckedInAt),
+    createdAt: timestampToIso(data.kind === 'attendance' ? data.createdAt : data.attendanceCreatedAt),
   };
 }
 
@@ -93,7 +98,9 @@ function useAttendanceSubscription(
     let unsubscribe = () => {};
 
     if (!enabled) {
-      setState({ status: 'ready', records: [], error: null });
+      deferStateUpdate(() => {
+        if (active) setState({ status: 'ready', records: [], error: null });
+      });
       return () => { active = false; };
     }
 
@@ -112,15 +119,18 @@ function useAttendanceSubscription(
       );
     } catch (error) {
       if (active) {
-        setState({
-          status: 'error',
-          records: [],
-          error: {
-            code: error instanceof Error && error.message.toLowerCase().includes('permission')
-              ? 'FORBIDDEN'
-              : 'SERVICE_UNAVAILABLE',
-            retryable: true,
-          },
+        deferStateUpdate(() => {
+          if (!active) return;
+          setState({
+            status: 'error',
+            records: [],
+            error: {
+              code: error instanceof Error && error.message.toLowerCase().includes('permission')
+                ? 'FORBIDDEN'
+                : 'SERVICE_UNAVAILABLE',
+              retryable: true,
+            },
+          });
         });
       }
     }
@@ -166,7 +176,6 @@ export function useMyAttendanceHistory(enabled = true): SubscriptionState<Firest
     return query(
       collectionGroup(getAttendanceFirestore(), 'participations'),
       where('studentId', '==', uid),
-      where('kind', '==', 'attendance'),
       orderBy('createdAt', 'desc'),
     );
   }, []);
@@ -203,13 +212,15 @@ export function useAttendanceSessionMetadata(
   sessionIds: string[],
 ): Record<string, AttendanceSessionMetadata | null> {
   const [metadata, setMetadata] = useState<Record<string, AttendanceSessionMetadata | null>>({});
-  const sessionIdsKey = sessionIds.join('|');
+  const sessionIdsKey = [...new Set(sessionIds)].join('|');
 
   useEffect(() => {
     let active = true;
-    const uniqueIds = [...new Set(sessionIds)];
+    const uniqueIds = sessionIdsKey ? sessionIdsKey.split('|') : [];
     if (uniqueIds.length === 0) {
-      setMetadata({});
+      deferStateUpdate(() => {
+        if (active) setMetadata({});
+      });
       return () => { active = false; };
     }
 
@@ -243,7 +254,11 @@ export function subscribeSessionParticipationSummary(
 
         snapshot.docs.forEach((document) => {
           const data = document.data();
-          if (data.kind === 'attendance') {
+          if (data.kind === 'attendance' || (
+            data.kind === 'leave'
+            && data.status === 'rejected'
+            && data.attendanceCheckedInAt
+          )) {
             summary.attendanceCount += 1;
           } else if (data.kind === 'leave') {
             if (data.status === 'pending') summary.pendingLeaveCount += 1;
@@ -324,11 +339,15 @@ export function useSessionParticipationSummaries(
     const uniqueSessionIds = sessionIdsKey ? sessionIdsKey.split('|') : [];
 
     if (!enabled || uniqueSessionIds.length === 0) {
-      setState({ status: 'ready', summaries: {}, errors: {} });
+      deferStateUpdate(() => {
+        if (active) setState({ status: 'ready', summaries: {}, errors: {} });
+      });
       return () => { active = false; };
     }
 
-    setState({ status: 'loading', summaries: {}, errors: {} });
+    deferStateUpdate(() => {
+      if (active) setState({ status: 'loading', summaries: {}, errors: {} });
+    });
     const unsubscribe = subscribeSessionParticipationSummaries(
       uniqueSessionIds,
       (summaries) => {
@@ -375,11 +394,15 @@ export function useSessionParticipationSummary(
     let unsubscribe = () => {};
 
     if (!enabled || !sessionId) {
-      setState({ status: 'ready', records: [], error: null });
+      deferStateUpdate(() => {
+        if (active) setState({ status: 'ready', records: [], error: null });
+      });
       return () => { active = false; };
     }
 
-    setState({ status: 'loading', records: [], error: null });
+    deferStateUpdate(() => {
+      if (active) setState({ status: 'loading', records: [], error: null });
+    });
     unsubscribe = subscribeSessionParticipationSummary(
       sessionId,
       (summary) => {

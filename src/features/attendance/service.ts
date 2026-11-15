@@ -173,6 +173,7 @@ export async function checkIn(sessionId: string): Promise<AttendanceResult<Fires
     const sessionReference = doc(db, 'sessions', sessionId);
     const profileReference = doc(db, 'users', user.uid);
     const participationReference = doc(db, 'sessions', sessionId, 'participations', user.uid);
+    let rejectedLeaveCheckIn = false;
 
     const transactionResult = await runTransaction<AttendanceResult<CheckInRecord>>(db, async (transaction: Transaction) => {
       const profileSnapshot = await transaction.get(profileReference);
@@ -215,7 +216,18 @@ export async function checkIn(sessionId: string): Promise<AttendanceResult<Fires
       }
 
       if (participationSnapshot.exists()) {
-        return { ok: false, error: { code: 'CONFLICT', retryable: false } };
+        const existing = participationSnapshot.data() as {
+          kind?: unknown;
+          status?: unknown;
+          attendanceCheckedInAt?: unknown;
+        };
+        if (existing.kind !== 'leave' || existing.status !== 'rejected') {
+          return { ok: false, error: { code: 'CONFLICT', retryable: false } };
+        }
+        if (existing.attendanceCheckedInAt) {
+          return { ok: false, error: { code: 'CONFLICT', retryable: false } };
+        }
+        rejectedLeaveCheckIn = true;
       }
 
       const record: CheckInRecord = {
@@ -230,15 +242,27 @@ export async function checkIn(sessionId: string): Promise<AttendanceResult<Fires
         updatedAt: serverTimestamp(),
         checkedInAt: serverTimestamp(),
       };
-      transaction.set(participationReference, record);
+      if (rejectedLeaveCheckIn) {
+        transaction.update(participationReference, {
+          attendanceCreatedAt: serverTimestamp(),
+          attendanceUpdatedAt: serverTimestamp(),
+          attendanceCheckedInAt: serverTimestamp(),
+        });
+      } else {
+        transaction.set(participationReference, record);
+      }
       return { ok: true, data: record };
     });
 
     if (!transactionResult.ok) return transactionResult;
 
     const confirmedSnapshot = await getDocFromServer(participationReference);
-    const confirmed = confirmedSnapshot.data() as Partial<CheckInRecord> | undefined;
-    const checkedInAt = timestampToIso(confirmed?.checkedInAt);
+    const confirmed = confirmedSnapshot.data() as (Partial<CheckInRecord> & {
+      attendanceCheckedInAt?: unknown;
+    }) | undefined;
+    const checkedInAt = timestampToIso(rejectedLeaveCheckIn
+      ? confirmed?.attendanceCheckedInAt
+      : confirmed?.checkedInAt);
     if (!confirmedSnapshot.exists() || !checkedInAt) {
       return { ok: false, error: { code: 'SERVICE_UNAVAILABLE', retryable: true } };
     }

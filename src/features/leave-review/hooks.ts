@@ -6,6 +6,10 @@ import {
 } from './service';
 import type { LeaveReviewMetadata, LeaveReviewQueueState, LeaveReviewRecord } from './types';
 
+function deferStateUpdate(update: () => void): void {
+  void Promise.resolve().then(update);
+}
+
 export function usePendingLeaveReviews(enabled = true): LeaveReviewQueueState {
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<Omit<LeaveReviewQueueState, 'retry'>>({
@@ -18,7 +22,9 @@ export function usePendingLeaveReviews(enabled = true): LeaveReviewQueueState {
     let active = true;
 
     if (!enabled) {
-      setState({ status: 'ready', records: [], error: null });
+      deferStateUpdate(() => {
+        if (active) setState({ status: 'ready', records: [], error: null });
+      });
       return () => { active = false; };
     }
 
@@ -53,18 +59,25 @@ export function useLeaveReviewMetadata(
 
   useEffect(() => {
     let active = true;
-    const uniqueRecords = Array.from(
-      new Map(records.map((record) => [record.sessionId + ':' + record.classId, record])).values(),
-    );
+    const uniqueRecords = (metadataKey ? metadataKey.split('|') : []).map((key) => {
+      const separatorIndex = key.indexOf(':');
+      return {
+        key,
+        sessionId: key.slice(0, separatorIndex),
+        classId: key.slice(separatorIndex + 1),
+      };
+    });
 
     if (uniqueRecords.length === 0) {
-      setMetadata({});
+      deferStateUpdate(() => {
+        if (active) setMetadata({});
+      });
       return () => { active = false; };
     }
 
     void Promise.all(uniqueRecords.map(async (record) => {
       const value = await getLeaveReviewMetadata(record.sessionId, record.classId);
-      return [record.sessionId + ':' + record.classId, value] as const;
+      return [record.key, value] as const;
     })).then((entries) => {
       if (active) setMetadata(Object.fromEntries(entries));
     });

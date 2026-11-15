@@ -75,6 +75,7 @@ async function seedScenario(
     sessionStatus?: 'not_open' | 'open' | 'closed';
     classArchived?: boolean;
     existingParticipation?: boolean;
+    existingLeaveStatus?: 'pending' | 'approved' | 'rejected';
   } = {},
 ) {
   const {
@@ -84,6 +85,7 @@ async function seedScenario(
     sessionStatus = 'open',
     classArchived = false,
     existingParticipation = false,
+    existingLeaveStatus,
   } = options;
 
   await rulesEnvironment.withSecurityRulesDisabled(async (context) => {
@@ -126,6 +128,14 @@ async function seedScenario(
     if (existingParticipation) {
       await setDoc(doc(adminDb, 'sessions', 'session-1', 'participations', uid), {
         kind: 'attendance',
+        studentId: uid,
+      });
+    }
+
+    if (existingLeaveStatus) {
+      await setDoc(doc(adminDb, 'sessions', 'session-1', 'participations', uid), {
+        kind: 'leave',
+        status: existingLeaveStatus,
         studentId: uid,
       });
     }
@@ -209,6 +219,48 @@ describe('Attendance integration with Firebase Emulator', () => {
     const result = await checkIn('session-1');
 
     expect(result).toEqual({ ok: false, error: { code: 'CONFLICT', retryable: false } });
+  });
+
+  test.each(['pending', 'approved'] as const)('rejects check-in when leave is %s', async (status) => {
+    const user = await signInTestUser();
+    await seedScenario(user.uid, { existingLeaveStatus: status });
+
+    const result = await checkIn('session-1');
+
+    expect(result).toEqual({ ok: false, error: { code: 'CONFLICT', retryable: false } });
+    expect((await getDoc(participationReference(user.uid))).data()).toMatchObject({
+      kind: 'leave',
+      status,
+    });
+  });
+
+  test('allows check-in after a rejected leave without changing the leave decision', async () => {
+    const user = await signInTestUser();
+    await seedScenario(user.uid, { existingLeaveStatus: 'rejected' });
+
+    const result = await checkIn('session-1');
+
+    expect(result.ok).toBe(true);
+    const leave = await getDoc(participationReference(user.uid));
+    const attendance = await getDoc(participationReference(user.uid));
+    expect(leave.data()).toMatchObject({ kind: 'leave', status: 'rejected' });
+    expect(attendance.data()).toMatchObject({
+      kind: 'leave',
+      status: 'rejected',
+      studentId: user.uid,
+    });
+    expect(attendance.data()?.attendanceCheckedInAt).toBeDefined();
+  });
+
+  test('allows only one concurrent check-in after a rejected leave', async () => {
+    const user = await signInTestUser();
+    await seedScenario(user.uid, { existingLeaveStatus: 'rejected' });
+
+    const results = await Promise.all([checkIn('session-1'), checkIn('session-1')]);
+
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(results.filter((result) => !result.ok && result.error.code === 'CONFLICT')).toHaveLength(1);
+    expect((await getDoc(participationReference(user.uid))).data()?.attendanceCheckedInAt).toBeDefined();
   });
 
   test('rejects a user who is not signed in', async () => {

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 
-import EmptyState from '@/components/common/EmptyState';
+import EmptyStateComponent from '@/components/common/EmptyState';
 import { useLeaveReviewMetadata, usePendingLeaveReviews } from '@/features/leave-review/hooks';
 import { LeaveReviewCard } from '@/features/leave-review/components/LeaveReviewCard';
 import { LeaveReviewDetail } from '@/features/leave-review/components/LeaveReviewDetail';
@@ -47,7 +47,7 @@ export default function LeaveReviewQueueScreen() {
             {notice ? <Text accessibilityRole="alert" style={styles.notice}>{notice}</Text> : null}
           </View>
         }
-        ListEmptyComponent={<EmptyState title="Tidak ada pengajuan pending" message="Antrean izin yang perlu direview akan muncul di sini." />}
+        ListEmptyComponent={<EmptyStateComponent title="Tidak ada pengajuan pending" message="Antrean izin yang perlu direview akan muncul di sini." />}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         renderItem={({ item }) => {
           const key = item.sessionId + ':' + item.classId;
