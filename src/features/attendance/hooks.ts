@@ -29,15 +29,28 @@ function mapListenerError(error: unknown): AttendanceError {
   return { code: 'SERVICE_UNAVAILABLE', retryable: true };
 }
 
+function deferStateUpdate(update: () => void): void {
+  void Promise.resolve().then(update);
+}
+
 function parseParticipation(id: string, value: unknown): AttendanceParticipation | null {
   if (!value || typeof value !== 'object') return null;
-  const data = value as { kind?: unknown; checkedInAt?: unknown };
+  const data = value as { kind?: unknown; status?: unknown; checkedInAt?: unknown; attendanceCheckedInAt?: unknown };
   if (data.kind !== 'attendance' && data.kind !== 'leave') return null;
+  const hasRejectedAttendance = data.kind === 'leave'
+    && data.status === 'rejected'
+    && data.attendanceCheckedInAt;
+  const kind = hasRejectedAttendance ? 'attendance' : data.kind;
+  const status = data.kind === 'leave'
+    && (data.status === 'pending' || data.status === 'approved' || data.status === 'rejected')
+    ? data.status
+    : null;
   let checkedInAt: string | null = null;
-  if (data.checkedInAt && typeof data.checkedInAt === 'object' && 'toDate' in data.checkedInAt) {
-    checkedInAt = (data.checkedInAt as { toDate: () => Date }).toDate().toISOString();
+  const timestamp = hasRejectedAttendance ? data.attendanceCheckedInAt : data.checkedInAt;
+  if (timestamp && typeof timestamp === 'object' && 'toDate' in timestamp) {
+    checkedInAt = (timestamp as { toDate: () => Date }).toDate().toISOString();
   }
-  return { id, kind: data.kind, checkedInAt };
+  return { id, kind, status: kind === 'leave' ? status : null, checkedInAt };
 }
 
 export function useAttendanceState(sessionId: string): AttendanceState {
@@ -81,11 +94,14 @@ export function useAttendanceState(sessionId: string): AttendanceState {
       const auth = getAttendanceAuth();
       const uid = auth.currentUser?.uid;
       if (!uid) {
-        setState({
-          status: 'error',
-          session: null,
-          participation: null,
-          error: { code: 'UNAUTHENTICATED', retryable: false },
+        deferStateUpdate(() => {
+          if (!active) return;
+          setState({
+            status: 'error',
+            session: null,
+            participation: null,
+            error: { code: 'UNAUTHENTICATED', retryable: false },
+          });
         });
         return () => { active = false; };
       }
