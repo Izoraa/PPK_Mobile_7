@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   FlatList,
   Modal,
@@ -11,6 +11,7 @@ import {
 import { EmptyState } from '@/components/common/EmptyState';
 import { AttendanceList } from '@/components/session/AttendanceList';
 import { CheckInPanel } from '@/components/session/CheckInPanel';
+import { useSessionParticipationSummaries } from '@/features/attendance/subscriptions';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useApp } from '@/state/AppContext';
@@ -25,8 +26,13 @@ const STATUS_LABELS: Record<Session['status'], string> = {
 };
 
 export default function AttendanceScreen() {
-  const { sessions, getAttendancesBySession } = useApp();
+  const { currentUser, sessions } = useApp();
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const sessionIds = useMemo(() => sessions.map((session) => session.id), [sessions]);
+  const summaryState = useSessionParticipationSummaries(
+    sessionIds,
+    currentUser?.role === 'assistant',
+  );
 
   return (
     <ThemedView style={styles.container}>
@@ -55,8 +61,6 @@ export default function AttendanceScreen() {
             />
           }
           renderItem={({ item }) => {
-            const attendanceCount = getAttendancesBySession(item.id).length;
-
             return (
               <Pressable
                 accessibilityRole="button"
@@ -73,10 +77,14 @@ export default function AttendanceScreen() {
                   </View>
                   <View style={styles.countBadge}>
                     <ThemedText type="smallBold" style={styles.countText}>
-                      {attendanceCount}
+                      {currentUser?.role === 'assistant'
+                        ? `Hadir: ${summaryState.summaries[item.id]?.attendanceCount ?? '—'}`
+                        : 'Live'}
                     </ThemedText>
                     <ThemedText type="small" style={styles.countLabel}>
-                      hadir
+                      {currentUser?.role === 'assistant'
+                        ? (summaryState.errors[item.id] ? 'Tidak tersedia' : 'Live · Firestore')
+                        : 'Firestore'}
                     </ThemedText>
                   </View>
                 </View>
