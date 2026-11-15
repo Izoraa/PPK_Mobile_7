@@ -47,6 +47,10 @@ function mapListenerError(error: FirestoreError): AttendanceError {
   }
 }
 
+function deferStateUpdate(update: () => void): void {
+  void Promise.resolve().then(update);
+}
+
 function timestampToIso(value: unknown): string | null {
   if (value && typeof value === 'object' && 'toDate' in value) {
     return (value as { toDate: () => Date }).toDate().toISOString();
@@ -64,7 +68,8 @@ function readAttendanceRecord(
     || typeof data.studentId !== 'string'
     || typeof data.studentName !== 'string'
     || (typeof data.studentNumber !== 'string' && data.studentNumber !== null)
-    || data.kind !== 'attendance'
+    || (data.kind !== 'attendance'
+      && !(data.kind === 'leave' && data.status === 'rejected' && data.attendanceCheckedInAt))
   ) return null;
 
   return {
@@ -74,8 +79,8 @@ function readAttendanceRecord(
     studentId: data.studentId,
     studentName: data.studentName,
     studentNumber: data.studentNumber,
-    checkedInAt: timestampToIso(data.checkedInAt),
-    createdAt: timestampToIso(data.createdAt),
+    checkedInAt: timestampToIso(data.kind === 'attendance' ? data.checkedInAt : data.attendanceCheckedInAt),
+    createdAt: timestampToIso(data.kind === 'attendance' ? data.createdAt : data.attendanceCreatedAt),
   };
 }
 
@@ -97,7 +102,18 @@ function useAttendanceSubscription(
     let unsubscribe = () => {};
 
     if (!enabled) {
-      setState({ status: 'ready', records: [], error: null, fromCache: false, hasPendingWrites: false });
+        deferStateUpdate(() => {
+        if (!active) return;
+
+        setState({
+          status: 'ready',
+          records: [],
+          error: null,
+          fromCache: false,
+          hasPendingWrites: false,
+        });
+      });
+
       return () => { active = false; };
     }
 
@@ -123,20 +139,23 @@ function useAttendanceSubscription(
         },
       );
     } catch (error) {
-      if (active) {
+      deferStateUpdate(() => {
+        if (!active) return;
+
         setState({
           status: 'error',
           records: [],
           fromCache: false,
           hasPendingWrites: false,
           error: {
-            code: error instanceof Error && error.message.toLowerCase().includes('permission')
+            code: error instanceof Error
+              && error.message.toLowerCase().includes('permission')
               ? 'FORBIDDEN'
               : 'SERVICE_UNAVAILABLE',
             retryable: true,
           },
         });
-      }
+      });
     }
 
     return () => {
@@ -180,7 +199,6 @@ export function useMyAttendanceHistory(enabled = true): SubscriptionState<Firest
     return query(
       collectionGroup(getAttendanceFirestore(), 'participations'),
       where('studentId', '==', uid),
-      where('kind', '==', 'attendance'),
       orderBy('createdAt', 'desc'),
     );
   }, []);
@@ -217,13 +235,15 @@ export function useAttendanceSessionMetadata(
   sessionIds: string[],
 ): Record<string, AttendanceSessionMetadata | null> {
   const [metadata, setMetadata] = useState<Record<string, AttendanceSessionMetadata | null>>({});
-  const sessionIdsKey = sessionIds.join('|');
+  const sessionIdsKey = [...new Set(sessionIds)].join('|');
 
   useEffect(() => {
     let active = true;
-    const uniqueIds = [...new Set(sessionIds)];
+    const uniqueIds = sessionIdsKey ? sessionIdsKey.split('|') : [];
     if (uniqueIds.length === 0) {
-      setMetadata({});
+      deferStateUpdate(() => {
+        if (active) setMetadata({});
+      });
       return () => { active = false; };
     }
 
@@ -258,7 +278,11 @@ export function subscribeSessionParticipationSummary(
 
         snapshot.docs.forEach((document) => {
           const data = document.data();
-          if (data.kind === 'attendance') {
+          if (data.kind === 'attendance' || (
+            data.kind === 'leave'
+            && data.status === 'rejected'
+            && data.attendanceCheckedInAt
+          )) {
             summary.attendanceCount += 1;
           } else if (data.kind === 'leave') {
             if (data.status === 'pending') summary.pendingLeaveCount += 1;
@@ -351,12 +375,33 @@ export function useSessionParticipationSummaries(
     let active = true;
     const uniqueSessionIds = sessionIdsKey ? sessionIdsKey.split('|') : [];
 
-    if (!enabled || uniqueSessionIds.length === 0) {
-      setState({ status: 'ready', summaries: {}, errors: {}, fromCache: false, hasPendingWrites: false });
+   if (!enabled || uniqueSessionIds.length === 0) {
+      deferStateUpdate(() => {
+        if (!active) return;
+
+        setState({
+          status: 'ready',
+          summaries: {},
+          errors: {},
+          fromCache: false,
+          hasPendingWrites: false,
+        });
+      });
+
       return () => { active = false; };
     }
 
-    setState((previous) => ({ ...previous, status: 'loading', summaries: {}, errors: {} }));
+    deferStateUpdate(() => {
+      if (!active) return;
+
+      setState({
+        status: 'loading',
+        summaries: {},
+        errors: {},
+        fromCache: false,
+        hasPendingWrites: false,
+      });
+    });
     const unsubscribe = subscribeSessionParticipationSummaries(
       uniqueSessionIds,
       (summaries, metadata) => {
@@ -407,11 +452,32 @@ export function useSessionParticipationSummary(
     let unsubscribe = () => {};
 
     if (!enabled || !sessionId) {
-      setState({ status: 'ready', records: [], error: null, fromCache: false, hasPendingWrites: false });
+      deferStateUpdate(() => {
+        if (!active) return;
+
+        setState({
+          status: 'ready',
+          records: [],
+          error: null,
+          fromCache: false,
+          hasPendingWrites: false,
+        });
+      });
+
       return () => { active = false; };
     }
 
-    setState((previous) => ({ ...previous, status: 'loading', records: [], error: null }));
+    deferStateUpdate(() => {
+      if (!active) return;
+
+      setState({
+        status: 'loading',
+        records: [],
+        error: null,
+        fromCache: false,
+        hasPendingWrites: false,
+      });
+    });
     unsubscribe = subscribeSessionParticipationSummary(
       sessionId,
       (summary, metadata) => {

@@ -1,11 +1,23 @@
-import { initializeApp, type FirebaseApp } from 'firebase/app';
+import { getApp, getApps, initializeApp, type FirebaseApp } from 'firebase/app';
 import { connectAuthEmulator, type Auth } from 'firebase/auth';
-import { connectFirestoreEmulator, getFirestore, type Firestore } from 'firebase/firestore';
-import { connectFunctionsEmulator, getFunctions, type Functions } from 'firebase/functions';
+import {
+  connectFirestoreEmulator,
+  getFirestore,
+  type Firestore,
+} from 'firebase/firestore';
+import {
+  connectFunctionsEmulator,
+  getFunctions,
+  type Functions,
+} from 'firebase/functions';
 
 import { getPlatformAuth } from './auth';
 
 function getFirebaseApp(): FirebaseApp {
+  if (getApps().length > 0) {
+    return getApp();
+  }
+
   const apiKey = process.env.EXPO_PUBLIC_FIREBASE_API_KEY?.trim();
   const authDomain = process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN?.trim();
   const projectId = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID?.trim();

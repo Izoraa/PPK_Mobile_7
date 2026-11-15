@@ -131,40 +131,62 @@ export default function ScheduleScreen() {
     : '/(student)/sessions/[sessionId]';
 
   return (
-    <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.screen}>
-      <View style={styles.header}>
-        <Text accessibilityRole="header" style={styles.title}>Jadwal praktikum</Text>
-        <Text style={styles.userName}>{currentUser.name}</Text>
-        <Link href="../account" style={styles.accountLink}>Akun</Link>
-        {currentUser.role === 'student' ? (
-          <Link href="/(student)/leaves" style={styles.accountLink}>Izin saya</Link>
-        ) : null}
-      </View>
-      <AsyncState
-        status={status === 'ready' && sessions.length === 0 ? 'empty' : status}
-        error={error}
-        fromCache={metadata.fromCache}
-        hasPendingWrites={metadata.hasPendingWrites}
-        onRetry={() => setAttempt((value) => value + 1)}
-        emptyTitle="Belum ada sesi praktikum"
-        emptyMessage={currentUser.role === 'assistant'
-          ? 'Belum ada sesi praktikum aktif untuk kelas Anda.'
-          : 'Sesi praktikum dari kelas yang Anda ikuti akan muncul di sini.'}
-      >
-        <FlatList
-          data={sortedSessions}
-          keyExtractor={(session) => session.id}
-          contentContainerStyle={styles.content}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          renderItem={({ item }) => (
-            <SessionCard
-              session={item as never}
-              onPress={() => router.push(detailPath.replace('[sessionId]', item.id) as never)}
-            />
-          )}
-        />
-      </AsyncState>
-    </SafeAreaView>
+    return (
+      <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.screen}>
+        <View style={styles.header}>
+          <Text accessibilityRole="header" style={styles.title}>
+            Jadwal praktikum
+          </Text>
+
+          <Text style={styles.userName}>{currentUser.name}</Text>
+
+          <Link href="../account" style={styles.accountLink}>
+            Akun
+          </Link>
+
+          {currentUser.role === 'student' ? (
+            <Link href="/(student)/leaves" style={styles.accountLink}>
+              Izin saya
+            </Link>
+          ) : null}
+
+          {currentUser.role === 'assistant' ? (
+            <Link href="/(assistant)/classes" style={styles.accountLink}>
+              Kelola Kelas & Peserta →
+            </Link>
+          ) : null}
+        </View>
+
+        <AsyncState
+          status={status === 'ready' && sessions.length === 0 ? 'empty' : status}
+          error={error}
+          fromCache={metadata.fromCache}
+          hasPendingWrites={metadata.hasPendingWrites}
+          onRetry={() => setAttempt((value) => value + 1)}
+          emptyTitle="Belum ada sesi praktikum"
+          emptyMessage={
+            currentUser.role === 'assistant'
+              ? 'Belum ada sesi praktikum aktif. Gunakan menu "Kelola Kelas & Peserta" di atas untuk membuat kelas dan sesi.'
+              : 'Sesi praktikum dari kelas yang Anda ikuti akan muncul di sini.'
+          }
+        >
+          <FlatList
+            data={sortedSessions}
+            keyExtractor={(session) => session.id}
+            contentContainerStyle={styles.content}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            renderItem={({ item }) => (
+              <SessionCard
+                session={item as never}
+                onPress={() =>
+                  router.push(detailPath.replace('[sessionId]', item.id) as never)
+                }
+              />
+            )}
+          />
+        </AsyncState>
+      </SafeAreaView>
+    );
   );
 }
 

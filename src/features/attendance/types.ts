@@ -18,6 +18,7 @@ export type AttendanceSession = {
 export type AttendanceParticipation = {
   id: string;
   kind: 'attendance' | 'leave';
+  status: 'pending' | 'approved' | 'rejected' | null;
   checkedInAt: string | null;
 };
 

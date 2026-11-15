@@ -74,15 +74,19 @@ export function CheckInPanel({ sessionId, attendanceState: sharedAttendanceState
   }
 
   const alreadyCheckedIn = participation?.kind === 'attendance';
-  const hasOtherParticipation = participation !== null && !alreadyCheckedIn;
+  const rejectedLeave = participation?.kind === 'leave' && participation.status === 'rejected';
+  const hasBlockingParticipation = participation !== null && !alreadyCheckedIn && !rejectedLeave;
   const isOpen = session.status === 'open';
   const isNotOpen = session.status === 'not_open';
   const isClosed = session.status === 'closed';
 
   const getInfoBanner = (): { message: string; color: string } | null => {
     if (alreadyCheckedIn) return { message: CHECK_IN_ERROR_MESSAGES.ALREADY_CHECKED_IN, color: colors.success };
-    if (hasOtherParticipation) {
-      return { message: 'Partisipasi untuk sesi ini sudah tercatat. Presensi tidak dapat dibuat.', color: colors.neutral };
+    if (hasBlockingParticipation) {
+      if (participation?.kind === 'leave' && participation.status === 'approved') {
+        return { message: 'Pengajuan izin disetujui. Presensi tidak dapat dibuat.', color: colors.neutral };
+      }
+      return { message: 'Pengajuan izin masih menunggu keputusan. Presensi tidak dapat dibuat.', color: colors.neutral };
     }
     if (session.isArchived) return { message: 'Sesi sudah diarsipkan. Presensi tidak dapat dilakukan.', color: colors.danger };
     if (isNotOpen) return { message: CHECK_IN_ERROR_MESSAGES.SESSION_NOT_OPEN, color: colors.neutral };
@@ -91,7 +95,7 @@ export function CheckInPanel({ sessionId, attendanceState: sharedAttendanceState
   };
 
   const handleCheckIn = async () => {
-    if (!isOpen || alreadyCheckedIn || hasOtherParticipation || isSubmitting) return;
+    if (!isOpen || alreadyCheckedIn || hasBlockingParticipation || isSubmitting) return;
     setIsSubmitting(true);
     setRetryableError(false);
     const result = await checkIn(sessionId);
@@ -127,7 +131,7 @@ export function CheckInPanel({ sessionId, attendanceState: sharedAttendanceState
   const infoBanner = getInfoBanner();
 
   // Can the student press check-in? Only when session is open AND not already checked in (SRS-10, SRS-12)
-  const canCheckIn = isOpen && !session.isArchived && !alreadyCheckedIn && !hasOtherParticipation && !isSubmitting;
+  const canCheckIn = isOpen && !session.isArchived && !alreadyCheckedIn && !hasBlockingParticipation && !isSubmitting;
 
   return (
     <View style={styles.container}>

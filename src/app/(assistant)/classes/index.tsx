@@ -66,7 +66,10 @@ export default function AssistantClassesScreen() {
   return (
     <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.container}>
       <View style={styles.header}>
-        <View>
+        <View style={styles.headerLeft}>
+          <TouchableOpacity onPress={() => router.replace('/')} style={styles.backButton}>
+            <Text style={styles.backText}>← Kembali ke Jadwal</Text>
+          </TouchableOpacity>
           <Text style={styles.title}>Kelas Praktikum</Text>
           <Text style={styles.subtitle}>Kelola praktikum dan peserta Anda</Text>
         </View>
@@ -127,6 +130,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  headerLeft: {
+    flex: 1,
+  },
+  backButton: {
+    marginBottom: spacing.xs,
+  },
+  backText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '500',
   },
   title: {
     fontSize: 22,
