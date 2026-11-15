@@ -1,3 +1,4 @@
+/* eslint-disable import/first */
 import { deleteApp, initializeApp, type FirebaseApp } from 'firebase/app';
 import {
   connectAuthEmulator,
@@ -47,10 +48,6 @@ let rulesEnvironment: RulesTestEnvironment;
 let authEmulatorConnected = false;
 let firestoreEmulatorConnected = false;
 let userCounter = 0;
-
-function sessionReference(sessionId = 'session-1') {
-  return doc(db, 'sessions', sessionId);
-}
 
 function participationReference(uid: string, sessionId = 'session-1') {
   return doc(db, 'sessions', sessionId, 'participations', uid);

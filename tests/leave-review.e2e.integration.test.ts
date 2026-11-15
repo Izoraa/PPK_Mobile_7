@@ -59,7 +59,7 @@ let rulesEnvironment: RulesTestEnvironment;
 let authEmulatorConnected = false;
 let firestoreEmulatorConnected = false;
 let accountCounter = 0;
-const createdAccounts: Array<{ email: string; password: string }> = [];
+const createdAccounts: { email: string; password: string }[] = [];
 
 function leaveReference(studentId: string) {
   return doc(db, 'sessions', 'session-e2e', 'participations', studentId);
@@ -140,11 +140,11 @@ async function submitLeaveAsStudent(studentUid: string, assistantUid: string, re
 
 function createQueueWatcher() {
   const snapshots: LeaveReviewRecord[][] = [];
-  const waiters: Array<{
+  const waiters: {
     predicate: (records: LeaveReviewRecord[]) => boolean;
     resolve: (records: LeaveReviewRecord[]) => void;
     reject: (error: unknown) => void;
-  }> = [];
+  }[] = [];
   let unsubscribe = () => {};
 
   unsubscribe = subscribePendingLeaveReviews(

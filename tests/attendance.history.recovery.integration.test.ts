@@ -57,8 +57,8 @@ function historyQuery(firestore: Firestore, uid: string): Query<DocumentData> {
 
 function waitForHistorySnapshot(
   firestoreQuery: Query<DocumentData>,
-  predicate: (docs: Array<{ id: string; data: () => DocumentData }>) => boolean,
-): Promise<Array<{ id: string; data: () => DocumentData }>> {
+  predicate: (docs: { id: string; data: () => DocumentData }[]) => boolean,
+): Promise<{ id: string; data: () => DocumentData }[]> {
   return new Promise((resolve, reject) => {
     let unsubscribe = () => {};
     const timeout = setTimeout(() => {
