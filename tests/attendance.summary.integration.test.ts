@@ -40,7 +40,6 @@ const FIRESTORE_EMULATOR_HOST = '127.0.0.1';
 const FIRESTORE_EMULATOR_PORT = 8080;
 const SESSION_ID = 'summary-session';
 const CLASS_ID = 'summary-class';
-const ASSISTANT_ID = 'summary-assistant';
 
 let app: FirebaseApp;
 let auth: Auth;

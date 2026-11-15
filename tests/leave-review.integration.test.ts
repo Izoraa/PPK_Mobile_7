@@ -49,7 +49,7 @@ let rulesEnvironment: RulesTestEnvironment;
 let authEmulatorConnected = false;
 let firestoreEmulatorConnected = false;
 let accountCounter = 0;
-const createdAccounts: Array<{ email: string; password: string }> = [];
+const createdAccounts: { email: string; password: string }[] = [];
 
 const initialAi = {
   status: 'pending',

@@ -72,10 +72,6 @@ function historyQuery(): Query<DocumentData> {
   );
 }
 
-function participationReference(uid: string, sessionId: string) {
-  return doc(db, 'sessions', sessionId, 'participations', uid);
-}
-
 async function signInTestUser(): Promise<User> {
   userCounter += 1;
   const credential = await createUserWithEmailAndPassword(
@@ -165,8 +161,8 @@ async function seedHistoryRecord(
 
 function waitForSnapshot(
   firestoreQuery: Query<DocumentData>,
-  predicate: (snapshot: { docs: Array<{ id: string; data: () => DocumentData }> }) => boolean,
-): Promise<Array<{ id: string; data: () => DocumentData }>> {
+  predicate: (snapshot: { docs: { id: string; data: () => DocumentData }[] }) => boolean,
+): Promise<{ id: string; data: () => DocumentData }[]> {
   return new Promise((resolve, reject) => {
     let unsubscribe = () => {};
     const timeout = setTimeout(() => {
