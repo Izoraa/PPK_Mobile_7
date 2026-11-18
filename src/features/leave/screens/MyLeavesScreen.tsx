@@ -73,8 +73,25 @@ export default function MyLeavesScreen() {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
-        <Text accessibilityRole="header" style={styles.title}>Izin saya</Text>
-        <Text style={styles.subtitle}>Pantau status pengajuan izin Anda.</Text>
+        <Pressable
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Kembali"
+          hitSlop={10}
+          style={({ pressed }) => [
+            styles.backButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text style={styles.backArrow}>←</Text>
+        </Pressable>
+
+        <Text accessibilityRole="header" style={styles.title}>
+          Izin saya
+        </Text>
+        <Text style={styles.subtitle}>
+          Lihat status pengajuan izin Anda.
+        </Text>
       </View>
 
       <AsyncState
@@ -134,6 +151,20 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     backgroundColor: colors.card,
   },
+
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  backButton: {
+    padding: spacing.xs,
+  },
+  backArrow: {
+    color: '#2563EB',
+    fontSize: 28,
+    lineHeight: 32,
+  },
   cardHeading: { gap: spacing.xs },
   cardTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
   date: { color: colors.textMuted, fontSize: 13 },
@@ -142,3 +173,5 @@ const styles = StyleSheet.create({
   ai: { color: colors.textMuted, fontSize: 13 },
   pressed: { opacity: 0.75 },
 });
+
+
