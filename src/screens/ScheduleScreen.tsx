@@ -131,7 +131,6 @@ export default function ScheduleScreen() {
     : '/(student)/sessions/[sessionId]';
 
   return (
-    return (
       <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.screen}>
         <View style={styles.header}>
           <Text accessibilityRole="header" style={styles.title}>
@@ -187,7 +186,6 @@ export default function ScheduleScreen() {
         </AsyncState>
       </SafeAreaView>
     );
-  );
 }
 
 const styles = StyleSheet.create({
