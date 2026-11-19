@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Link, useLocalSearchParams } from 'expo-router';
+import { doc, getDoc } from 'firebase/firestore';
 
 import { AsyncState } from '@/components/common/AsyncState';
+import { getFirebaseFirestore } from '@/lib/firebase/client';
 import { colors, radius, spacing } from '@/theme';
 
 import { AiSupportNotice } from '../components/AiSupportNotice';
@@ -23,6 +25,14 @@ const initialState: ViewState = {
   fromCache: false,
   hasPendingWrites: false,
   error: null,
+};
+
+type SessionContext = { className: string; course: string; sessionTitle: string; startsAt: Date | null };
+const emptyContext: SessionContext = {
+  className: 'Informasi kelas tidak tersedia',
+  course: 'Informasi praktikum tidak tersedia',
+  sessionTitle: 'Informasi sesi tidak tersedia',
+  startsAt: null,
 };
 
 function decisionLabel(status: LeaveRequestRecord['status']): string {
@@ -52,6 +62,7 @@ export default function LeaveDetailScreen() {
   const { sessionId } = useLocalSearchParams<{ sessionId?: string }>();
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<ViewState>(initialState);
+  const [sessionContext, setSessionContext] = useState<SessionContext>(emptyContext);
 
   useEffect(() => {
     setState(initialState);
@@ -72,6 +83,33 @@ export default function LeaveDetailScreen() {
       (error) => setState((previous) => ({ ...previous, status: 'error', error })),
     );
   }, [sessionId, attempt]);
+
+  useEffect(() => {
+    let active = true;
+    const request = state.data;
+    if (!request) return () => { active = false; };
+
+    void Promise.all([
+      getDoc(doc(getFirebaseFirestore(), 'sessions', request.sessionId)),
+      getDoc(doc(getFirebaseFirestore(), 'classes', request.classId)),
+    ]).then(([sessionSnapshot, classSnapshot]) => {
+      if (!active) return;
+      const session = sessionSnapshot.data();
+      const course = classSnapshot.data();
+      setSessionContext({
+        className: typeof course?.name === 'string' ? course.name : emptyContext.className,
+        course: typeof course?.course === 'string' ? course.course : emptyContext.course,
+        sessionTitle: typeof session?.title === 'string' ? session.title : emptyContext.sessionTitle,
+        startsAt: session?.startsAt && typeof session.startsAt.toDate === 'function'
+          ? session.startsAt.toDate()
+          : null,
+      });
+    }).catch(() => {
+      if (active) setSessionContext(emptyContext);
+    });
+
+    return () => { active = false; };
+  }, [state.data]);
 
   const displayStatus = state.status === 'ready' && state.data === null
     ? 'empty'
@@ -101,13 +139,21 @@ export default function LeaveDetailScreen() {
         {request ? (
           <ScrollView contentContainerStyle={styles.content}>
             <View style={styles.card}>
+              <Text style={styles.sectionHeading}>Informasi praktikum</Text>
+              <Text style={styles.sectionTitle}>Kelas</Text>
+              <Text style={styles.value}>{sessionContext.className}</Text>
+              <Text style={styles.sectionTitle}>Praktikum</Text>
+              <Text style={styles.value}>{sessionContext.course}</Text>
               <Text style={styles.sectionTitle}>Sesi</Text>
-              <Text style={styles.value}>{request.sessionId}</Text>
+              <Text style={styles.value}>{sessionContext.sessionTitle}</Text>
+              <Text style={styles.sectionTitle}>Tanggal kelas</Text>
+              <Text style={styles.value}>{sessionContext.startsAt?.toLocaleString('id-ID') ?? 'Tanggal tidak tersedia'}</Text>
+
+              <View style={styles.divider} />
+
+              <Text style={styles.sectionHeading}>Informasi izin</Text>
               <Text style={styles.sectionTitle}>Alasan izin</Text>
               <Text style={styles.value}>{request.reason}</Text>
-            </View>
-
-            <View style={styles.card}>
               <Text style={styles.sectionTitle}>Keputusan asisten</Text>
               <Text style={styles.value}>{decisionLabel(request.status)}</Text>
               <Text style={styles.sectionTitle}>Catatan pemeriksa</Text>
@@ -115,10 +161,10 @@ export default function LeaveDetailScreen() {
               {formatTimestamp(request.reviewedAt) ? (
                 <Text style={styles.muted}>Diperiksa pada {formatTimestamp(request.reviewedAt)}</Text>
               ) : null}
-            </View>
 
-            <View style={styles.card}>
-              <Text style={styles.sectionTitle}>Klasifikasi AI</Text>
+              <View style={styles.divider} />
+
+              <Text style={styles.sectionHeading}>Klasifikasi AI</Text>
               <Text style={styles.value}>{aiLabel(request.ai.status)}</Text>
               {request.ai.status === 'succeeded' && request.ai.category ? (
                 <Text style={styles.value}>Kategori: {request.ai.category}</Text>
@@ -138,7 +184,7 @@ export default function LeaveDetailScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   header: { gap: spacing.sm, padding: spacing.md },
-  content: { gap: spacing.md, padding: spacing.md, paddingTop: 0 },
+  content: { padding: spacing.md, paddingTop: 0 },
   title: { color: colors.text, fontSize: 24, fontWeight: '700' },
   backButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
   backText: { color: colors.primary, fontSize: 15, fontWeight: '600' },
@@ -150,6 +196,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     backgroundColor: colors.card,
   },
+  sectionHeading: { color: colors.text, fontSize: 17, fontWeight: '700' },
+  divider: { height: 2, backgroundColor: '#2563EB', marginVertical: spacing.sm },
   sectionTitle: { color: colors.textMuted, fontSize: 14, fontWeight: '600' },
   value: { color: colors.text, fontSize: 15, lineHeight: 22 },
   muted: { color: colors.textMuted, fontSize: 13 },

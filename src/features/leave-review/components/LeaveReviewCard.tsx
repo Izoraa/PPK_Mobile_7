@@ -33,7 +33,13 @@ export function LeaveReviewCard({ record, metadata, onPress }: LeaveReviewCardPr
             {record.studentNumber ? `NIM ${record.studentNumber}` : 'NIM tidak tersedia'}
           </Text>
         </View>
-        <Text style={styles.pending}>Pending</Text>
+        <Text style={[
+          styles.pending,
+          record.status === 'approved' && styles.approved,
+          record.status === 'rejected' && styles.rejected,
+        ]}>
+          {record.status === 'pending' ? 'Pending' : record.status === 'approved' ? 'Diterima' : 'Ditolak'}
+        </Text>
       </View>
       <Text numberOfLines={3} style={styles.reason}>{record.reason}</Text>
       <Text style={styles.meta}>Sesi: {metadata?.sessionTitle ?? record.sessionId}</Text>
@@ -63,6 +69,8 @@ const styles = StyleSheet.create({
   name: { color: colors.text, fontSize: 17, fontWeight: '700' },
   secondary: { color: colors.textMuted, fontSize: 14 },
   pending: { color: colors.primary, fontSize: 13, fontWeight: '700' },
+  approved: { color: colors.success },
+  rejected: { color: colors.danger },
   reason: { color: colors.text, fontSize: 15, lineHeight: 21 },
   meta: { color: colors.textMuted, fontSize: 13 },
 });

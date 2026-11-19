@@ -109,7 +109,7 @@ export function parseLeaveReviewRecord(
     typeof data.studentName !== "string" ||
     (typeof data.studentNumber !== "string" && data.studentNumber !== null) ||
     data.kind !== "leave" ||
-    data.status !== "pending" ||
+    (data.status !== "pending" && data.status !== "approved" && data.status !== "rejected") ||
     typeof data.reason !== "string" ||
     !ai
   )
@@ -395,7 +395,6 @@ export function subscribeSessionPendingLeaveReviews(
     const sessionQuery = query(
       sessionParticipations,
       where("kind", "==", "leave"),
-      where("status", "==", "pending"),
     );
 
     return onSnapshot(
