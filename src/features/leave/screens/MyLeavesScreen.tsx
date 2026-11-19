@@ -74,7 +74,7 @@ export default function MyLeavesScreen() {
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => router.replace('/')}
           accessibilityRole="button"
           accessibilityLabel="Kembali"
           hitSlop={10}
@@ -120,12 +120,18 @@ export default function MyLeavesScreen() {
                 <Text style={styles.cardTitle}>Pengajuan izin</Text>
                 <Text style={styles.date}>{formatTimestamp(item.createdAt)}</Text>
               </View>
-              <Text numberOfLines={2} style={styles.reason}>{item.reason}</Text>
-              <Text style={styles.decision}>Keputusan: {decisionLabel(item.status)}</Text>
-              <Text style={styles.ai}>Klasifikasi AI: {aiLabel(item.ai.status)}</Text>
-              {item.ai.status === 'succeeded' ? (
-                <Text style={styles.ai}>Hasil AI: {item.ai.category ?? 'Kategori tidak tersedia'}</Text>
-              ) : null}
+              <View style={styles.reasonBox}>
+                <Text style={styles.reasonLabel}>Alasan izin</Text>
+                <Text style={styles.reason}>{item.reason}</Text>
+              </View>
+              <Text style={[
+                styles.decision,
+                item.status === 'rejected' && styles.rejected,
+                item.status === 'approved' && styles.approved,
+                item.status === 'pending' && styles.pending,
+              ]}>
+                Keputusan: {decisionLabel(item.status)}
+              </Text>
               {item.reviewNote ? (
                 <Text numberOfLines={2} style={styles.ai}>Catatan pemeriksa: {item.reviewNote}</Text>
               ) : null}
@@ -168,8 +174,20 @@ const styles = StyleSheet.create({
   cardHeading: { gap: spacing.xs },
   cardTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
   date: { color: colors.textMuted, fontSize: 13 },
-  reason: { color: colors.text, fontSize: 14, lineHeight: 20 },
-  decision: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  reasonBox: {
+    gap: spacing.xs,
+    padding: spacing.sm,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    backgroundColor: '#EFF6FF',
+  },
+  reasonLabel: { color: colors.primary, fontSize: 12, fontWeight: '700' },
+  reason: { color: colors.primary, fontSize: 14, lineHeight: 20 },
+  decision: { fontSize: 14, fontWeight: '700' },
+  rejected: { color: colors.danger },
+  approved: { color: colors.success },
+  pending: { color: '#CA8A04' },
   ai: { color: colors.textMuted, fontSize: 13 },
   pressed: { opacity: 0.75 },
 });

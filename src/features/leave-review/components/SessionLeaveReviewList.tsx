@@ -45,8 +45,8 @@ export function SessionLeaveReviewList({ sessionId }: Props) {
         fromCache={queue.fromCache}
         hasPendingWrites={queue.hasPendingWrites}
         onRetry={queue.retry}
-        emptyTitle="Tidak ada izin pending"
-        emptyMessage="Pengajuan izin untuk sesi ini akan muncul di sini."
+        emptyTitle="Belum ada pengajuan izin"
+        emptyMessage="Semua pengajuan izin sesi ini akan muncul di sini, termasuk yang sudah diputuskan."
       >
         <View style={styles.list}>
           {queue.records.map((record) => {
