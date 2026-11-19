@@ -1,5 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import { useLocalSearchParams, useRouter } from "expo-router";
 import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+} from "firebase/firestore";
+import { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -8,29 +18,133 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  ActivityIndicator,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { doc, getDoc } from 'firebase/firestore';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { getFirebaseFirestore } from '@/lib/firebase/client';
-import { updateSession, archiveSession, type SessionDoc } from '@/features/practicum';
-import { colors, radius, spacing } from '@/theme';
-import { ConfirmModal } from '@/components/common/ConfirmModal';
-import { StatusBadge } from '@/components/common/StatusBadge';
+import { ConfirmModal } from "@/components/common/ConfirmModal";
+import { StatusBadge } from "@/components/common/StatusBadge";
+import {
+  archiveSession,
+  updateSession,
+  type SessionDoc,
+} from "@/features/practicum";
+import { getFirebaseFirestore } from "@/lib/firebase/client";
+import { colors, radius, spacing } from "@/theme";
+import DateTimePicker from "@expo/ui/community/datetime-picker";
+import { Picker } from "@expo/ui/community/picker";
+
+function formatLocalDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function parseLocalDate(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+
+  return year && month && day ? new Date(year, month - 1, day, 12) : new Date();
+}
+
+type TimeFieldProps = {
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+  minHour: number;
+  maxHour: number;
+  lastHourOnlyZeroMinutes?: boolean;
+};
+
+function TimeField({
+  value,
+  onChange,
+  disabled,
+  minHour,
+  maxHour,
+  lastHourOnlyZeroMinutes = false,
+}: TimeFieldProps) {
+  const [rawHour = "", rawMinute = ""] = value.split(":");
+
+  const hours = Array.from({ length: maxHour - minHour + 1 }, (_, index) =>
+    String(minHour + index).padStart(2, "0"),
+  );
+
+  const allMinutes = Array.from({ length: 60 }, (_, index) =>
+    String(index).padStart(2, "0"),
+  );
+
+  const selectedHour = hours.includes(rawHour) ? rawHour : hours[0];
+
+  const minutes =
+    lastHourOnlyZeroMinutes && Number(selectedHour) === maxHour
+      ? ["00"]
+      : allMinutes;
+
+  const selectedMinute = minutes.includes(rawMinute) ? rawMinute : "00";
+
+  return (
+    <View style={styles.timeInputRow}>
+      <Picker
+        selectedValue={selectedHour}
+        enabled={!disabled}
+        style={[
+          styles.input,
+          styles.timeSegment,
+          disabled && styles.disabledInput,
+        ]}
+        onValueChange={(value) => {
+          const nextHour = String(value);
+          const nextMinute =
+            lastHourOnlyZeroMinutes && Number(nextHour) === maxHour
+              ? "00"
+              : selectedMinute;
+
+          onChange(`${nextHour}:${nextMinute}`);
+        }}
+      >
+        {hours.map((hour) => (
+          <Picker.Item key={hour} label={hour} value={hour} />
+        ))}
+      </Picker>
+
+      <Text style={styles.timeSeparator}>:</Text>
+
+      <Picker
+        selectedValue={selectedMinute}
+        enabled={!disabled}
+        style={[
+          styles.input,
+          styles.timeSegment,
+          disabled && styles.disabledInput,
+        ]}
+        onValueChange={(value) => {
+          onChange(`${selectedHour}:${String(value)}`);
+        }}
+      >
+        {minutes.map((minute) => (
+          <Picker.Item key={minute} label={minute} value={minute} />
+        ))}
+      </Picker>
+    </View>
+  );
+}
 
 export default function EditSessionScreen() {
   const router = useRouter();
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
 
   const [session, setSession] = useState<SessionDoc | null>(null);
-  const [title, setTitle] = useState('');
-  const [room, setRoom] = useState('');
-  const [timeZone, setTimeZone] = useState('Asia/Jakarta');
-  const [dateStr, setDateStr] = useState('');
-  const [startTimeStr, setStartTimeStr] = useState('');
-  const [endTimeStr, setEndTimeStr] = useState('');
+  const [title, setTitle] = useState("");
+  const [room, setRoom] = useState("");
+  const [labOptions, setLabOptions] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [timeZone, setTimeZone] = useState("Asia/Jakarta");
+  const [dateStr, setDateStr] = useState("");
+  const [startTimeStr, setStartTimeStr] = useState("");
+  const [endTimeStr, setEndTimeStr] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -43,19 +157,32 @@ export default function EditSessionScreen() {
     const fetchSession = async () => {
       try {
         const db = getFirebaseFirestore();
-        const snap = await getDoc(doc(db, 'sessions', sessionId));
+        const labSnapshot = await getDocs(
+          query(collection(db, "laboratories"), where("isActive", "==", true)),
+        );
+
+        setLabOptions(
+          labSnapshot.docs
+            .map((labDoc) => ({
+              id: labDoc.id,
+              name: labDoc.data().name,
+            }))
+            .filter((lab) => typeof lab.name === "string" && lab.name.trim())
+            .sort((a, b) => a.name.localeCompare(b.name, "id")),
+        );
+        const snap = await getDoc(doc(db, "sessions", sessionId));
         if (snap.exists()) {
           const d = snap.data();
           const sess: SessionDoc = {
             id: snap.id,
-            classId: d.classId ?? '',
-            assistantId: d.assistantId ?? '',
-            title: d.title ?? '',
-            room: d.room ?? '',
+            classId: d.classId ?? "",
+            assistantId: d.assistantId ?? "",
+            title: d.title ?? "",
+            room: d.room ?? "",
             startsAt: d.startsAt,
             endsAt: d.endsAt,
-            timeZone: d.timeZone ?? 'Asia/Jakarta',
-            status: d.status ?? 'not_open',
+            timeZone: d.timeZone ?? "Asia/Jakarta",
+            status: d.status ?? "not_open",
             isArchived: Boolean(d.isArchived),
             openedAt: d.openedAt ?? null,
             closedAt: d.closedAt ?? null,
@@ -69,7 +196,7 @@ export default function EditSessionScreen() {
 
           if (sess.startsAt?.toDate) {
             const sDate = sess.startsAt.toDate();
-            setDateStr(sDate.toISOString().split('T')[0]);
+            setDateStr(formatLocalDate(sDate));
             setStartTimeStr(sDate.toTimeString().substring(0, 5));
           }
           if (sess.endsAt?.toDate) {
@@ -78,7 +205,7 @@ export default function EditSessionScreen() {
           }
         }
       } catch (err: any) {
-        setErrorMsg(err.message || 'Gagal memuat sesi.');
+        setErrorMsg(err.message || "Gagal memuat sesi.");
       } finally {
         setLoading(false);
       }
@@ -95,20 +222,50 @@ export default function EditSessionScreen() {
     const trimmedRoom = room.trim();
 
     if (!trimmedTitle || !trimmedRoom) {
-      setErrorMsg('Judul dan ruangan wajib diisi.');
+      setErrorMsg("Judul dan ruangan wajib diisi.");
       return;
     }
 
+    const isValidTime = (
+      value: string,
+      minHour: number,
+      maxHour: number,
+      lastHourOnlyZeroMinutes = false,
+    ) => {
+      if (!/^\d{2}:\d{2}$/.test(value)) return false;
+
+      const [hourText, minuteText] = value.split(":");
+      const hour = Number(hourText);
+      const minute = Number(minuteText);
+
+      return (
+        hour >= minHour &&
+        hour <= maxHour &&
+        minute >= 0 &&
+        minute <= 59 &&
+        (!lastHourOnlyZeroMinutes || hour !== maxHour || minute === 0)
+      );
+    };
+
+    if (!isValidTime(startTimeStr, 7, 19)) {
+      setErrorMsg("Jam mulai harus antara 07:00 dan 19:59.");
+      return;
+    }
+
+    if (!isValidTime(endTimeStr, 8, 21, true)) {
+      setErrorMsg("Jam selesai harus antara 08:00 dan 21:00.");
+      return;
+    }
     const startsAt = new Date(`${dateStr.trim()}T${startTimeStr.trim()}:00`);
     const endsAt = new Date(`${dateStr.trim()}T${endTimeStr.trim()}:00`);
 
     if (isNaN(startsAt.getTime()) || isNaN(endsAt.getTime())) {
-      setErrorMsg('Format tanggal atau jam tidak valid.');
+      setErrorMsg("Format tanggal atau jam tidak valid.");
       return;
     }
 
     if (endsAt.getTime() <= startsAt.getTime()) {
-      setErrorMsg('Waktu selesai harus sesudah waktu mulai.');
+      setErrorMsg("Waktu selesai harus sesudah waktu mulai.");
       return;
     }
 
@@ -125,7 +282,7 @@ export default function EditSessionScreen() {
     if (res.ok) {
       router.back();
     } else {
-      setErrorMsg(res.error.message || 'Gagal memperbarui sesi.');
+      setErrorMsg(res.error.message || "Gagal memperbarui sesi.");
     }
   };
 
@@ -137,15 +294,18 @@ export default function EditSessionScreen() {
     setSaving(false);
 
     if (res.ok) {
-      router.replace('/(assistant)/classes' as any);
+      router.replace("/(assistant)/classes" as any);
     } else {
-      setErrorMsg(res.error.message || 'Gagal mengarsipkan sesi.');
+      setErrorMsg(res.error.message || "Gagal mengarsipkan sesi.");
     }
   };
 
   if (loading) {
     return (
-      <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.centerContainer}>
+      <SafeAreaView
+        edges={["top", "left", "right", "bottom"]}
+        style={styles.centerContainer}
+      >
         <ActivityIndicator size="large" color={colors.primary} />
       </SafeAreaView>
     );
@@ -153,26 +313,38 @@ export default function EditSessionScreen() {
 
   if (!session) {
     return (
-      <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.centerContainer}>
+      <SafeAreaView
+        edges={["top", "left", "right", "bottom"]}
+        style={styles.centerContainer}
+      >
         <Text style={styles.errorText}>Sesi tidak ditemukan.</Text>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backButton}
+        >
           <Text style={styles.backText}>← Kembali</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
   }
 
-  const isLocked = session.status !== 'not_open';
+  const isLocked = session.status !== "not_open";
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.container}>
+    <SafeAreaView
+      edges={["top", "left", "right", "bottom"]}
+      style={styles.container}
+    >
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.keyboardView}
       >
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={styles.backButton}
+            >
               <Text style={styles.backText}>← Kembali</Text>
             </TouchableOpacity>
             <View style={styles.titleRow}>
@@ -183,9 +355,12 @@ export default function EditSessionScreen() {
 
           {isLocked ? (
             <View style={styles.lockedBox}>
-              <Text style={styles.lockedTitle}>Perubahan Metadata Terkunci</Text>
+              <Text style={styles.lockedTitle}>
+                Perubahan Metadata Terkunci
+              </Text>
               <Text style={styles.lockedText}>
-                Sesi yang sudah dibuka atau ditutup tidak dapat diubah metadatanya agar bukti catatan riwayat presensi tetap konsisten.
+                Sesi yang sudah dibuka atau ditutup tidak dapat diubah
+                metadatanya agar bukti catatan riwayat presensi tetap konsisten.
               </Text>
             </View>
           ) : null}
@@ -208,42 +383,67 @@ export default function EditSessionScreen() {
 
           <View style={styles.formGroup}>
             <Text style={styles.label}>Ruangan / Laboratorium</Text>
-            <TextInput
+            <Picker
+              selectedValue={room}
+              onValueChange={(value) => setRoom(String(value))}
+              enabled={!isLocked}
               style={[styles.input, isLocked && styles.disabledInput]}
-              value={room}
-              onChangeText={setRoom}
-              editable={!isLocked}
-            />
+            >
+              <Picker.Item label="Pilih laboratorium" value="" />
+              {labOptions.map((lab) => (
+                <Picker.Item key={lab.id} label={lab.name} value={lab.name} />
+              ))}
+            </Picker>
           </View>
 
           <View style={styles.formGroup}>
             <Text style={styles.label}>Tanggal (YYYY-MM-DD)</Text>
-            <TextInput
+            <TouchableOpacity
               style={[styles.input, isLocked && styles.disabledInput]}
-              value={dateStr}
-              onChangeText={setDateStr}
-              editable={!isLocked}
-            />
+              onPress={() => setShowDatePicker(true)}
+              disabled={isLocked}
+              activeOpacity={0.8}
+            >
+              <Text style={{ color: dateStr ? colors.text : colors.textMuted }}>
+                {dateStr || "Pilih tanggal"}
+              </Text>
+            </TouchableOpacity>
+
+            {showDatePicker && !isLocked ? (
+              <DateTimePicker
+                value={parseLocalDate(dateStr)}
+                mode="date"
+                presentation="dialog"
+                onValueChange={(_event, selectedDate) => {
+                  setDateStr(formatLocalDate(selectedDate));
+                  setShowDatePicker(false);
+                }}
+                onDismiss={() => setShowDatePicker(false)}
+              />
+            ) : null}
           </View>
 
           <View style={styles.row}>
             <View style={[styles.formGroup, styles.flex1]}>
               <Text style={styles.label}>Jam Mulai (HH:mm)</Text>
-              <TextInput
-                style={[styles.input, isLocked && styles.disabledInput]}
+              <TimeField
                 value={startTimeStr}
-                onChangeText={setStartTimeStr}
-                editable={!isLocked}
+                onChange={setStartTimeStr}
+                disabled={isLocked}
+                minHour={7}
+                maxHour={19}
               />
             </View>
 
             <View style={[styles.formGroup, styles.flex1]}>
               <Text style={styles.label}>Jam Selesai (HH:mm)</Text>
-              <TextInput
-                style={[styles.input, isLocked && styles.disabledInput]}
+              <TimeField
                 value={endTimeStr}
-                onChangeText={setEndTimeStr}
-                editable={!isLocked}
+                onChange={setEndTimeStr}
+                disabled={isLocked}
+                minHour={8}
+                maxHour={21}
+                lastHourOnlyZeroMinutes
               />
             </View>
           </View>
@@ -266,10 +466,15 @@ export default function EditSessionScreen() {
           <View style={styles.divider} />
 
           <TouchableOpacity
-            style={[styles.archiveButton, session.status === 'open' && styles.disabledButton]}
+            style={[
+              styles.archiveButton,
+              session.status === "open" && styles.disabledButton,
+            ]}
             onPress={() => {
-              if (session.status === 'open') {
-                setErrorMsg('Sesi yang sedang dibuka harus ditutup terlebih dahulu sebelum dapat diarsipkan.');
+              if (session.status === "open") {
+                setErrorMsg(
+                  "Sesi yang sedang dibuka harus ditutup terlebih dahulu sebelum dapat diarsipkan.",
+                );
               } else {
                 setShowArchiveModal(true);
               }
@@ -279,7 +484,8 @@ export default function EditSessionScreen() {
             <Text style={styles.archiveText}>Arsipkan Sesi Ini</Text>
           </TouchableOpacity>
           <Text style={styles.archiveHint}>
-            Sesi yang diarsipkan akan dihapus dari daftar aktif. Riwayat dan izin yang sudah ada tetap tersimpan.
+            Sesi yang diarsipkan akan dihapus dari daftar aktif. Riwayat dan
+            izin yang sudah ada tetap tersimpan.
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -305,8 +511,8 @@ const styles = StyleSheet.create({
   },
   centerContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   keyboardView: {
     flex: 1,
@@ -323,42 +529,42 @@ const styles = StyleSheet.create({
   backText: {
     color: colors.primary,
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   titleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   title: {
     fontSize: 22,
-    fontWeight: '700',
+    fontWeight: "700",
     color: colors.text,
     flex: 1,
   },
   lockedBox: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: "#FEF3C7",
     borderWidth: 1,
-    borderColor: '#FCD34D',
+    borderColor: "#FCD34D",
     borderRadius: radius.md,
     padding: spacing.md,
     marginBottom: spacing.md,
   },
   lockedTitle: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#92400E',
+    fontWeight: "700",
+    color: "#92400E",
     marginBottom: 2,
   },
   lockedText: {
     fontSize: 13,
-    color: '#B45309',
+    color: "#B45309",
     lineHeight: 18,
   },
   errorBox: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: "#FEE2E2",
     borderWidth: 1,
-    borderColor: '#F87171',
+    borderColor: "#F87171",
     borderRadius: radius.sm,
     padding: spacing.sm,
     marginBottom: spacing.md,
@@ -371,7 +577,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   row: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: spacing.md,
   },
   flex1: {
@@ -379,7 +585,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
     color: colors.text,
     marginBottom: spacing.xs,
   },
@@ -394,23 +600,23 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   disabledInput: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: "#F1F5F9",
     color: colors.textMuted,
   },
   saveButton: {
     backgroundColor: colors.primary,
     borderRadius: radius.md,
     paddingVertical: spacing.md,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: spacing.sm,
   },
   disabledButton: {
     opacity: 0.6,
   },
   saveText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   divider: {
     height: 1,
@@ -422,19 +628,32 @@ const styles = StyleSheet.create({
     borderColor: colors.danger,
     borderRadius: radius.md,
     paddingVertical: spacing.md,
-    alignItems: 'center',
-    backgroundColor: '#FEF2F2',
+    alignItems: "center",
+    backgroundColor: "#FEF2F2",
   },
   archiveText: {
     color: colors.danger,
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   archiveHint: {
     fontSize: 13,
     color: colors.textMuted,
-    textAlign: 'center',
+    textAlign: "center",
     marginTop: spacing.xs,
   },
+  timeInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  timeSegment: {
+    width: 72,
+    textAlign: "center",
+  },
+  timeSeparator: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: "600",
+  },
 });
-
