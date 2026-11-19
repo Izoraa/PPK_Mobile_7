@@ -1,67 +1,125 @@
-import { FirebaseError } from 'firebase/app';
-import { httpsCallable } from 'firebase/functions';
-
-import { getFirebaseFunctions } from '@/lib/firebase/client';
+import { getFirebaseAuth } from '@/lib/firebase/client';
 import type { AppErrorCode, Result } from '@/types';
 
 import type { LeaveSubmissionRef } from './leaveService';
 
-export type ClassificationStatus = 'pending' | 'processing' | 'succeeded' | 'failed';
+export type ClassificationStatus =
+  | 'pending'
+  | 'processing'
+  | 'succeeded'
+  | 'failed';
 
-type ClassificationOutput = { aiStatus: ClassificationStatus };
-type ClassificationInput = { sessionId: string; studentId: string };
+type ClassificationOutput = {
+  aiStatus: ClassificationStatus;
+  category?: string;
+};
 
-function mapCallableError(error: unknown): { code: AppErrorCode; retryable: boolean } {
-  if (error instanceof FirebaseError) {
-    const details = error.customData?.details;
-    if (typeof details === 'object' && details !== null) {
-      const payload = details as Record<string, unknown>;
-      const code = payload.appCode;
-      const retryable = payload.retryable;
-      if ((code === 'AI_TIMEOUT' || code === 'AI_UNAVAILABLE' || code === 'AI_INVALID_RESPONSE'
-        || code === 'UNAUTHENTICATED' || code === 'FORBIDDEN' || code === 'VALIDATION_ERROR'
-        || code === 'NOT_FOUND' || code === 'CONFLICT' || code === 'SERVICE_UNAVAILABLE')
-        && typeof retryable === 'boolean') {
-        return { code, retryable };
-      }
-    }
-
-    switch (error.code) {
-      case 'functions/unauthenticated': return { code: 'UNAUTHENTICATED', retryable: false };
-      case 'functions/permission-denied': return { code: 'FORBIDDEN', retryable: false };
-      case 'functions/invalid-argument': return { code: 'VALIDATION_ERROR', retryable: false };
-      case 'functions/not-found': return { code: 'NOT_FOUND', retryable: false };
-      case 'functions/resource-exhausted': return { code: 'CONFLICT', retryable: false };
-      case 'functions/deadline-exceeded': return { code: 'AI_TIMEOUT', retryable: true };
-      case 'functions/unavailable': return { code: 'AI_UNAVAILABLE', retryable: true };
-      case 'functions/data-loss': return { code: 'AI_INVALID_RESPONSE', retryable: true };
-      default: return { code: 'SERVICE_UNAVAILABLE', retryable: true };
-    }
+function mapHttpError(status: number): {
+  code: AppErrorCode;
+  retryable: boolean;
+} {
+  switch (status) {
+    case 400:
+      return { code: 'VALIDATION_ERROR', retryable: false };
+    case 401:
+      return { code: 'UNAUTHENTICATED', retryable: false };
+    case 403:
+      return { code: 'FORBIDDEN', retryable: false };
+    case 404:
+      return { code: 'NOT_FOUND', retryable: false };
+    case 409:
+    case 429:
+      return { code: 'CONFLICT', retryable: false };
+    default:
+      return { code: 'AI_UNAVAILABLE', retryable: true };
   }
-
-  return { code: 'SERVICE_UNAVAILABLE', retryable: true };
 }
 
 export async function requestClassification(
   input: LeaveSubmissionRef,
 ): Promise<Result<ClassificationOutput>> {
-  const payload: ClassificationInput = {
-    sessionId: input.sessionId,
-    studentId: input.studentId,
-  };
-
   try {
-    const callable = httpsCallable<ClassificationInput, ClassificationOutput>(
-      getFirebaseFunctions(),
-      'requestClassification',
-    );
-    const response = await callable(payload);
-    const status = response.data?.aiStatus;
-    if (status !== 'pending' && status !== 'processing' && status !== 'succeeded' && status !== 'failed') {
-      return { ok: false, error: { code: 'SERVICE_UNAVAILABLE', retryable: true } };
+    const user = getFirebaseAuth().currentUser;
+
+    if (!user) {
+      return {
+        ok: false,
+        error: { code: 'UNAUTHENTICATED', retryable: false },
+      };
     }
-    return { ok: true, data: { aiStatus: status } };
-  } catch (error) {
-    return { ok: false, error: mapCallableError(error) };
+
+    const baseUrl = process.env.EXPO_PUBLIC_LEAVE_AI_API_URL?.trim();
+
+    if (!baseUrl) {
+      return {
+        ok: false,
+        error: { code: 'SERVICE_UNAVAILABLE', retryable: false },
+      };
+    }
+
+    const idToken = await user.getIdToken();
+    const response = await fetch(
+      `${baseUrl.replace(/\/+$/, '')}/classify-leave`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sessionId: input.sessionId,
+          studentId: input.studentId,
+        }),
+      },
+    );
+
+    const body: unknown = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: mapHttpError(response.status),
+      };
+    }
+
+    if (
+      typeof body !== 'object'
+      || body === null
+      || !('aiStatus' in body)
+    ) {
+      return {
+        ok: false,
+        error: { code: 'SERVICE_UNAVAILABLE', retryable: true },
+      };
+    }
+
+    const aiStatus = body.aiStatus;
+
+    if (
+      aiStatus !== 'pending'
+      && aiStatus !== 'processing'
+      && aiStatus !== 'succeeded'
+      && aiStatus !== 'failed'
+    ) {
+      return {
+        ok: false,
+        error: { code: 'SERVICE_UNAVAILABLE', retryable: true },
+      };
+    }
+
+    const category =
+      'category' in body && typeof body.category === 'string'
+        ? body.category
+        : undefined;
+
+    return {
+      ok: true,
+      data: { aiStatus, category },
+    };
+  } catch {
+    return {
+      ok: false,
+      error: { code: 'NETWORK_ERROR', retryable: true },
+    };
   }
 }

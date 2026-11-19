@@ -63,8 +63,6 @@ export function LeaveReviewDetail({ record, metadata, onClose, onSuccess, onErro
             {record.ai.status === 'failed' && record.ai.errorCode ? (
               <Text style={styles.meta}>{failureMessage(record.ai.errorCode)}</Text>
             ) : null}
-            {record.ai.modelVersion ? <Text style={styles.meta}>Model: {record.ai.modelVersion}</Text> : null}
-            {record.ai.attemptCount > 0 ? <Text style={styles.meta}>Percobaan: {record.ai.attemptCount}</Text> : null}
             {record.ai.classifiedAt ? <Text style={styles.meta}>Diklasifikasikan: {formatDate(record.ai.classifiedAt)}</Text> : null}
             <ClassificationRetryButton
               sessionId={record.sessionId}

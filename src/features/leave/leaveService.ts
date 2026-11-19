@@ -10,7 +10,6 @@ import { getFirebaseAuth, getFirebaseFirestore } from '@/lib/firebase/client';
 import type { AppErrorCode, Result } from '@/types';
 
 import { validateLeaveReason } from './validation';
-import { requestClassification } from './aiService';
 
 export interface LeaveSubmissionRef {
   sessionId: string;
@@ -185,10 +184,8 @@ export async function submitLeave(
       });
     });
 
-    const submission = { sessionId, studentId: uid };
-    // Keep the saved leave request successful even when the optional AI call is offline.
-    void requestClassification(submission);
-    return { ok: true, data: submission };
+    // Classification is initiated by the assigned assistant from the review screen.
+    return { ok: true, data: { sessionId, studentId: uid } };
   } catch (error) {
     return { ok: false, error: mapFailure(error) };
   }
