@@ -52,7 +52,12 @@ export async function getActiveProfileAccount(expectedUid?: string): Promise<Res
     let applicationUser: User | null = null;
     if (typeof name === 'string' && name.trim()) {
       if (profileStatus === 'assistant') {
-        applicationUser = { id: user.uid, name, role: 'assistant' };
+        applicationUser = {
+          id: user.uid,
+          name,
+          ...(typeof studentNumber === 'string' && studentNumber.trim() ? { studentNumber } : {}),
+          role: 'assistant',
+        };
       } else if (profileStatus === 'student' && typeof studentNumber === 'string' && studentNumber.trim()) {
         applicationUser = { id: user.uid, name, studentNumber, role: 'student' };
       }
@@ -76,7 +81,7 @@ export async function saveRegistrationProfile(
   }
   const { requestedRole } = input;
   const name = input.name.trim();
-  const studentNumber = requestedRole === 'student' ? input.studentNumber.trim() : null;
+  const studentNumber = input.studentNumber.trim();
 
   try {
     const auth = getFirebaseAuth();

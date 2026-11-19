@@ -38,6 +38,9 @@ export default function AppTabs() {
               <TabButton iconName={{ web: "history" }}>Riwayat</TabButton>
             </TabTrigger>
           )}
+          <TabTrigger name="account" href="/account" asChild>
+            <TabButton iconName={{ web: "person" }}>Profil</TabButton>
+          </TabTrigger>
         </CustomTabList>
       </TabList>
     </Tabs>

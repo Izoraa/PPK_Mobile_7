@@ -33,6 +33,6 @@ export function validateRegistration(input: RegistrationCredentialsInput): strin
 export function validateProfile({ name, studentNumber, requestedRole }: RegistrationProfileInput): string | null {
   if (!name.trim()) return 'Nama lengkap wajib diisi.';
   if (requestedRole !== 'student' && requestedRole !== 'assistant') return 'Pilih jenis akun yang valid.';
-  if (requestedRole === 'student' && !studentNumber.trim()) return 'NIM wajib diisi untuk praktikan.';
+  if (!studentNumber.trim()) return 'NIM wajib diisi untuk semua jenis akun.';
   return null;
 }

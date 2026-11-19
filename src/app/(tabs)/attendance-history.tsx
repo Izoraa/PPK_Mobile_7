@@ -1,19 +1,31 @@
+import { useFonts } from 'expo-font';
 import { Redirect } from 'expo-router';
+import { Inter_400Regular, Inter_500Medium } from '@expo-google-fonts/inter';
+import { Poppins_600SemiBold } from '@expo-google-fonts/poppins';
 import { useMemo } from 'react';
-import { FlatList, SafeAreaView, StyleSheet, View } from 'react-native';
+import { FlatList, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 
+import { AsyncState } from '@/components/common/AsyncState';
 import { formatAttendanceTimestamp } from '@/features/attendance/format';
 import {
   useAttendanceSessionMetadata,
   useMyAttendanceHistory,
 } from '@/features/attendance/subscriptions';
-import { AsyncState } from '@/components/common/AsyncState';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { useApp } from '@/state/AppContext';
-import { colors, spacing } from '@/theme';
+import { spacing } from '@/theme';
+
+const brand = {
+  blue: '#0D21A1',
+  yellow: '#EEC643',
+  white: '#FFFFFF',
+  ink: '#172033',
+  muted: '#667085',
+  border: '#E5EAF3',
+  page: '#F5F7FC',
+};
 
 export default function AttendanceHistoryScreen() {
+  const [fontsLoaded] = useFonts({ Poppins_600SemiBold, Inter_400Regular, Inter_500Medium });
   const { currentUser } = useApp();
   const historyState = useMyAttendanceHistory(currentUser?.role === 'student');
   const sessionIds = useMemo(
@@ -25,106 +37,103 @@ export default function AttendanceHistoryScreen() {
   if (currentUser?.role !== 'student') return <Redirect href="/" />;
 
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.header}>
-          <ThemedText style={styles.appName}>LabCheckIn</ThemedText>
+    <SafeAreaView style={styles.screen}>
+      <View style={styles.content}>
+        <View style={styles.heading}>
+          <Text accessibilityRole="header" style={[styles.title, fontsLoaded && styles.poppins]}>
+            Riwayat presensi
+          </Text>
+          <Text style={[styles.description, fontsLoaded && styles.inter]}>
+            Catatan kehadiran praktikum Anda.
+          </Text>
         </View>
-        <View style={styles.historyContent}>
-          <View style={styles.historyHeader}>
-            <ThemedText type="title" style={styles.pageTitle}>Riwayat Presensi</ThemedText>
-            <ThemedText themeColor="textSecondary" style={styles.description}>
-              Riwayat kehadiran akun mahasiswa yang sedang login.
-            </ThemedText>
-            <ThemedText type="subtitle" style={styles.activeUser}>
-              {currentUser.name}
-            </ThemedText>
-          </View>
-          <AsyncState
-            status={historyState.status === 'ready' && historyState.records.length === 0 ? 'empty' : historyState.status}
-            error={historyState.error}
-            fromCache={historyState.fromCache}
-            hasPendingWrites={historyState.hasPendingWrites}
-            onRetry={historyState.retry}
-            emptyTitle="Belum ada riwayat presensi"
-            emptyMessage="Belum ada presensi yang tercatat untuk akun ini."
-          >
-            <FlatList
-              data={historyState.records}
-              keyExtractor={(attendance) => attendance.id}
-              contentContainerStyle={styles.listContent}
-              renderItem={({ item }) => (
+
+        <View style={styles.nameCard}>
+          <View style={styles.nameMarker} />
+          <Text style={[styles.studentName, fontsLoaded && styles.interMedium]} numberOfLines={1}>
+            {currentUser.name}
+          </Text>
+        </View>
+
+        <AsyncState
+          status={historyState.status === 'ready' && historyState.records.length === 0 ? 'empty' : historyState.status}
+          error={historyState.error}
+          fromCache={historyState.fromCache}
+          hasPendingWrites={historyState.hasPendingWrites}
+          onRetry={historyState.retry}
+          emptyTitle="Belum ada riwayat presensi"
+          emptyMessage="Presensi yang sudah tercatat akan muncul di sini."
+        >
+          <FlatList
+            data={historyState.records}
+            keyExtractor={(attendance) => attendance.id}
+            contentContainerStyle={styles.listContent}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            renderItem={({ item }) => {
+              const metadata = sessionMetadata[item.sessionId];
+              const attendanceTime = formatAttendanceTimestamp(item.checkedInAt ?? item.createdAt ?? '');
+              const className = metadata?.className ?? `Kelas ${item.classId}`;
+
+              return (
                 <View style={styles.attendanceCard}>
                   <View style={styles.cardTopRow}>
                     <View style={styles.cardHeading}>
-                      <ThemedText type="subtitle" style={styles.cardText}>
-                        {sessionMetadata[item.sessionId]?.title ?? `Sesi ${item.sessionId}`}
-                      </ThemedText>
-                      <ThemedText themeColor="textSecondary" style={styles.roomText}>
-                        {sessionMetadata[item.sessionId]
-                          ? `${sessionMetadata[item.sessionId]?.room} · Kelas ${item.classId}`
-                          : `Kelas ${item.classId} · Detail sesi belum tersedia`}
-                      </ThemedText>
+                      <Text style={[styles.cardTitle, fontsLoaded && styles.poppins]}>{className}</Text>
+                      <Text style={[styles.cardSubtitle, fontsLoaded && styles.inter]}>
+                        {metadata?.title ?? `Sesi ${item.sessionId}`}
+                        {metadata?.room ? `  ·  Ruang ${metadata.room}` : ''}
+                      </Text>
                     </View>
                     <View style={styles.statusBadge}>
-                      <ThemedText type="smallBold" style={styles.statusText}>Hadir</ThemedText>
+                      <Text style={[styles.statusText, fontsLoaded && styles.interMedium]}>Hadir</Text>
                     </View>
                   </View>
-                  <ThemedText themeColor="textSecondary" style={styles.dateTime}>
-                    {formatAttendanceTimestamp(item.checkedInAt ?? item.createdAt ?? '')}
-                  </ThemedText>
-                  {sessionMetadata[item.sessionId]?.startsAt ? (
-                    <ThemedText themeColor="textSecondary" style={styles.sessionTime}>
-                      Jadwal: {formatAttendanceTimestamp(sessionMetadata[item.sessionId]?.startsAt ?? '')}
-                    </ThemedText>
-                  ) : null}
+
+                  <View style={styles.divider} />
+
+                  <View style={styles.timeRow}>
+                    <View style={styles.timeMarker} />
+                    <View style={styles.timeCopy}>
+                      <Text style={[styles.timeLabel, fontsLoaded && styles.interMedium]}>Waktu presensi</Text>
+                      <Text style={[styles.timeValue, fontsLoaded && styles.inter]}>{attendanceTime}</Text>
+                    </View>
+                  </View>
+
                 </View>
-              )}
-            />
-          </AsyncState>
-        </View>
-      </SafeAreaView>
-    </ThemedView>
+              );
+            }}
+          />
+        </AsyncState>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F3F4F6' },
-  safeArea: { flex: 1 },
-  historyContent: { flex: 1 },
-  historyHeader: { paddingHorizontal: spacing.md, paddingTop: spacing.md },
-  listContent: { gap: spacing.md, padding: spacing.md, paddingBottom: spacing.xl },
-  header: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.md,
-    backgroundColor: '#25D366',
-  },
-  appName: { color: '#FFFFFF', fontSize: 30, fontWeight: '800', lineHeight: 36 },
-  pageTitle: { fontSize: 24, lineHeight: 32, marginBottom: spacing.xs },
-  description: { marginTop: spacing.xs, marginBottom: spacing.md },
-  activeUser: { marginBottom: spacing.xs },
-  attendanceCard: {
-    padding: spacing.md,
-    borderRadius: 16,
-    backgroundColor: '#E5E7EB',
-    borderWidth: 1,
-    borderColor: '#E7EAF2',
-    gap: spacing.md,
-  },
+  screen: { flex: 1, backgroundColor: brand.page },
+  content: { flex: 1, width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: spacing.md, paddingTop: spacing.md },
+  heading: { gap: spacing.xs, paddingHorizontal: spacing.xs, paddingTop: spacing.md, paddingBottom: spacing.md },
+  title: { color: brand.blue, fontSize: 26, fontWeight: '600' },
+  description: { color: brand.muted, fontSize: 14, lineHeight: 21 },
+  nameCard: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md, paddingHorizontal: spacing.md, borderRadius: 14, backgroundColor: brand.blue },
+  nameMarker: { width: 4, height: 25, borderRadius: 2, backgroundColor: brand.yellow },
+  studentName: { flex: 1, color: brand.white, fontSize: 14, fontWeight: '600' },
+  poppins: { fontFamily: 'Poppins_600SemiBold' },
+  inter: { fontFamily: 'Inter_400Regular' },
+  interMedium: { fontFamily: 'Inter_500Medium' },
+  listContent: { paddingBottom: spacing.xl },
+  separator: { height: spacing.md },
+  attendanceCard: { gap: spacing.md, padding: spacing.md, borderRadius: 16, borderWidth: 1, borderColor: brand.border, backgroundColor: brand.white },
   cardTopRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.sm },
   cardHeading: { flex: 1, gap: spacing.xs },
-  cardText: { color: colors.text },
-  roomText: { color: colors.textMuted, fontSize: 14 },
-  sessionTime: { color: colors.textMuted, fontSize: 14 },
-  statusBadge: {
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#4CAF50',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    backgroundColor: '#EDF8EE',
-  },
-  statusText: { color: '#3E9B45' },
-  dateTime: { color: colors.textMuted, fontSize: 15 },
+  cardTitle: { color: brand.ink, fontSize: 16, fontWeight: '600' },
+  cardSubtitle: { color: brand.muted, fontSize: 13, lineHeight: 19 },
+  statusBadge: { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 16, backgroundColor: '#FFF7D8' },
+  statusText: { color: brand.blue, fontSize: 12, fontWeight: '600' },
+  divider: { height: 1, backgroundColor: brand.border },
+  timeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  timeMarker: { width: 4, height: 34, borderRadius: 2, backgroundColor: brand.yellow },
+  timeCopy: { flex: 1, gap: 3 },
+  timeLabel: { color: brand.muted, fontSize: 12 },
+  timeValue: { color: brand.ink, fontSize: 14 },
 });
