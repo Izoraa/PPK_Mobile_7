@@ -1,10 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from "react";
 
 import {
   getLeaveReviewMetadata,
   subscribePendingLeaveReviews,
-} from './service';
-import type { LeaveReviewMetadata, LeaveReviewQueueState, LeaveReviewRecord } from './types';
+  subscribeSessionPendingLeaveReviews,
+} from "./service";
+import type {
+  LeaveReviewMetadata,
+  LeaveReviewQueueState,
+  LeaveReviewRecord,
+} from "./types";
 
 function deferStateUpdate(update: () => void): void {
   void Promise.resolve().then(update);
@@ -12,8 +17,8 @@ function deferStateUpdate(update: () => void): void {
 
 export function usePendingLeaveReviews(enabled = true): LeaveReviewQueueState {
   const [attempt, setAttempt] = useState(0);
-  const [state, setState] = useState<Omit<LeaveReviewQueueState, 'retry'>>({
-    status: enabled ? 'loading' : 'ready',
+  const [state, setState] = useState<Omit<LeaveReviewQueueState, "retry">>({
+    status: enabled ? "loading" : "ready",
     records: [],
     error: null,
     fromCache: false,
@@ -28,22 +33,26 @@ export function usePendingLeaveReviews(enabled = true): LeaveReviewQueueState {
         if (!active) return;
 
         setState({
-          status: 'ready',
+          status: "ready",
           records: [],
           error: null,
           fromCache: false,
           hasPendingWrites: false,
         });
       });
-      return () => { active = false; };
+      return () => {
+        active = false;
+      };
     }
 
     const unsubscribe = subscribePendingLeaveReviews(
       (records, metadata) => {
-        if (active) setState({ status: 'ready', records, error: null, ...metadata });
+        if (active)
+          setState({ status: "ready", records, error: null, ...metadata });
       },
       (error) => {
-        if (active) setState((previous) => ({ ...previous, status: 'error', error }));
+        if (active)
+          setState((previous) => ({ ...previous, status: "error", error }));
       },
     );
 
@@ -54,7 +63,82 @@ export function usePendingLeaveReviews(enabled = true): LeaveReviewQueueState {
   }, [enabled, attempt]);
 
   const retry = useCallback(() => {
-    setState((previous) => ({ ...previous, status: 'loading', error: null }));
+    setState((previous) => ({ ...previous, status: "loading", error: null }));
+    setAttempt((value) => value + 1);
+  }, []);
+
+  return { ...state, retry };
+}
+
+export function useSessionPendingLeaveReviews(
+  sessionId: string | null,
+): LeaveReviewQueueState {
+  const [attempt, setAttempt] = useState(0);
+  const [state, setState] = useState<Omit<LeaveReviewQueueState, "retry">>({
+    status: sessionId ? "loading" : "ready",
+    records: [],
+    error: null,
+    fromCache: false,
+    hasPendingWrites: false,
+  });
+
+  useEffect(() => {
+    let active = true;
+
+    if (!sessionId) {
+      setState({
+        status: "ready",
+        records: [],
+        error: null,
+        fromCache: false,
+        hasPendingWrites: false,
+      });
+      return () => {
+        active = false;
+      };
+    }
+
+    setState((previous) => ({
+      ...previous,
+      status: "loading",
+      error: null,
+    }));
+
+    const unsubscribe = subscribeSessionPendingLeaveReviews(
+      sessionId,
+      (records, metadata) => {
+        if (active) {
+          setState({
+            status: "ready",
+            records,
+            error: null,
+            ...metadata,
+          });
+        }
+      },
+      (error) => {
+        if (active) {
+          setState((previous) => ({
+            ...previous,
+            status: "error",
+            error,
+          }));
+        }
+      },
+    );
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [sessionId, attempt]);
+
+  const retry = useCallback(() => {
+    setState((previous) => ({
+      ...previous,
+      status: "loading",
+      error: null,
+    }));
     setAttempt((value) => value + 1);
   }, []);
 
@@ -64,35 +148,50 @@ export function usePendingLeaveReviews(enabled = true): LeaveReviewQueueState {
 export function useLeaveReviewMetadata(
   records: LeaveReviewRecord[],
 ): Record<string, LeaveReviewMetadata> {
-  const [metadata, setMetadata] = useState<Record<string, LeaveReviewMetadata>>({});
-  const metadataKey = records.map((record) => record.sessionId + ':' + record.classId).join('|');
+  const [metadata, setMetadata] = useState<Record<string, LeaveReviewMetadata>>(
+    {},
+  );
+  const metadataKey = records
+    .map((record) => record.sessionId + ":" + record.classId)
+    .join("|");
 
   useEffect(() => {
     let active = true;
-    const uniqueRecords = (metadataKey ? metadataKey.split('|') : []).map((key) => {
-      const separatorIndex = key.indexOf(':');
-      return {
-        key,
-        sessionId: key.slice(0, separatorIndex),
-        classId: key.slice(separatorIndex + 1),
-      };
-    });
+    const uniqueRecords = (metadataKey ? metadataKey.split("|") : []).map(
+      (key) => {
+        const separatorIndex = key.indexOf(":");
+        return {
+          key,
+          sessionId: key.slice(0, separatorIndex),
+          classId: key.slice(separatorIndex + 1),
+        };
+      },
+    );
 
     if (uniqueRecords.length === 0) {
       deferStateUpdate(() => {
         if (active) setMetadata({});
       });
-      return () => { active = false; };
+      return () => {
+        active = false;
+      };
     }
 
-    void Promise.all(uniqueRecords.map(async (record) => {
-      const value = await getLeaveReviewMetadata(record.sessionId, record.classId);
-      return [record.key, value] as const;
-    })).then((entries) => {
+    void Promise.all(
+      uniqueRecords.map(async (record) => {
+        const value = await getLeaveReviewMetadata(
+          record.sessionId,
+          record.classId,
+        );
+        return [record.key, value] as const;
+      }),
+    ).then((entries) => {
       if (active) setMetadata(Object.fromEntries(entries));
     });
 
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [metadataKey]);
 
   return metadata;
