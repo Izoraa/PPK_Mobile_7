@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "labcheckin-leave-ai",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-19",
+  "observability": { "enabled": true },
+  "vars": {
+    "FIREBASE_PROJECT_ID": "labcheckin-58c73",
+    "GROQ_MODEL": "openai/gpt-oss-20b",
+    "ALLOWED_ORIGINS": "http://localhost:8081,http://localhost:8082,http://localhost:8083"
+  }
+}

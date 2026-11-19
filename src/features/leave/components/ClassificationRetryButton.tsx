@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { LeaveAiClassification } from '../types';
@@ -15,40 +15,58 @@ type Props = {
 export function ClassificationRetryButton({ sessionId, studentId, ai }: Props) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const unavailablePermanently = ai.errorCode === 'AI_UNAVAILABLE_PERMANENT' || ai.errorCode === 'CONFLICT';
-  const canTry = ai.status !== 'succeeded' && ai.attemptCount < 3 && !unavailablePermanently;
-
-  if (!canTry) return null;
+  const autoStarted = useRef(false);
+  const canTry = ai.status !== 'succeeded' && ai.status !== 'processing';
 
   async function retry() {
     if (busy) return;
     setBusy(true);
     setMessage(null);
-    const result = await requestClassification({ sessionId, studentId });
-    if (result.ok) {
-      setMessage(result.data.aiStatus === 'succeeded'
-        ? 'Klasifikasi tersedia. Status diperbarui dari server.'
-        : result.data.aiStatus === 'processing'
-          ? 'Klasifikasi sedang diproses oleh server.'
-          : 'Pengajuan tetap tersimpan. Klasifikasi AI belum tersedia; asisten tetap dapat memeriksa.');
-    } else {
-      setMessage(getErrorMessage(result.error.code));
+    try {
+      const result = await requestClassification({ sessionId, studentId });
+      if (result.ok) {
+        setMessage(result.data.aiStatus === 'succeeded'
+          ? 'Klasifikasi tersedia. Status diperbarui dari server.'
+          : result.data.aiStatus === 'processing'
+            ? 'Klasifikasi sedang diproses oleh server.'
+            : 'Pengajuan tetap tersimpan. Klasifikasi AI belum tersedia; asisten tetap dapat memeriksa.');
+      } else {
+        setMessage(getErrorMessage(result.error.code));
+      }
+    } catch {
+      setMessage('Layanan klasifikasi belum tersedia. Coba lagi nanti.');
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
+
+  useEffect(() => {
+    if (ai.status !== 'pending' || autoStarted.current) return;
+    autoStarted.current = true;
+    void retry();
+  }, [ai.status, sessionId, studentId]);
+
+  if (ai.status === 'succeeded') return null;
 
   return (
     <View style={styles.container}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ disabled: busy }}
-        disabled={busy}
-        onPress={() => void retry()}
-        style={[styles.button, busy && styles.disabled]}
-      >
-        {busy ? <ActivityIndicator color={colors.primary} /> : null}
-        <Text style={styles.label}>{busy ? 'Meminta klasifikasi…' : 'Coba klasifikasi AI lagi'}</Text>
-      </Pressable>
+      {ai.status === 'pending' || ai.status === 'processing' || busy ? (
+        <View accessibilityRole="progressbar" style={styles.progress}>
+          <ActivityIndicator color={colors.primary} />
+          <Text style={styles.message}>Klasifikasi AI sedang diproses…</Text>
+        </View>
+      ) : canTry ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ disabled: busy }}
+          disabled={busy}
+          onPress={() => void retry()}
+          style={[styles.button, busy && styles.disabled]}
+        >
+          {busy ? <ActivityIndicator color={colors.primary} /> : null}
+          <Text style={styles.label}>{busy ? 'Meminta klasifikasi…' : 'Coba klasifikasi AI lagi'}</Text>
+        </Pressable>
+      ) : null}
       {message ? <Text accessibilityRole="alert" style={styles.message}>{message}</Text> : null}
     </View>
   );
@@ -56,6 +74,7 @@ export function ClassificationRetryButton({ sessionId, studentId, ai }: Props) {
 
 const styles = StyleSheet.create({
   container: { gap: spacing.xs, marginTop: spacing.xs },
+  progress: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   button: {
     minHeight: 44,
     alignSelf: 'flex-start',

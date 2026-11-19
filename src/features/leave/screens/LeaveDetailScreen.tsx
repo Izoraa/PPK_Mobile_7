@@ -6,7 +6,6 @@ import { AsyncState } from '@/components/common/AsyncState';
 import { colors, radius, spacing } from '@/theme';
 
 import { AiSupportNotice } from '../components/AiSupportNotice';
-import { ClassificationRetryButton } from '../components/ClassificationRetryButton';
 import { subscribeMyLeave } from '../leaveSubscriptions';
 import type { LeaveListenerError, LeaveRequestRecord } from '../types';
 
@@ -127,11 +126,6 @@ export default function LeaveDetailScreen() {
               {request.ai.status !== 'succeeded' ? (
                 <Text style={styles.muted}>Pengajuan tetap tersimpan; asisten dapat memeriksa meski klasifikasi AI belum tersedia.</Text>
               ) : null}
-              <ClassificationRetryButton
-                sessionId={request.sessionId}
-                studentId={request.studentId}
-                ai={request.ai}
-              />
               <AiSupportNotice />
             </View>
           </ScrollView>

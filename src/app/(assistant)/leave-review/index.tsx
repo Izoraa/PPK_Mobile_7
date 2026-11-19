@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
   Pressable,
@@ -25,6 +25,16 @@ export default function LeaveReviewQueueScreen() {
   const metadata = useLeaveReviewMetadata(queue.records);
   const [selected, setSelected] = useState<LeaveReviewRecord | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  const selectedRecord = useMemo(() => {
+    if (!selected) return null;
+    return queue.records.find((record) => record.id === selected.id) ?? selected;
+  }, [queue.records, selected]);
+
+  useEffect(() => {
+    if (!selected || !selectedRecord) return;
+    if (selected !== selectedRecord) setSelected(selectedRecord);
+  }, [selected, selectedRecord]);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -100,10 +110,10 @@ export default function LeaveReviewQueueScreen() {
       </AsyncState>
 
       <LeaveReviewDetail
-        record={selected}
+        record={selectedRecord}
         metadata={
-          selected
-            ? metadata[selected.sessionId + ':' + selected.classId]
+          selectedRecord
+            ? metadata[selectedRecord.sessionId + ':' + selectedRecord.classId]
             : undefined
         }
         onClose={() => setSelected(null)}
