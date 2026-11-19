@@ -1,3 +1,6 @@
+import { Inter_400Regular, Inter_500Medium } from '@expo-google-fonts/inter';
+import { Poppins_600SemiBold } from '@expo-google-fonts/poppins';
+import { useFonts } from 'expo-font';
 import { Link, Redirect } from 'expo-router';
 import { useRef, useState } from 'react';
 import {
@@ -17,8 +20,19 @@ import { login, restoreIdentity } from '@/features/auth/authService';
 import { validateCredentials } from '@/features/auth/validation';
 import { useAuthRestoration } from '@/providers/AuthProvider';
 import { useApp } from '@/state/AppContext';
-import { colors, radius, spacing } from '@/theme';
+import { spacing } from '@/theme';
 import type { AppErrorCode } from '@/types';
+
+const brand = {
+  blue: '#0D21A1',
+  yellow: '#EEC643',
+  white: '#FFFFFF',
+  ink: '#101828',
+  muted: '#667085',
+  border: '#D9DEEA',
+  error: '#B42318',
+  errorBg: '#FEF3F2',
+};
 
 const loginErrorMessages: Partial<Record<AppErrorCode, string>> = {
   VALIDATION_ERROR: 'Masukkan email yang valid dan isi kata sandi.',
@@ -36,6 +50,7 @@ const profileNotices = {
 export default function LoginScreen() {
   const { currentUser, setAuthenticatedUser } = useApp();
   const { state: restoration } = useAuthRestoration();
+  const [fontsLoaded] = useFonts({ Poppins_600SemiBold, Inter_400Regular, Inter_500Medium });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -107,11 +122,20 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
+      <View pointerEvents="none" style={styles.yellowShape} />
+      <View pointerEvents="none" style={styles.blueShape} />
       <KeyboardAvoidingView style={styles.body} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Text accessibilityRole="header" style={styles.title}>Masuk ke LabCheckIn</Text>
+          <View style={styles.brandRow}>
+            <Text style={styles.brandName}>LABCHECKIN</Text>
+          </View>
+          <View style={styles.card}>
+          <View style={styles.intro}>
+            <Text accessibilityRole="header" style={[styles.title, fontsLoaded && styles.poppins]}>Selamat datang</Text>
+            <Text style={[styles.subtitle, fontsLoaded && styles.inter]}>Masuk untuk melanjutkan ke akun Anda.</Text>
+          </View>
           <View style={styles.field}>
-            <Text style={styles.label}>Email</Text>
+            <Text style={[styles.label, fontsLoaded && styles.interMedium]}>Email</Text>
             <TextInput
               accessibilityLabel="Email"
               autoCapitalize="none"
@@ -120,12 +144,14 @@ export default function LoginScreen() {
               editable={!isSubmitting}
               keyboardType="email-address"
               onChangeText={setEmail}
-              style={styles.input}
+              placeholder="nama@email.com"
+              placeholderTextColor="#98A2B3"
+              style={[styles.input, fontsLoaded && styles.inter]}
               value={email}
             />
           </View>
           <View style={styles.field}>
-            <Text style={styles.label}>Kata sandi</Text>
+            <Text style={[styles.label, fontsLoaded && styles.interMedium]}>Kata sandi</Text>
             <TextInput
               accessibilityLabel="Kata sandi"
               autoCapitalize="none"
@@ -134,16 +160,18 @@ export default function LoginScreen() {
               editable={!isSubmitting}
               onChangeText={setPassword}
               onSubmitEditing={submitLogin}
+              placeholder="Masukkan kata sandi"
+              placeholderTextColor="#98A2B3"
               returnKeyType="go"
               secureTextEntry
-              style={styles.input}
+              style={[styles.input, fontsLoaded && styles.inter]}
               value={password}
             />
           </View>
 
-          {errorMessage && <Text accessibilityRole="alert" style={styles.error}>{errorMessage}</Text>}
+          {errorMessage && <Text accessibilityRole="alert" style={[styles.error, fontsLoaded && styles.inter]}>{errorMessage}</Text>}
           {profileNotice && (
-            <Text accessibilityRole="alert" style={styles.label}>{profileNotices[profileNotice]}</Text>
+            <Text accessibilityRole="alert" style={[styles.notice, fontsLoaded && styles.inter]}>{profileNotices[profileNotice]}</Text>
           )}
 
           <Pressable
@@ -151,23 +179,24 @@ export default function LoginScreen() {
             accessibilityState={{ busy: isSubmitting, disabled: isSubmitting }}
             disabled={isSubmitting}
             onPress={submitLogin}
-            style={styles.submitButton}
+            style={({ pressed }) => [styles.submitButton, pressed && !isSubmitting && styles.pressed]}
           >
-            {isSubmitting && <ActivityIndicator color={colors.card} />}
-            <Text style={styles.submitLabel}>{isSubmitting ? 'Memeriksa akun…' : 'Masuk'}</Text>
+            {isSubmitting && <ActivityIndicator color={brand.blue} />}
+            <Text style={[styles.submitLabel, fontsLoaded && styles.interMedium]}>{isSubmitting ? 'Memeriksa akun…' : 'Masuk'}</Text>
           </Pressable>
 
           {profileNotice === 'assistantPending' && (
             <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={checkActivation} style={styles.link}>
-              <Text style={styles.linkLabel}>Periksa status aktivasi</Text>
+              <Text style={[styles.linkLabel, fontsLoaded && styles.interMedium]}>Periksa status aktivasi</Text>
             </Pressable>
           )}
 
           {!isSubmitting && (profileNotice === null || profileNotice === 'profileMissing') && (
-            <Link href="/register" style={styles.link}>
+            <Link href="/register" style={[styles.link, fontsLoaded && styles.interMedium]}>
               {profileNotice === 'profileMissing' ? 'Lengkapi profil' : 'Daftar akun'}
             </Link>
           )}
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -175,34 +204,65 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
+  screen: {
+    flex: 1,
+    backgroundColor: '#F5F7FD',
+  },
+  yellowShape: { position: 'absolute', width: 190, height: 190, borderRadius: 95, backgroundColor: brand.yellow, top: -135, right: -70 },
+  blueShape: { position: 'absolute', width: 150, height: 150, borderRadius: 75, backgroundColor: brand.blue, bottom: -110, left: -78 },
   body: { flex: 1 },
-  content: { alignSelf: 'center', width: '100%', maxWidth: 480, padding: spacing.lg, gap: spacing.md },
-  title: { color: colors.text, fontSize: 28, fontWeight: '700' },
+  content: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 460,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xl,
+    gap: spacing.md,
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  brandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.xs },
+  brandName: { color: brand.blue, fontSize: 26, fontWeight: '800', letterSpacing: 1.5 },
+  card: { gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: brand.white, borderWidth: 1, borderColor: '#E6EAF2', shadowColor: brand.blue, shadowOpacity: 0.08, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 3 },
+  intro: { gap: spacing.xs, marginBottom: spacing.sm, alignItems: 'center' },
+  title: { color: brand.ink, fontSize: 24, fontWeight: '600', textAlign: 'center' },
+  subtitle: { color: brand.muted, fontSize: 13, lineHeight: 19, textAlign: 'center' },
+  poppins: { fontFamily: 'Poppins_600SemiBold' },
+  inter: { fontFamily: 'Inter_400Regular' },
+  interMedium: { fontFamily: 'Inter_500Medium' },
   field: { gap: spacing.sm },
-  label: { color: colors.text, fontSize: 16, fontWeight: '600' },
+  label: { color: brand.ink, fontSize: 14, fontWeight: '600' },
   input: {
-    minHeight: 48,
+    minHeight: 52,
     paddingHorizontal: spacing.md,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.card,
-    color: colors.text,
+    borderColor: brand.border,
+    borderRadius: 10,
+    backgroundColor: brand.white,
+    color: brand.ink,
     fontSize: 16,
   },
-  error: { color: colors.danger, fontSize: 16 },
-  submitButton: {
-    minHeight: 48,
+  error: {
+    color: brand.error,
+    backgroundColor: brand.errorBg,
+    borderRadius: 8,
     padding: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.primary,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  submitButton: {
+    minHeight: 54,
+    padding: spacing.md,
+    borderRadius: 10,
+    backgroundColor: brand.blue,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
   },
-  submitLabel: { color: colors.card, fontSize: 16, fontWeight: '700' },
-  link: { color: colors.primary, fontSize: 16, paddingVertical: spacing.md, textAlign: 'center' },
-  linkLabel: { color: colors.primary, fontSize: 16, textAlign: 'center' },
+  submitLabel: { color: brand.white, fontSize: 16, fontWeight: '700' },
+  notice: { color: brand.blue, fontSize: 14, lineHeight: 20 },
+  pressed: { opacity: 0.82 },
+  link: { color: brand.blue, fontSize: 15, fontWeight: '600', paddingVertical: spacing.sm, textAlign: 'center' },
+  linkLabel: { color: brand.blue, fontSize: 15, fontWeight: '600', textAlign: 'center' },
 });

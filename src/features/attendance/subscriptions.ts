@@ -1,6 +1,7 @@
 import {
   collection,
   collectionGroup,
+  doc,
   getDocFromServer,
   onSnapshot,
   orderBy,
@@ -218,8 +219,15 @@ export async function getAttendanceSessionMetadata(
       || typeof data.room !== 'string'
       || typeof data.timeZone !== 'string'
     ) return null;
+    let className: string | null = null;
+    if (typeof data.classId === 'string' && data.classId) {
+      const classSnapshot = await getDocFromServer(doc(getAttendanceFirestore(), 'classes', data.classId));
+      const classData = classSnapshot.data();
+      if (typeof classData?.name === 'string') className = classData.name;
+    }
     return {
       id: sessionId,
+      className,
       title: data.title,
       room: data.room,
       startsAt: timestampToIso(data.startsAt),

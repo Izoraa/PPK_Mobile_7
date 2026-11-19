@@ -61,9 +61,8 @@ service cloud.firestore {
           && profile.email is string && profile.email == request.auth.token.email
           && profile.name is string && profile.name.trim().size() > 0
           && profile.role == 'student'
-          && ((profile.requestedRole == 'student'
-              && profile.studentNumber is string && profile.studentNumber.trim().size() > 0)
-            || (profile.requestedRole == 'assistant' && profile.studentNumber == null))
+          && profile.requestedRole in ['student', 'assistant']
+          && profile.studentNumber is string && profile.studentNumber.trim().size() > 0
           && profile.createdAt == request.time && profile.updatedAt == request.time;
       }
 

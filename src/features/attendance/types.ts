@@ -42,6 +42,7 @@ export type SessionParticipationSummary = {
 
 export type AttendanceSessionMetadata = {
   id: string;
+  className: string | null;
   title: string;
   room: string;
   startsAt: string | null;

@@ -30,7 +30,7 @@ export type SessionStatus = 'not_open' | 'open' | 'closed';
 export interface User {
   id: string;
   name: string;
-  studentNumber?: string; // only for students (NIM)
+  studentNumber?: string; // NIM, included for student and assistant accounts when available
   role: Role;
 }
 

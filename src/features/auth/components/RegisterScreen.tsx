@@ -1,3 +1,6 @@
+import { Inter_400Regular, Inter_500Medium } from '@expo-google-fonts/inter';
+import { Poppins_600SemiBold } from '@expo-google-fonts/poppins';
+import { useFonts } from 'expo-font';
 import { Link } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -16,13 +19,24 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { register } from '@/features/auth/authService';
 import { getActiveProfileAccount, saveRegistrationProfile, type ProfileStatus } from '@/features/auth/profileService';
 import { validateProfile, validateRegistration } from '@/features/auth/validation';
-import { colors, radius, spacing } from '@/theme';
+import { spacing } from '@/theme';
 import type { AppErrorCode, Role } from '@/types';
 
 const roleOptions: { value: Role; label: string }[] = [
   { value: 'student', label: 'Praktikan' },
   { value: 'assistant', label: 'Asisten praktikum' },
 ];
+
+const brand = {
+  blue: '#0D21A1',
+  yellow: '#EEC643',
+  white: '#FFFFFF',
+  ink: '#101828',
+  muted: '#667085',
+  border: '#D9DEEA',
+  error: '#B42318',
+  errorBg: '#FEF3F2',
+};
 
 const profileStatusMessages: Record<ProfileStatus, string> = {
   student: 'Profil praktikan sudah tersimpan.',
@@ -39,7 +53,7 @@ const registrationErrorMessages: Partial<Record<AppErrorCode, string>> = {
 };
 
 const profileErrorMessages: Partial<Record<AppErrorCode, string>> = {
-  VALIDATION_ERROR: 'Isi nama lengkap dan, jika mendaftar sebagai praktikan, isi NIM.',
+  VALIDATION_ERROR: 'Isi nama lengkap dan NIM, lalu pilih jenis akun yang valid.',
   PROFILE_INCOMPLETE: 'Data profil akun belum lengkap. Hubungi pengelola aplikasi.',
   NETWORK_ERROR: 'Profil belum terkonfirmasi. Periksa jaringan, lalu coba lagi.',
   SERVICE_UNAVAILABLE: 'Penyimpanan profil belum tersedia. Coba lagi nanti.',
@@ -53,6 +67,7 @@ type RegistrationStep =
   | { kind: 'complete'; status: ProfileStatus };
 
 export default function RegisterScreen() {
+  const [fontsLoaded] = useFonts({ Poppins_600SemiBold, Inter_400Regular, Inter_500Medium });
   const [step, setStep] = useState<RegistrationStep>({ kind: 'checking' });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -102,7 +117,8 @@ export default function RegisterScreen() {
 
     const credentials = { email, password, passwordConfirmation };
     const profile = { name, studentNumber, requestedRole };
-    const validationError = step.kind === 'credentials' ? validateRegistration(credentials) : validateProfile(profile);
+    const profileValidationError = validateProfile(profile);
+    const validationError = profileValidationError ?? (step.kind === 'credentials' ? validateRegistration(credentials) : null);
     if (validationError) {
       setErrorMessage(validationError);
       return;
@@ -114,18 +130,34 @@ export default function RegisterScreen() {
 
     if (step.kind === 'credentials') {
       const result = await register(credentials);
-      setIsSubmitting(false);
-      if (result.ok) {
-        setPassword('');
-        setPasswordConfirmation('');
-        setStep({ kind: 'profile', uid: result.data.uid, email: email.trim() });
+      if (!result.ok) {
+        setIsSubmitting(false);
+        setErrorMessage(registrationErrorMessages[result.error.code] ?? 'Pendaftaran gagal. Coba lagi nanti.');
+        submissionLocked.current = false;
         return;
       }
-      setErrorMessage(registrationErrorMessages[result.error.code] ?? 'Pendaftaran gagal. Coba lagi nanti.');
+
+      setPassword('');
+      setPasswordConfirmation('');
+      const profileResult = await saveRegistrationProfile(result.data.uid, profile);
+      setIsSubmitting(false);
+      if (profileResult.ok) {
+        setStep({ kind: 'complete', status: profileResult.data });
+        return;
+      }
+
+      setStep({ kind: 'profile', uid: result.data.uid, email: email.trim() });
+      setErrorMessage(profileErrorMessages[profileResult.error.code] ?? 'Profil belum dapat disimpan. Coba lagi.');
+      setCanRetryProfile(profileResult.error.retryable);
       submissionLocked.current = false;
       return;
     }
 
+    if (step.kind !== 'profile') {
+      setIsSubmitting(false);
+      submissionLocked.current = false;
+      return;
+    }
     const result = await saveRegistrationProfile(step.uid, profile);
     setIsSubmitting(false);
     if (result.ok) {
@@ -145,129 +177,156 @@ export default function RegisterScreen() {
   }
 
   const profileSubmitLabel = canRetryProfile ? 'Coba simpan lagi' : 'Simpan profil';
+  const isRegistrationForm = step.kind === 'credentials' || step.kind === 'profile';
 
   return (
     <SafeAreaView style={styles.screen}>
       <KeyboardAvoidingView style={styles.body} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Text accessibilityRole="header" style={styles.title}>
-            {step.kind === 'profile' ? 'Lengkapi profil' : 'Daftar akun'}
-          </Text>
+          <View style={styles.heading}>
+            <Text style={[styles.eyebrow, fontsLoaded && styles.interMedium]}>LABCHECKIN</Text>
+            <Text accessibilityRole="header" style={[styles.title, fontsLoaded && styles.poppins]}>
+              {step.kind === 'profile' ? 'Lengkapi profil' : 'Buat akun'}</Text>
+            <Text style={[styles.description, fontsLoaded && styles.inter]}>
+              {step.kind === 'profile'
+                ? 'Lengkapi data profil akun Anda.'
+                : 'Pilih peran dan isi data untuk mulai menggunakan LabCheckIn.'}
+            </Text>
+          </View>
 
-          {step.kind === 'checking' && <ActivityIndicator accessibilityLabel="Memeriksa profil" color={colors.primary} />}
+          {step.kind === 'checking' && <ActivityIndicator accessibilityLabel="Memeriksa profil" color={brand.blue} />}
           {step.kind === 'complete' && (
-            <Text accessibilityRole="alert" style={styles.label}>
+            <Text accessibilityRole="alert" style={[styles.statusMessage, fontsLoaded && styles.inter]}>
               {profileStatusMessages[step.status]}
             </Text>
           )}
-          {step.kind === 'credentials' && (
-            <>
-              <View style={styles.field}>
-                <Text style={styles.label}>Email</Text>
-                <TextInput
-                  accessibilityLabel="Email"
-                  autoCapitalize="none"
-                  autoComplete="email"
-                  autoCorrect={false}
-                  editable={!isSubmitting}
-                  keyboardType="email-address"
-                  onChangeText={setEmail}
-                  style={styles.input}
-                  value={email}
-                />
+          {isRegistrationForm && (
+            <View style={styles.formCard}>
+              <View accessibilityRole="radiogroup" accessibilityLabel="Pilih peran" style={styles.field}>
+                <Text style={[styles.label, fontsLoaded && styles.interMedium]}>Saya mendaftar sebagai</Text>
+                <View style={styles.roleRow}>
+                  {roleOptions.map(({ value, label }) => {
+                    const selected = requestedRole === value;
+                    return (
+                      <Pressable
+                        key={value}
+                        accessibilityRole="radio"
+                        accessibilityState={{ checked: selected, disabled: isSubmitting }}
+                        disabled={isSubmitting}
+                        onPress={() => setRequestedRole(value)}
+                        style={[styles.roleOption, selected && styles.selectedRoleOption]}
+                      >
+                        <Text style={[styles.roleLabel, selected && styles.selectedRoleLabel, fontsLoaded && styles.interMedium]}>
+                          {label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
               </View>
 
-              <View style={styles.field}>
-                <Text style={styles.label}>Kata sandi</Text>
-                <TextInput
-                  accessibilityLabel="Kata sandi"
-                  autoCapitalize="none"
-                  autoComplete="new-password"
-                  autoCorrect={false}
-                  editable={!isSubmitting}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                  style={styles.input}
-                  value={password}
-                />
-              </View>
-
-              <View style={styles.field}>
-                <Text style={styles.label}>Konfirmasi kata sandi</Text>
-                <TextInput
-                  accessibilityLabel="Konfirmasi kata sandi"
-                  autoCapitalize="none"
-                  autoComplete="new-password"
-                  autoCorrect={false}
-                  editable={!isSubmitting}
-                  onChangeText={setPasswordConfirmation}
-                  onSubmitEditing={submitRegistration}
-                  returnKeyType="go"
-                  secureTextEntry
-                  style={styles.input}
-                  value={passwordConfirmation}
-                />
-              </View>
-            </>
-          )}
-          {step.kind === 'profile' && (
-            <>
-              <Text style={styles.label}>{step.email}</Text>
-              <View accessibilityRole="radiogroup" accessibilityLabel="Jenis akun" style={styles.field}>
-                <Text style={styles.label}>Jenis akun</Text>
-                {roleOptions.map(({ value, label }) => (
-                  <Pressable
-                    key={value}
-                    accessibilityRole="radio"
-                    accessibilityState={{ checked: requestedRole === value, disabled: isSubmitting }}
-                    disabled={isSubmitting}
-                    onPress={() => setRequestedRole(value)}
-                    style={[styles.roleOption, requestedRole === value && styles.selectedRoleOption]}
-                  >
-                    <Text style={styles.label}>{label}</Text>
-                  </Pressable>
-                ))}
-              </View>
               {requestedRole === 'assistant' && (
-                <Text style={styles.description}>Akun asisten memerlukan persetujuan pengelola.</Text>
+                <Text style={[styles.helperText, fontsLoaded && styles.inter]}>
+                  Akun asisten memerlukan persetujuan pengelola.
+                </Text>
               )}
+
               <View style={styles.field}>
-                <Text style={styles.label}>Nama lengkap</Text>
+                <Text style={[styles.label, fontsLoaded && styles.interMedium]}>Nama lengkap</Text>
                 <TextInput
                   accessibilityLabel="Nama lengkap"
                   autoComplete="name"
                   editable={!isSubmitting}
                   onChangeText={setName}
-                  style={styles.input}
+                  placeholder="Masukkan nama lengkap"
+                  placeholderTextColor="#98A2B3"
+                  style={[styles.input, fontsLoaded && styles.inter]}
                   value={name}
                 />
               </View>
-              {requestedRole === 'student' && (
-                <View style={styles.field}>
-                  <Text style={styles.label}>NIM</Text>
-                  <TextInput
-                    accessibilityLabel="NIM"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    editable={!isSubmitting}
-                    onChangeText={setStudentNumber}
-                    onSubmitEditing={submitRegistration}
-                    returnKeyType="go"
-                    style={styles.input}
-                    value={studentNumber}
-                  />
-                </View>
+
+              <View style={styles.field}>
+                <Text style={[styles.label, fontsLoaded && styles.interMedium]}>NIM</Text>
+                <TextInput
+                  accessibilityLabel="NIM"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!isSubmitting}
+                  keyboardType="number-pad"
+                  onChangeText={setStudentNumber}
+                  placeholder="Masukkan NIM"
+                  placeholderTextColor="#98A2B3"
+                  style={[styles.input, fontsLoaded && styles.inter]}
+                  value={studentNumber}
+                />
+              </View>
+
+              <View style={styles.field}>
+                <Text style={[styles.label, fontsLoaded && styles.interMedium]}>Email</Text>
+                <TextInput
+                  accessibilityLabel="Email"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  autoCorrect={false}
+                  editable={!isSubmitting && step.kind === 'credentials'}
+                  keyboardType="email-address"
+                  onChangeText={setEmail}
+                  placeholder="nama@email.com"
+                  placeholderTextColor="#98A2B3"
+                  style={[styles.input, fontsLoaded && styles.inter, step.kind === 'profile' && styles.readOnlyInput]}
+                  value={step.kind === 'profile' ? step.email : email}
+                />
+              </View>
+
+              {step.kind === 'credentials' && (
+                <>
+                  <View style={styles.field}>
+                    <Text style={[styles.label, fontsLoaded && styles.interMedium]}>Kata sandi</Text>
+                    <TextInput
+                      accessibilityLabel="Kata sandi"
+                      autoCapitalize="none"
+                      autoComplete="new-password"
+                      autoCorrect={false}
+                      editable={!isSubmitting}
+                      onChangeText={setPassword}
+                      placeholder="Buat kata sandi"
+                      placeholderTextColor="#98A2B3"
+                      secureTextEntry
+                      style={[styles.input, fontsLoaded && styles.inter]}
+                      value={password}
+                    />
+                  </View>
+
+                  <View style={styles.field}>
+                    <Text style={[styles.label, fontsLoaded && styles.interMedium]}>Konfirmasi kata sandi</Text>
+                    <TextInput
+                      accessibilityLabel="Konfirmasi kata sandi"
+                      autoCapitalize="none"
+                      autoComplete="new-password"
+                      autoCorrect={false}
+                      editable={!isSubmitting}
+                      onChangeText={setPasswordConfirmation}
+                      onSubmitEditing={submitRegistration}
+                      placeholder="Ulangi kata sandi"
+                      placeholderTextColor="#98A2B3"
+                      returnKeyType="go"
+                      secureTextEntry
+                      style={[styles.input, fontsLoaded && styles.inter]}
+                      value={passwordConfirmation}
+                    />
+                  </View>
+                </>
               )}
-            </>
+            </View>
           )}
 
-          {errorMessage && <Text accessibilityRole="alert" style={styles.error}>{errorMessage}</Text>}
+          {errorMessage && <Text accessibilityRole="alert" style={[styles.error, fontsLoaded && styles.inter]}>{errorMessage}</Text>}
           {(step.kind === 'unavailable' || (step.kind === 'complete' && step.status === 'assistantPending')) && (
             <Pressable accessibilityRole="button" onPress={checkProfileAgain} style={styles.submitButton}>
-              <Text style={styles.submitLabel}>Periksa status profil</Text>
+              <Text style={[styles.submitLabel, fontsLoaded && styles.interMedium]}>Periksa status profil</Text>
             </Pressable>
           )}
-          {(step.kind === 'credentials' || step.kind === 'profile') && (
+          {isRegistrationForm && (
             <Pressable
               accessibilityRole="button"
               accessibilityState={{ busy: isSubmitting, disabled: isSubmitting }}
@@ -275,14 +334,14 @@ export default function RegisterScreen() {
               onPress={submitRegistration}
               style={styles.submitButton}
             >
-              {isSubmitting && <ActivityIndicator color={colors.card} />}
-              <Text style={styles.submitLabel}>
-                {step.kind === 'credentials' ? 'Daftar' : profileSubmitLabel}
+              {isSubmitting && <ActivityIndicator color={brand.white} />}
+              <Text style={[styles.submitLabel, fontsLoaded && styles.interMedium]}>
+                {step.kind === 'credentials' ? 'Daftar akun' : profileSubmitLabel}
               </Text>
             </Pressable>
           )}
 
-          {!isSubmitting && <Link href="./login" dismissTo style={styles.backLink}>Kembali ke login</Link>}
+          {!isSubmitting && <Link href="./login" dismissTo style={[styles.backLink, fontsLoaded && styles.interMedium]}>Kembali ke login</Link>}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -290,44 +349,58 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
+  screen: { flex: 1, backgroundColor: '#F5F7FD' },
   body: { flex: 1 },
-  content: { alignSelf: 'center', width: '100%', maxWidth: 480, padding: spacing.lg, gap: spacing.md },
-  title: { color: colors.text, fontSize: 28, fontWeight: '700' },
+  content: { alignSelf: 'center', width: '100%', maxWidth: 480, padding: spacing.lg, paddingTop: spacing.xl, paddingBottom: 40, gap: spacing.md, flexGrow: 1 },
+  heading: { gap: spacing.xs, marginBottom: spacing.sm },
+  eyebrow: { color: brand.blue, fontSize: 13, fontWeight: '700', letterSpacing: 1.8 },
+  title: { color: brand.blue, fontSize: 27, fontWeight: '600' },
+  description: { color: brand.muted, fontSize: 14, lineHeight: 21 },
+  poppins: { fontFamily: 'Poppins_600SemiBold' },
+  inter: { fontFamily: 'Inter_400Regular' },
+  interMedium: { fontFamily: 'Inter_500Medium' },
+  formCard: { gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: brand.white, borderWidth: 1, borderColor: '#E6EAF2', shadowColor: brand.blue, shadowOpacity: 0.07, shadowRadius: 16, shadowOffset: { width: 0, height: 7 }, elevation: 3 },
   field: { gap: spacing.sm },
-  label: { color: colors.text, fontSize: 16, fontWeight: '600' },
-  description: { color: colors.textMuted, fontSize: 16 },
+  label: { color: brand.ink, fontSize: 14, fontWeight: '600' },
+  helperText: { color: brand.muted, fontSize: 13, lineHeight: 19, marginTop: -spacing.sm },
+  roleRow: { flexDirection: 'row', gap: spacing.sm },
   roleOption: {
+    flex: 1,
     minHeight: 48,
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
-    borderWidth: 2,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.card,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: brand.border,
+    borderRadius: 12,
+    backgroundColor: brand.white,
   },
-  selectedRoleOption: { borderColor: colors.primary },
+  selectedRoleOption: { borderColor: brand.blue, backgroundColor: '#FFF9E5' },
+  roleLabel: { color: brand.muted, fontSize: 14, fontWeight: '600', textAlign: 'center' },
+  selectedRoleLabel: { color: brand.blue },
   input: {
-    minHeight: 48,
+    minHeight: 50,
     paddingHorizontal: spacing.md,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.card,
-    color: colors.text,
-    fontSize: 16,
+    borderColor: brand.border,
+    borderRadius: 12,
+    backgroundColor: brand.white,
+    color: brand.ink,
+    fontSize: 15,
   },
-  error: { color: colors.danger, fontSize: 16 },
+  readOnlyInput: { backgroundColor: '#F2F4F7', color: brand.muted },
+  error: { color: brand.error, backgroundColor: brand.errorBg, borderRadius: 10, padding: spacing.md, fontSize: 14, lineHeight: 20 },
+  statusMessage: { color: brand.ink, backgroundColor: brand.white, padding: spacing.lg, borderRadius: 16, fontSize: 15 },
   submitButton: {
-    minHeight: 48,
+    minHeight: 52,
     padding: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.primary,
+    borderRadius: 12,
+    backgroundColor: brand.blue,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
   },
-  submitLabel: { color: colors.card, fontSize: 16, fontWeight: '700' },
-  backLink: { color: colors.primary, fontSize: 16, paddingVertical: spacing.md, textAlign: 'center' },
+  submitLabel: { color: brand.white, fontSize: 15, fontWeight: '700' },
+  backLink: { color: brand.blue, fontSize: 14, fontWeight: '600', paddingVertical: spacing.sm, textAlign: 'center' },
 });

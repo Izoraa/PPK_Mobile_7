@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useFonts } from 'expo-font';
 import { FlatList, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
+import { Inter_400Regular, Inter_500Medium } from '@expo-google-fonts/inter';
+import { Poppins_600SemiBold } from '@expo-google-fonts/poppins';
 
 import { AsyncState } from '@/components/common/AsyncState';
-import { colors, radius, spacing } from '@/theme';
+import { spacing } from '@/theme';
 
 import { subscribeMyLeaves } from '../leaveSubscriptions';
 import type { LeaveListenerError, LeaveRequestRecord } from '../types';
@@ -32,14 +35,14 @@ function decisionLabel(status: LeaveRequestRecord['status']): string {
   }
 }
 
-function aiLabel(status: LeaveRequestRecord['ai']['status']): string {
-  switch (status) {
-    case 'pending': return 'Menunggu klasifikasi AI';
-    case 'processing': return 'Klasifikasi AI sedang diproses';
-    case 'succeeded': return 'Klasifikasi AI tersedia';
-    case 'failed': return 'Klasifikasi AI belum tersedia';
-  }
-}
+const brand = {
+  blue: '#0D21A1',
+  yellow: '#EEC643',
+  white: '#FFFFFF',
+  ink: '#172033',
+  muted: '#667085',
+  border: '#E4E9F2',
+};
 
 function formatTimestamp(timestamp: LeaveRequestRecord['createdAt']): string {
   return timestamp
@@ -48,6 +51,7 @@ function formatTimestamp(timestamp: LeaveRequestRecord['createdAt']): string {
 }
 
 export default function MyLeavesScreen() {
+  const [fontsLoaded] = useFonts({ Poppins_600SemiBold, Inter_400Regular, Inter_500Medium });
   const router = useRouter();
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<ViewState>(initialState);
@@ -86,10 +90,10 @@ export default function MyLeavesScreen() {
           <Text style={styles.backArrow}>←</Text>
         </Pressable>
 
-        <Text accessibilityRole="header" style={styles.title}>
+        <Text accessibilityRole="header" style={[styles.title, fontsLoaded && styles.poppins]}>
           Izin saya
         </Text>
-        <Text style={styles.subtitle}>
+        <Text style={[styles.subtitle, fontsLoaded && styles.inter]}>
           Lihat status pengajuan izin Anda.
         </Text>
       </View>
@@ -107,33 +111,49 @@ export default function MyLeavesScreen() {
           data={state.data}
           keyExtractor={(item) => item.sessionId}
           contentContainerStyle={styles.list}
-          renderItem={({ item }) => (
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          renderItem={({ item, index }) => (
             <Pressable
               accessibilityRole="button"
               onPress={() => router.push({
                 pathname: '/(student)/leaves/[sessionId]',
                 params: { sessionId: item.sessionId },
               } as Href)}
-              style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+              style={({ pressed }) => [
+                styles.card,
+                index % 2 === 0 ? styles.yellowCard : styles.blueCard,
+                pressed && styles.pressed,
+              ]}
             >
-              <View style={styles.cardHeading}>
-                <Text style={styles.cardTitle}>Pengajuan izin</Text>
-                <Text style={styles.date}>{formatTimestamp(item.createdAt)}</Text>
+              <View style={styles.cardTopRow}>
+                <View style={styles.cardHeading}>
+                  <Text style={[styles.cardTitle, fontsLoaded && styles.poppins]}>Pengajuan izin</Text>
+                  <Text style={[styles.date, fontsLoaded && styles.inter]}>{formatTimestamp(item.createdAt)}</Text>
+                </View>
+                <View style={[
+                  styles.statusBadge,
+                  item.status === 'rejected' && styles.rejectedBadge,
+                  item.status === 'approved' && styles.approvedBadge,
+                  item.status === 'pending' && styles.pendingBadge,
+                ]}>
+                  <Text style={[
+                    styles.statusText,
+                    item.status === 'rejected' && styles.rejected,
+                    item.status === 'approved' && styles.approved,
+                    item.status === 'pending' && styles.pending,
+                    fontsLoaded && styles.interMedium,
+                  ]}>{decisionLabel(item.status)}</Text>
+                </View>
               </View>
               <View style={styles.reasonBox}>
-                <Text style={styles.reasonLabel}>Alasan izin</Text>
-                <Text style={styles.reason}>{item.reason}</Text>
+                <Text style={[styles.reasonLabel, fontsLoaded && styles.interMedium]}>Alasan izin</Text>
+                <Text style={[styles.reason, fontsLoaded && styles.inter]}>{item.reason}</Text>
               </View>
-              <Text style={[
-                styles.decision,
-                item.status === 'rejected' && styles.rejected,
-                item.status === 'approved' && styles.approved,
-                item.status === 'pending' && styles.pending,
-              ]}>
-                Keputusan: {decisionLabel(item.status)}
-              </Text>
               {item.reviewNote ? (
-                <Text numberOfLines={2} style={styles.ai}>Catatan pemeriksa: {item.reviewNote}</Text>
+                <View style={styles.noteBox}>
+                  <Text style={[styles.noteLabel, fontsLoaded && styles.interMedium]}>Catatan pemeriksa</Text>
+                  <Text numberOfLines={3} style={[styles.noteText, fontsLoaded && styles.inter]}>{item.reviewNote}</Text>
+                </View>
               ) : null}
             </Pressable>
           )}
@@ -144,51 +164,63 @@ export default function MyLeavesScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
-  header: { gap: spacing.xs, padding: spacing.md },
-  title: { color: colors.text, fontSize: 24, fontWeight: '700' },
-  subtitle: { color: colors.textMuted, fontSize: 14 },
-  list: { flexGrow: 1, gap: spacing.md, padding: spacing.md, paddingTop: 0 },
+  screen: { flex: 1, backgroundColor: '#F5F7FC' },
+  header: { gap: spacing.xs, paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.lg },
+  title: { color: brand.blue, fontSize: 25, fontWeight: '600' },
+  subtitle: { color: brand.muted, fontSize: 14, lineHeight: 20 },
+  poppins: { fontFamily: 'Poppins_600SemiBold' },
+  inter: { fontFamily: 'Inter_400Regular' },
+  interMedium: { fontFamily: 'Inter_500Medium' },
+  list: { flexGrow: 1, paddingHorizontal: spacing.md, paddingBottom: spacing.xl },
+  separator: { height: spacing.md },
   card: {
-    gap: spacing.sm,
+    gap: spacing.md,
     padding: spacing.md,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.card,
+    borderLeftWidth: 4,
+    borderColor: brand.border,
+    borderRadius: 18,
+    backgroundColor: brand.white,
+    shadowColor: brand.blue,
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
-
-  headerRow: {
+  yellowCard: { borderLeftColor: brand.yellow },
+  blueCard: { borderLeftColor: brand.blue },
+  cardTopRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
+    gap: spacing.sm,
   },
-  backButton: {
-    padding: spacing.xs,
-  },
-  backArrow: {
-    color: '#2563EB',
-    fontSize: 28,
-    lineHeight: 32,
-  },
-  cardHeading: { gap: spacing.xs },
-  cardTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  date: { color: colors.textMuted, fontSize: 13 },
+  backButton: { padding: spacing.xs },
+  backArrow: { color: brand.blue, fontSize: 28, lineHeight: 32 },
+  cardHeading: { flex: 1, gap: spacing.xs },
+  cardTitle: { color: brand.ink, fontSize: 16, fontWeight: '600' },
+  date: { color: brand.muted, fontSize: 12, lineHeight: 18 },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16 },
+  rejectedBadge: { backgroundColor: '#FEE4E2' },
+  approvedBadge: { backgroundColor: '#E8F5E9' },
+  pendingBadge: { backgroundColor: brand.yellow },
+  statusText: { fontSize: 12, fontWeight: '600' },
   reasonBox: {
     gap: spacing.xs,
-    padding: spacing.sm,
-    borderRadius: radius.sm,
+    padding: spacing.md,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#BFDBFE',
-    backgroundColor: '#EFF6FF',
+    borderColor: '#D5DDFD',
+    backgroundColor: '#F3F5FF',
   },
-  reasonLabel: { color: colors.primary, fontSize: 12, fontWeight: '700' },
-  reason: { color: colors.primary, fontSize: 14, lineHeight: 20 },
-  decision: { fontSize: 14, fontWeight: '700' },
-  rejected: { color: colors.danger },
-  approved: { color: colors.success },
-  pending: { color: '#CA8A04' },
-  ai: { color: colors.textMuted, fontSize: 13 },
+  reasonLabel: { color: brand.blue, fontSize: 12, fontWeight: '600' },
+  reason: { color: brand.ink, fontSize: 14, lineHeight: 21 },
+  noteBox: { gap: spacing.xs, paddingTop: spacing.xs },
+  noteLabel: { color: brand.muted, fontSize: 12 },
+  noteText: { color: brand.ink, fontSize: 13, lineHeight: 19 },
+  rejected: { color: '#B42318' },
+  approved: { color: '#188038' },
+  pending: { color: '#946C00' },
   pressed: { opacity: 0.75 },
 });
 
