@@ -3,9 +3,11 @@ import { Redirect } from 'expo-router';
 import { Inter_400Regular, Inter_500Medium } from '@expo-google-fonts/inter';
 import { Poppins_600SemiBold } from '@expo-google-fonts/poppins';
 import { useMemo } from 'react';
-import { FlatList, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AsyncState } from '@/components/common/AsyncState';
+import { TabBarDivider } from '@/components/TabBarDivider';
 import { formatAttendanceTimestamp } from '@/features/attendance/format';
 import {
   useAttendanceSessionMetadata,
@@ -37,17 +39,13 @@ export default function AttendanceHistoryScreen() {
   if (currentUser?.role !== 'student') return <Redirect href="/" />;
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={styles.screen}>
+      <View style={styles.topBar}>
+        <Text accessibilityRole="header" style={[styles.topBarTitle, fontsLoaded && styles.poppins]}>
+          Riwayat presensi
+        </Text>
+      </View>
       <View style={styles.content}>
-        <View style={styles.heading}>
-          <Text accessibilityRole="header" style={[styles.title, fontsLoaded && styles.poppins]}>
-            Riwayat presensi
-          </Text>
-          <Text style={[styles.description, fontsLoaded && styles.inter]}>
-            Catatan kehadiran praktikum Anda.
-          </Text>
-        </View>
-
         <View style={styles.nameCard}>
           <View style={styles.nameMarker} />
           <Text style={[styles.studentName, fontsLoaded && styles.interMedium]} numberOfLines={1}>
@@ -105,16 +103,16 @@ export default function AttendanceHistoryScreen() {
           />
         </AsyncState>
       </View>
+      <TabBarDivider />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: brand.page },
-  content: { flex: 1, width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: spacing.md, paddingTop: spacing.md },
-  heading: { gap: spacing.xs, paddingHorizontal: spacing.xs, paddingTop: spacing.md, paddingBottom: spacing.md },
-  title: { color: brand.blue, fontSize: 26, fontWeight: '600' },
-  description: { color: brand.muted, fontSize: 14, lineHeight: 21 },
+  screen: { flex: 1, backgroundColor: brand.white },
+  topBar: { height: 56, alignItems: 'center', justifyContent: 'center', backgroundColor: brand.white, borderBottomWidth: 1, borderBottomColor: '#E6EAF2' },
+  topBarTitle: { textAlign: 'center', color: brand.blue, fontSize: 18, fontWeight: '600' },
+  content: { flex: 1, width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: spacing.md, paddingTop: spacing.md, backgroundColor: brand.page },
   nameCard: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md, paddingHorizontal: spacing.md, borderRadius: 14, backgroundColor: brand.blue },
   nameMarker: { width: 4, height: 25, borderRadius: 2, backgroundColor: brand.yellow },
   studentName: { flex: 1, color: brand.white, fontSize: 14, fontWeight: '600' },
@@ -128,8 +126,8 @@ const styles = StyleSheet.create({
   cardHeading: { flex: 1, gap: spacing.xs },
   cardTitle: { color: brand.ink, fontSize: 16, fontWeight: '600' },
   cardSubtitle: { color: brand.muted, fontSize: 13, lineHeight: 19 },
-  statusBadge: { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 16, backgroundColor: '#FFF7D8' },
-  statusText: { color: brand.blue, fontSize: 12, fontWeight: '600' },
+  statusBadge: { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 16, backgroundColor: '#16A34A' },
+  statusText: { color: brand.white, fontSize: 12, fontWeight: '600' },
   divider: { height: 1, backgroundColor: brand.border },
   timeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   timeMarker: { width: 4, height: 34, borderRadius: 2, backgroundColor: brand.yellow },

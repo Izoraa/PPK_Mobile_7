@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Link, useLocalSearchParams } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Poppins_600SemiBold } from '@expo-google-fonts/poppins';
+import { useFonts } from 'expo-font';
 import { doc, getDoc } from 'firebase/firestore';
 
 import { AsyncState } from '@/components/common/AsyncState';
@@ -59,6 +62,7 @@ function formatTimestamp(timestamp: LeaveRequestRecord['reviewedAt']): string | 
 }
 
 export default function LeaveDetailScreen() {
+  const [fontsLoaded] = useFonts({ Poppins_600SemiBold });
   const { sessionId } = useLocalSearchParams<{ sessionId?: string }>();
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<ViewState>(initialState);
@@ -120,11 +124,12 @@ export default function LeaveDetailScreen() {
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
         <Link href="/(student)/leaves" asChild>
-          <Pressable style={styles.backButton}>
-            <Text style={styles.backText}>Kembali ke izin saya</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Kembali ke izin saya" style={styles.backButton}>
+            <Text style={styles.backText}>←</Text>
           </Pressable>
         </Link>
-        <Text accessibilityRole="header" style={styles.title}>Detail pengajuan izin</Text>
+        <Text accessibilityRole="header" style={[styles.title, fontsLoaded && styles.poppins]}>Detail pengajuan izin</Text>
+        <View style={styles.headerSpacer} />
       </View>
 
       <AsyncState
@@ -183,11 +188,13 @@ export default function LeaveDetailScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  header: { gap: spacing.sm, padding: spacing.md },
+  header: { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E6EAF2' },
   content: { padding: spacing.md, paddingTop: 0 },
-  title: { color: colors.text, fontSize: 24, fontWeight: '700' },
-  backButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
-  backText: { color: colors.primary, fontSize: 15, fontWeight: '600' },
+  title: { position: 'absolute', left: 64, right: 64, textAlign: 'center', color: '#0D21A1', fontSize: 18, fontWeight: '600' },
+  poppins: { fontFamily: 'Poppins_600SemiBold' },
+  backButton: { width: 48, height: 48, alignItems: 'flex-start', justifyContent: 'center' },
+  backText: { color: '#0D21A1', fontSize: 30, lineHeight: 36, transform: [{ translateY: -7 }] },
+  headerSpacer: { width: 48, height: 48 },
   card: {
     gap: spacing.sm,
     padding: spacing.md,

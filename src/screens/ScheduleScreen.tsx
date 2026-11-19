@@ -4,6 +4,7 @@ import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AsyncState } from "@/components/common/AsyncState";
+import { TabBarDivider } from "@/components/TabBarDivider";
 import {
   subscribeClasses,
   subscribeSessions,
@@ -155,7 +156,7 @@ export default function ScheduleScreen() {
       : "/(student)/sessions/[sessionId]";
 
   return (
-    <SafeAreaView edges={["left", "right", "bottom"]} style={styles.screen}>
+    <SafeAreaView edges={["left", "right"]} style={styles.screen}>
       <View style={styles.header}>
         <Text accessibilityRole="header" style={styles.title}>
           Jadwal praktikum
@@ -204,6 +205,7 @@ export default function ScheduleScreen() {
           )}
         />
       </AsyncState>
+      <TabBarDivider />
     </SafeAreaView>
   );
 }
