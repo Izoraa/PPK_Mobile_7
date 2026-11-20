@@ -21,7 +21,7 @@ import {
   getAttendanceAuth,
   getAttendanceFirestore,
 } from "@/features/attendance/service";
-import { dispatchNotification } from "@/features/notifications";
+import { dispatchNotification } from "@/features/notifications/notificationService";
 import type { Result } from "@/types";
 import type {
   LeaveAi,
