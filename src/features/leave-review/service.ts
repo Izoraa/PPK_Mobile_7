@@ -21,6 +21,7 @@ import {
   getAttendanceAuth,
   getAttendanceFirestore,
 } from "@/features/attendance/service";
+import { dispatchNotification } from "@/features/notifications";
 import type { Result } from "@/types";
 import type {
   LeaveAi,
@@ -148,7 +149,7 @@ export async function getLeaveReviewMetadata(
     return {
       sessionTitle:
         sessionSnapshot.exists() &&
-        typeof sessionSnapshot.data().title === "string"
+          typeof sessionSnapshot.data().title === "string"
           ? sessionSnapshot.data().title
           : null,
       className:
@@ -311,6 +312,29 @@ async function reviewLeave(
         error: { code: "SERVICE_UNAVAILABLE", retryable: true },
       };
     }
+
+    if (status === "approved") {
+      // S3-SRS-25: Notify applicant student when leave is approved
+      void dispatchNotification("LEAVE_APPROVED", {
+        sessionId,
+        studentId,
+        title: "Pengajuan Izin Disetujui",
+        body: reviewNote
+          ? `Pengajuan izin Anda telah disetujui: "${reviewNote}"`
+          : "Pengajuan izin Anda untuk sesi praktikum telah disetujui oleh asisten.",
+      });
+    } else {
+      // S3-SRS-26: Notify applicant student when leave is rejected
+      void dispatchNotification("LEAVE_REJECTED", {
+        sessionId,
+        studentId,
+        title: "Pengajuan Izin Ditolak",
+        body: reviewNote
+          ? `Pengajuan izin Anda ditolak: "${reviewNote}"`
+          : "Pengajuan izin Anda untuk sesi praktikum telah ditolak oleh asisten.",
+      });
+    }
+
     return { ok: true, data: decision };
   } catch (error) {
     return { ok: false, error: mapReviewError(error) };
@@ -367,7 +391,7 @@ export function subscribePendingLeaveReviews(
           : "SERVICE_UNAVAILABLE",
       retryable: error instanceof Error && error.message !== "UNAUTHENTICATED",
     });
-    return () => {};
+    return () => { };
   }
 }
 
@@ -381,7 +405,7 @@ export function subscribeSessionPendingLeaveReviews(
 ): Unsubscribe {
   if (!sessionId.trim()) {
     onError({ code: "VALIDATION_ERROR", retryable: false });
-    return () => {};
+    return () => { };
   }
 
   try {
@@ -426,6 +450,6 @@ export function subscribeSessionPendingLeaveReviews(
         error instanceof Error && error.message === "UNAUTHENTICATED"
       ),
     });
-    return () => {};
+    return () => { };
   }
 }
