@@ -1,4 +1,3 @@
-import React from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 
 import { formatAttendanceTimestamp } from '@/features/attendance/format';
@@ -6,8 +5,8 @@ import {
   useSessionAttendance,
   useSessionParticipationSummary,
 } from '@/features/attendance/subscriptions';
-import { colors, radius, spacing } from '../../theme';
 import { useApp } from '../../state/AppContext';
+import { colors, radius, spacing } from '../../theme';
 import type { Attendance } from '../../types';
 import { formatDate, formatTime } from '../../utils/format';
 import { EmptyState } from '../common/EmptyState';
@@ -17,6 +16,8 @@ export interface AttendanceListProps {
   attendances?: Attendance[];
   emptyTitle?: string;
   emptyMessage?: string;
+  hideSummary?: boolean;
+  onlySummary?: boolean;
 }
 
 export function AttendanceList({
@@ -24,6 +25,8 @@ export function AttendanceList({
   attendances,
   emptyTitle = 'Belum ada praktikan yang presensi',
   emptyMessage = 'Daftar kehadiran masih kosong untuk konteks ini.',
+  hideSummary = false,
+  onlySummary = false,
 }: AttendanceListProps) {
   const { currentUser, getAttendancesBySession, getSession, getUserById } = useApp();
   const remote = useSessionAttendance(attendances ? null : sessionId ?? null);
@@ -31,6 +34,25 @@ export function AttendanceList({
     sessionId ?? null,
     !attendances && currentUser?.role === 'assistant',
   );
+
+  if (onlySummary) {
+    if (currentUser?.role !== 'assistant') return null;
+    return (
+      <View style={styles.summary}>
+        <Text style={styles.summaryTitle}>Ringkasan sesi</Text>
+        {summary.status === 'loading' ? (
+          <Text style={styles.summaryMessage}>Memuat ringkasan...</Text>
+        ) : (
+          <View style={styles.summaryGrid}>
+            <Text style={styles.summaryItem}>Hadir: {summary.records[0]?.attendanceCount ?? 0}</Text>
+            <Text style={styles.summaryItem}>Izin pending: {summary.records[0]?.pendingLeaveCount ?? 0}</Text>
+            <Text style={styles.summaryItem}>Izin disetujui: {summary.records[0]?.approvedLeaveCount ?? 0}</Text>
+            <Text style={styles.summaryItem}>Izin ditolak: {summary.records[0]?.rejectedLeaveCount ?? 0}</Text>
+          </View>
+        )}
+      </View>
+    );
+  }
 
   if (!attendances && sessionId && remote.status === 'loading') {
     return <EmptyState title="Memuat rekap presensi" message="Mengambil data kehadiran dari server." />;
@@ -52,7 +74,7 @@ export function AttendanceList({
   if (!attendances && sessionId) {
     return (
       <View style={styles.remoteContainer}>
-        {currentUser?.role === 'assistant' ? (
+        {currentUser?.role === 'assistant' && !hideSummary ? (
           <View style={styles.summary}>
             <Text style={styles.summaryTitle}>Ringkasan sesi</Text>
             {summary.fromCache ? (
