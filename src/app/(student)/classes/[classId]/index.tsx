@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
   StyleSheet,
@@ -116,6 +116,50 @@ export default function StudentClassDetailScreen() {
     return () => { active = false; unsubscribe(); };
   }, [classId, attempt]);
 
+  const sortedSessions = useMemo(() => {
+    const getTime = (s: SessionDoc) => {
+      if (!s.startsAt) return 0;
+      if (typeof (s.startsAt as any).toMillis === 'function') {
+        return (s.startsAt as any).toMillis();
+      }
+      if (typeof (s.startsAt as any).toDate === 'function') {
+        return (s.startsAt as any).toDate().getTime();
+      }
+      if (s.startsAt instanceof Date) {
+        return s.startsAt.getTime();
+      }
+      const parsed = new Date(s.startsAt as any).getTime();
+      return Number.isNaN(parsed) ? 0 : parsed;
+    };
+
+    return [...sessions].sort((a, b) => {
+      const aClosed = a.status === 'closed';
+      const bClosed = b.status === 'closed';
+
+      // ATURAN UTAMA: Sesi yang belum ditutup (open atau not_open) MUTLAK berada di atas sesi yang sudah ditutup,
+      // meskipun jadwalnya secara waktu sudah lewat.
+      if (aClosed !== bClosed) {
+        return aClosed ? 1 : -1;
+      }
+
+      const aTime = getTime(a);
+      const bTime = getTime(b);
+
+      // Jika keduanya belum ditutup (not_open atau open):
+      if (!aClosed) {
+        // Sesi yang sedang dibuka ditaruh paling atas
+        if (a.status === 'open' && b.status !== 'open') return -1;
+        if (a.status !== 'open' && b.status === 'open') return 1;
+
+        // Untuk sesama not_open (atau sesama open), urutkan berdasarkan jadwal terdekat (startsAt menaik)
+        return aTime - bTime;
+      }
+
+      // Jika keduanya sudah ditutup: urutkan dari yang paling baru selesai/ditutup (startsAt menurun)
+      return bTime - aTime;
+    });
+  }, [sessions]);
+
   if (status !== 'ready' || !classData) {
     return (
       <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.centerContainer}>
@@ -159,7 +203,7 @@ export default function StudentClassDetailScreen() {
       </View>
 
       <FlatList
-        data={sessions}
+        data={sortedSessions}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
