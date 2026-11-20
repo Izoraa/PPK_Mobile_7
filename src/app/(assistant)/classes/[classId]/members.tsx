@@ -1,25 +1,28 @@
-import React, { useEffect, useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
-  ActivityIndicator,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
 
+import { AsyncState } from '@/components/common/AsyncState';
 import {
+  getStudentUsers,
   subscribeMembers,
   upsertMembership,
   type MembershipDoc,
+  type StudentUserItem,
 } from '@/features/practicum';
 import { colors, radius, spacing } from '@/theme';
-import { AsyncState } from '@/components/common/AsyncState';
 import type { AppErrorCode } from '@/types';
 
 function membershipErrorMessage(code: string): string {
@@ -47,6 +50,29 @@ export default function ClassMembersScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [availableStudents, setAvailableStudents] = useState<StudentUserItem[]>([]);
+  const [selectedStudent, setSelectedStudent] = useState<StudentUserItem | null>(null);
+  const [loadingStudents, setLoadingStudents] = useState(false);
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchStudents() {
+      setLoadingStudents(true);
+      const res = await getStudentUsers();
+      if (isMounted) {
+        setLoadingStudents(false);
+        if (res.ok) {
+          setAvailableStudents(res.data);
+        }
+      }
+    }
+    fetchStudents();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!classId || typeof classId !== 'string') {
@@ -93,23 +119,22 @@ export default function ClassMembersScreen() {
     setErrorMsg(null);
     setSuccessMsg(null);
 
-    const uid = studentUid.trim();
-    if (!uid) {
-      setErrorMsg('Masukkan UID praktikan.');
+    if (!selectedStudent) {
+      setErrorMsg('Pilih praktikan dari daftar terlebih dahulu.');
       return;
     }
 
     setSubmitting(true);
     const res = await upsertMembership({
       classId,
-      studentId: uid,
+      studentId: selectedStudent.uid,
       isActive: true,
     });
     setSubmitting(false);
 
     if (res.ok) {
-      setStudentUid('');
-      setSuccessMsg('Praktikan berhasil ditambahkan ke kelas.');
+      setSelectedStudent(null); // Reset pilihan
+      setSuccessMsg(`Praktikan ${selectedStudent.name} berhasil ditambahkan ke kelas.`);
     } else {
       setErrorMsg(membershipErrorMessage(res.error.code));
     }
@@ -150,19 +175,35 @@ export default function ClassMembersScreen() {
         <View style={styles.addSection}>
           <Text style={styles.inputLabel}>Tambah Praktikan Baru</Text>
           <View style={styles.inputRow}>
-            <TextInput
-              style={styles.input}
-              placeholder="Tempel UID praktikan (dari menu Akun)"
-              placeholderTextColor={colors.textMuted}
-              value={studentUid}
-              onChangeText={setStudentUid}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
+            {/* Tombol pemicu dropdown */}
             <TouchableOpacity
-              style={[styles.addButton, submitting && styles.disabledButton]}
-              onPress={handleAddMember}
+              style={styles.dropdownTrigger}
+              onPress={() => setPickerVisible(true)}
+              activeOpacity={0.7}
               disabled={submitting}
+            >
+              <Text
+                style={[
+                  styles.dropdownTriggerText,
+                  !selectedStudent && styles.dropdownPlaceholder,
+                ]}
+                numberOfLines={1}
+              >
+                {selectedStudent
+                  ? `[${selectedStudent.studentNumber}] ${selectedStudent.name}`
+                  : loadingStudents
+                    ? 'Memuat data mahasiswa...'
+                    : 'Pilih praktikan dari daftar...'}
+              </Text>
+              <Text style={styles.dropdownArrow}>▼</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.addButton,
+                (submitting || !selectedStudent) && styles.disabledButton,
+              ]}
+              onPress={handleAddMember}
+              disabled={submitting || !selectedStudent}
               activeOpacity={0.8}
             >
               {submitting ? (
@@ -172,13 +213,11 @@ export default function ClassMembersScreen() {
               )}
             </TouchableOpacity>
           </View>
-
           {errorMsg ? (
             <View style={styles.errorBox}>
               <Text style={styles.errorText}>{errorMsg}</Text>
             </View>
           ) : null}
-
           {successMsg ? (
             <View style={styles.successBox}>
               <Text style={styles.successText}>{successMsg}</Text>
@@ -207,7 +246,7 @@ export default function ClassMembersScreen() {
                 <View style={styles.memberInfo}>
                   <Text style={styles.memberName}>{item.studentName || 'Nama belum tersedia'}</Text>
                   <Text style={styles.memberSub}>
-                    NIM: {item.studentNumber || '-'} • UID: {item.studentId.substring(0, 8)}...
+                    NIM: {item.studentNumber || '-'}
                   </Text>
                   <View style={styles.statusRow}>
                     <View
@@ -248,6 +287,79 @@ export default function ClassMembersScreen() {
             )}
           />
         </AsyncState>
+        <Modal
+          visible={pickerVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setPickerVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Pilih Mahasiswa</Text>
+                <TouchableOpacity onPress={() => setPickerVisible(false)}>
+                  <Text style={styles.modalCloseText}>Tutup</Text>
+                </TouchableOpacity>
+              </View>
+              {/* Kolom Pencarian */}
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Cari berdasarkan nama atau NIM..."
+                placeholderTextColor={colors.textMuted}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoCorrect={false}
+              />
+              {loadingStudents ? (
+                <View style={styles.centerLoading}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                  <Text style={styles.loadingText}>Mengambil data praktikan...</Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={availableStudents.filter((s) => {
+                    const query = searchQuery.toLowerCase();
+                    return (
+                      s.name.toLowerCase().includes(query) ||
+                      s.studentNumber.toLowerCase().includes(query)
+                    );
+                  })}
+                  keyExtractor={(item) => item.uid}
+                  renderItem={({ item }) => {
+                    const isAlreadyMember = members.some((m) => m.studentId === item.uid);
+                    return (
+                      <TouchableOpacity
+                        style={[
+                          styles.studentOption,
+                          isAlreadyMember && styles.disabledOption,
+                        ]}
+                        disabled={isAlreadyMember}
+                        onPress={() => {
+                          setSelectedStudent(item);
+                          setPickerVisible(false);
+                          setSearchQuery('');
+                        }}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.studentOptionName}>{item.name}</Text>
+                          <Text style={styles.studentOptionNim}>NIM: {item.studentNumber}</Text>
+                        </View>
+                        {isAlreadyMember && (
+                          <Text style={styles.alreadyMemberBadge}>Sudah di kelas</Text>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  }}
+                  ListEmptyComponent={
+                    <Text style={styles.emptySearchText}>
+                      Tidak ada mahasiswa yang sesuai.
+                    </Text>
+                  }
+                />
+              )}
+            </View>
+          </View>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -438,5 +550,110 @@ const styles = StyleSheet.create({
     color: colors.success,
     fontSize: 12,
     fontWeight: '500',
+  },
+  dropdownTrigger: {
+    flex: 1,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dropdownTriggerText: {
+    fontSize: 14,
+    color: colors.text,
+    flex: 1,
+  },
+  dropdownPlaceholder: {
+    color: colors.textMuted,
+  },
+  dropdownArrow: {
+    fontSize: 10,
+    color: colors.textMuted,
+    marginLeft: spacing.xs,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    maxHeight: '80%',
+    padding: spacing.md,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  modalCloseText: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  searchInput: {
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontSize: 14,
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  studentOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  disabledOption: {
+    opacity: 0.4,
+  },
+  studentOptionName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  studentOptionNim: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  alreadyMemberBadge: {
+    fontSize: 11,
+    color: colors.textMuted,
+    fontStyle: 'italic',
+  },
+  centerLoading: {
+    padding: spacing.xl,
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: spacing.sm,
+    color: colors.textMuted,
+    fontSize: 13,
+  },
+  emptySearchText: {
+    textAlign: 'center',
+    padding: spacing.lg,
+    color: colors.textMuted,
+    fontSize: 14,
   },
 });

@@ -2,6 +2,7 @@ import {
   collection,
   collectionGroup,
   doc,
+  getDoc,
   getDocFromServer,
   onSnapshot,
   orderBy,
@@ -260,7 +261,12 @@ export async function getAttendanceSessionMetadata(
   sessionId: string,
 ): Promise<AttendanceSessionMetadata | null> {
   try {
-    const snapshot = await getDocFromServer(getAttendanceSessionReference(sessionId));
+    let snapshot;
+    try {
+      snapshot = await getDocFromServer(getAttendanceSessionReference(sessionId));
+    } catch {
+      snapshot = await getDoc(getAttendanceSessionReference(sessionId));
+    }
     if (!snapshot.exists()) return null;
     const data = snapshot.data();
     if (
@@ -269,10 +275,29 @@ export async function getAttendanceSessionMetadata(
       || typeof data.timeZone !== 'string'
     ) return null;
     let className: string | null = null;
-    if (typeof data.classId === 'string' && data.classId) {
-      const classSnapshot = await getDocFromServer(doc(getAttendanceFirestore(), 'classes', data.classId));
-      const classData = classSnapshot.data();
-      if (typeof classData?.name === 'string') className = classData.name;
+    if (typeof data.className === 'string' && data.className.trim()) {
+      className = data.className.trim();
+    } else if (typeof data.course === 'string' && data.course.trim()) {
+      className = data.course.trim();
+    }
+    if (!className && typeof data.classId === 'string' && data.classId) {
+      try {
+        const classRef = doc(getAttendanceFirestore(), 'classes', data.classId);
+        let classSnapshot;
+        try {
+          classSnapshot = await getDoc(classRef);
+        } catch {
+          classSnapshot = await getDocFromServer(classRef);
+        }
+        if (classSnapshot.exists()) {
+          const classData = classSnapshot.data();
+          const name = typeof classData?.name === 'string' && classData.name.trim() ? classData.name.trim() : null;
+          const course = typeof classData?.course === 'string' && classData.course.trim() ? classData.course.trim() : null;
+          className = name || course || (typeof classData?.code === 'string' && classData.code.trim() ? `Kelas ${classData.code.trim()}` : null);
+        }
+      } catch {
+        // Silently keep className as null if permissions or network fail
+      }
     }
     return {
       id: sessionId,
@@ -286,6 +311,60 @@ export async function getAttendanceSessionMetadata(
   } catch {
     return null;
   }
+}
+
+export function useAttendanceClassNames(
+  classIds: string[],
+): Record<string, string> {
+  const [classNames, setClassNames] = useState<Record<string, string>>({});
+  const classIdsKey = [...new Set(classIds.filter(Boolean))].sort().join('|');
+
+  useEffect(() => {
+    let active = true;
+    const uniqueIds = classIdsKey ? classIdsKey.split('|') : [];
+    if (uniqueIds.length === 0) {
+      deferStateUpdate(() => {
+        if (active) setClassNames({});
+      });
+      return () => { active = false; };
+    }
+
+    const db = getAttendanceFirestore();
+    void Promise.all(
+      uniqueIds.map(async (classId) => {
+        try {
+          let classSnap;
+          try {
+            classSnap = await getDoc(doc(db, 'classes', classId));
+          } catch {
+            classSnap = await getDocFromServer(doc(db, 'classes', classId));
+          }
+          if (classSnap.exists()) {
+            const classData = classSnap.data();
+            const name = typeof classData?.name === 'string' && classData.name.trim() ? classData.name.trim() : null;
+            const course = typeof classData?.course === 'string' && classData.course.trim() ? classData.course.trim() : null;
+            const label = name || course || (typeof classData?.code === 'string' && classData.code.trim() ? `Kelas ${classData.code.trim()}` : null);
+            if (label) return [classId, label] as const;
+          }
+        } catch {
+          // ignore error
+        }
+        return [classId, ''] as const;
+      })
+    ).then((entries) => {
+      if (active) {
+        const next: Record<string, string> = {};
+        for (const [id, label] of entries) {
+          if (label) next[id] = label;
+        }
+        setClassNames(next);
+      }
+    });
+
+    return () => { active = false; };
+  }, [classIdsKey]);
+
+  return classNames;
 }
 
 export function useAttendanceSessionMetadata(

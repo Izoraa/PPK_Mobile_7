@@ -48,6 +48,10 @@ service cloud.firestore {
       return value is string && value.trim().size() >= minimum && value.size() <= maximum;
     }
 
+    match /laboratories/{labId} {
+      allow get, list: if hasRole('assistant');
+    }
+
     match /users/{uid} {
       function isOwner() {
         return request.auth != null && request.auth.uid == uid;
@@ -61,12 +65,16 @@ service cloud.firestore {
           && profile.email is string && profile.email == request.auth.token.email
           && profile.name is string && profile.name.trim().size() > 0
           && profile.role == 'student'
-          && profile.requestedRole in ['student', 'assistant']
-          && profile.studentNumber is string && profile.studentNumber.trim().size() > 0
+          && ((profile.requestedRole == 'student'
+              && profile.studentNumber is string && profile.studentNumber.trim().size() > 0)
+            || (profile.requestedRole == 'assistant' && profile.studentNumber == null))
           && profile.createdAt == request.time && profile.updatedAt == request.time;
       }
 
-      allow get: if isOwner();
+      // The enrolment form looks up a registered practicum student by UID.
+      allow get: if isOwner() || (hasRole('assistant')
+        && resource.data.role == 'student' && resource.data.requestedRole == 'student');
+      allow list: if hasRole('assistant');
       allow create: if isOwner() && isInitialProfile();
     }
 
@@ -93,10 +101,47 @@ service cloud.firestore {
     }
 
     match /memberships/{membershipId} {
-      // Membership writes run in a trusted backend.
-      allow read: if (isStudent() && resource.data.studentId == request.auth.uid)
-        || (hasRole('assistant') && resource.data.assistantId == request.auth.uid
-          && classData(resource.data.classId).assistantId == request.auth.uid);
+      function ownsMembershipClass() {
+        return hasRole('assistant') && classData(resource.data.classId).assistantId == request.auth.uid;
+      }
+
+      function canReadMembership() {
+        // The assistant roster query constrains classId, so check the canonical class owner.
+        return (isStudent() && resource.data.studentId == request.auth.uid) || ownsMembershipClass();
+      }
+
+      function matchesStudentProfile(data) {
+        let profile = get(/databases/$(database)/documents/users/$(data.studentId)).data;
+        return profile.uid == data.studentId
+          && profile.role == 'student' && profile.requestedRole == 'student'
+          && profile.name is string && profile.name.trim().size() > 0
+          && profile.studentNumber is string && profile.studentNumber.trim().size() > 0
+          && data.studentName == profile.name && data.studentNumber == profile.studentNumber;
+      }
+
+      function validMembershipWrite(data) {
+        let fields = ['classId', 'studentId', 'assistantId', 'studentName',
+          'studentNumber', 'isActive', 'createdAt', 'updatedAt'];
+        return hasExactFields(data, fields)
+          && isDocumentId(data.classId) && isDocumentId(data.studentId)
+          && membershipId == data.classId + '_' + data.studentId
+          && data.assistantId == request.auth.uid
+          && classData(data.classId).assistantId == request.auth.uid
+          && classIsActiveAfterWrite(data.classId)
+          && data.isActive is bool && data.createdAt is timestamp && data.updatedAt == request.time
+          && matchesStudentProfile(data);
+      }
+
+      // The upsert probes its document before creating it. Missing documents contain no roster data.
+      allow get: if (hasRole('assistant')
+          && !exists(/databases/$(database)/documents/memberships/$(membershipId)))
+        || canReadMembership();
+      allow list: if canReadMembership();
+      allow create: if hasRole('assistant') && validMembershipWrite(request.resource.data)
+        && request.resource.data.isActive == true && request.resource.data.createdAt == request.time;
+      allow update: if hasRole('assistant') && validMembershipWrite(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['isActive', 'studentName', 'studentNumber', 'updatedAt']);
     }
 
     match /sessions/{sessionId} {
@@ -128,11 +173,11 @@ service cloud.firestore {
         );
       }
 
-      allow get: if isSessionOwner() || (isStudent() && (
+      allow get: if isSessionOwner() || hasRole('assistant') || (isStudent() && (
         isActiveMember(resource.data.classId)
         || exists(/databases/$(database)/documents/sessions/$(sessionId)/participations/$(request.auth.uid))
       ));
-      allow list: if isSessionOwner() || (isStudent() && isActiveMember(resource.data.classId));
+      allow list: if isSessionOwner() || hasRole('assistant') || (isStudent() && isActiveMember(resource.data.classId));
       allow create: if hasRole('assistant')
         && hasExactFields(request.resource.data, ['classId', 'assistantId', 'title', 'room', 'startsAt',
           'endsAt', 'timeZone', 'status', 'isArchived', 'openedAt', 'closedAt', 'createdAt', 'updatedAt'])
@@ -198,14 +243,7 @@ service cloud.firestore {
         allow get: if (isStudent() && request.auth.uid == studentId) || ownsParentClass();
         allow list: if ownsParentClass();
         allow create: if isStudent() && request.auth.uid == studentId && validParticipation(request.resource.data);
-        allow update: if (ownsParentClass() && validReview())
-          || (isStudent() && request.auth.uid == studentId
-            && resource.data.kind == 'leave' && resource.data.status == 'rejected'
-            && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['attendanceCreatedAt', 'attendanceUpdatedAt', 'attendanceCheckedInAt'])
-            && request.resource.data.attendanceCreatedAt == request.time
-            && request.resource.data.attendanceUpdatedAt == request.time
-            && request.resource.data.attendanceCheckedInAt == request.time);
+        allow update: if ownsParentClass() && validReview();
       }
     }
 

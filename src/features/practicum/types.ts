@@ -98,3 +98,9 @@ export interface UpdateSessionInput {
   timeZone?: string;
 }
 
+export interface StudentUserItem {
+  uid: string;
+  name: string;
+  studentNumber: string;
+  email?: string;
+}
