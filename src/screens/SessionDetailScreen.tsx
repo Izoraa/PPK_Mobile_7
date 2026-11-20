@@ -203,9 +203,6 @@ export default function SessionDetailScreen() {
                         sessionId={session.id}
                       />
                     )}
-                  <AttendanceList sessionId={session.id} />
-                  <SessionLeaveReviewList sessionId={session.id} />
-
                   {/* 1. Card Ringkasan Sesi */}
                   <AttendanceList sessionId={session.id} onlySummary />
 
