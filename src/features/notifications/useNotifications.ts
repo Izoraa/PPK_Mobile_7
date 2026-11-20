@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 
@@ -29,9 +30,9 @@ export function useNotifications() {
   const responseListener = useRef<Notifications.Subscription | null>(null);
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || Platform.OS === 'web') return;
 
-    // S3-SRS-21 & S3-SRS-22: Register device token whenever a user logs in
+    // S3-SRS-21 & S3-SRS-22: Register device token whenever a user logs in (mobile only)
     void registerDeviceToken(currentUser.id);
 
     // Listener for foreground notifications
