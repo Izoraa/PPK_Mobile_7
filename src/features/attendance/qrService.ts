@@ -1,6 +1,8 @@
 import { getFirebaseAuth } from "@/lib/firebase/client";
 import type { AppErrorCode, Result } from "@/types";
 
+import { checkSessionQrPayload } from "./qrPayload";
+
 const QR_VALIDITY_MS = 15 * 60 * 1000;
 const HTTP_DATE_PRECISION_MS = 1000;
 
@@ -10,24 +12,6 @@ type SessionAttendanceQr = {
   expiresAt: string;
   displayUntil: number;
 };
-
-function isIssuedQrPayload(qrPayload: string, sessionId: string): boolean {
-  let payload: unknown;
-  try {
-    payload = JSON.parse(qrPayload);
-  } catch {
-    return false;
-  }
-
-  return (
-    typeof payload === "object" &&
-    payload !== null &&
-    Object.keys(payload).length === 3 &&
-    "v" in payload && payload.v === 1 &&
-    "sessionId" in payload && payload.sessionId === sessionId &&
-    "token" in payload && typeof payload.token === "string" && payload.token.trim().length > 0
-  );
-}
 
 function qrRequestError(status: number, body: unknown): Result<never> {
   if (
@@ -95,7 +79,7 @@ export async function requestSessionAttendanceQr(
       typeof body !== "object" || body === null ||
       !("sessionId" in body) || body.sessionId !== sessionId ||
       !("qrPayload" in body) || typeof body.qrPayload !== "string" ||
-      !isIssuedQrPayload(body.qrPayload, sessionId) ||
+      checkSessionQrPayload(body.qrPayload, sessionId) !== "matching" ||
       !("expiresAt" in body) || typeof body.expiresAt !== "string"
     ) {
       return { ok: false, error: { code: "SERVICE_UNAVAILABLE", retryable: true } };

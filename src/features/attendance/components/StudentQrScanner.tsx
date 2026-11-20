@@ -4,9 +4,12 @@ import { ActivityIndicator, AppState, Linking, Platform, Pressable, StyleSheet, 
 
 import { colors, radius, spacing } from '@/theme';
 
+import { checkSessionQrPayload } from '../qrPayload';
+
 type ScanState =
   | { status: 'idle' | 'scanning' | 'camera-error' }
-  | { status: 'scanned'; payload: string };
+  | { status: 'scanned'; payload: string }
+  | { status: 'rejected'; reason: 'invalid' | 'session-mismatch' };
 
 function ScannerButton({ label, onPress, disabled = false }: {
   label: string;
@@ -26,7 +29,7 @@ function ScannerButton({ label, onPress, disabled = false }: {
   );
 }
 
-export function StudentQrScanner() {
+export function StudentQrScanner({ sessionId }: { sessionId: string }) {
   const [permission, requestPermission, getPermission] = useCameraPermissions({ get: false });
   const [scan, setScan] = useState<ScanState>({ status: 'idle' });
   const [requesting, setRequesting] = useState(false);
@@ -73,8 +76,15 @@ export function StudentQrScanner() {
   };
 
   const capture = ({ type, data }: BarcodeScanningResult) => {
-    if (type !== 'qr' || !data) return;
-    setScan((current) => current.status === 'scanning' ? { status: 'scanned', payload: data } : current);
+    if (type !== 'qr') return;
+    setScan((current) => {
+      if (current.status !== 'scanning') return current;
+
+      const result = checkSessionQrPayload(data, sessionId);
+      return result === 'matching'
+        ? { status: 'scanned', payload: data }
+        : { status: 'rejected', reason: result };
+    });
   };
 
   if (permissionError) {
@@ -141,18 +151,26 @@ export function StudentQrScanner() {
   }
 
   const scanned = scan.status === 'scanned';
+  const rejected = scan.status === 'rejected';
   const cameraError = scan.status === 'camera-error';
   return (
     <View style={styles.content}>
       {scanned && (
         <Text accessibilityLiveRegion="polite" style={styles.body}>
-          Kode QR dipindai. Presensi belum tercatat.
+          Kode QR dipindai. Verifikasi kode oleh server belum tersedia.
+        </Text>
+      )}
+      {rejected && (
+        <Text accessibilityRole="alert" style={styles.body}>
+          {scan.reason === 'session-mismatch'
+            ? 'Kode QR ini untuk sesi praktikum lain.'
+            : 'Format kode QR presensi tidak valid.'}
         </Text>
       )}
       {cameraError && (
         <Text accessibilityRole="alert" style={styles.body}>Kamera tidak dapat dibuka. Coba lagi.</Text>
       )}
-      <ScannerButton label={scanned ? 'Pindai Ulang' : 'Buka Kamera'} onPress={startScan} />
+      <ScannerButton label={scanned || rejected ? 'Pindai Ulang' : 'Buka Kamera'} onPress={startScan} />
     </View>
   );
 }

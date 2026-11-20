@@ -76,7 +76,7 @@ function StudentAttendanceSession({ sessionId }: { sessionId: string }) {
           {session.isArchived ? (
             <Text style={styles.body}>Sesi sudah diarsipkan.</Text>
           ) : isFocused && session.status === 'open' && !metadata.fromCache && !metadata.hasPendingWrites ? (
-            <StudentQrScanner />
+            <StudentQrScanner sessionId={session.id} />
           ) : null}
         </View>
       )}
