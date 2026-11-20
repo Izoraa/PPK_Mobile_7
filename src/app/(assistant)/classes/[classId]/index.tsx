@@ -172,8 +172,8 @@ export default function AssistantClassDetailScreen() {
         >
           <View />
         </AsyncState>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backText}>← Kembali ke Daftar Kelas</Text>
+        <TouchableOpacity onPress={() => router.replace('/' as any)} style={styles.backButton}>
+          <Text style={styles.backText}>← Kembali ke Jadwal</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -182,7 +182,7 @@ export default function AssistantClassDetailScreen() {
   return (
     <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.replace('/(assistant)/classes' as any)} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.replace('/' as any)} style={styles.backButton}>
           <Text style={styles.backText}>← Semua Kelas</Text>
         </TouchableOpacity>
         <View style={styles.titleRow}>
