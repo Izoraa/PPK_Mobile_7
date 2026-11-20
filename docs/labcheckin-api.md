@@ -57,7 +57,9 @@ Ketiga properti respons bertipe `string`. Gunakan nilai `qrPayload` langsung seb
 
 ### POST /api/v1/attendance/qr/validate
 
-Memeriksa apakah QR cocok dengan sesi yang diminta, masih aktif, dan belum kedaluwarsa menurut waktu server Firestore.
+Memeriksa QR dan kelayakan mahasiswa dalam satu transaksi baca saja di Firestore. QR harus cocok dengan sesi yang diminta, sesuai dengan token aktif, dan belum kedaluwarsa menurut waktu server Firestore.
+
+API menggunakan UID dari Firebase Auth. Profil pengguna harus memiliki `role` dan `requestedRole` bernilai `student`. Sesi dan kelas harus ada dan aktif, sesi harus berstatus `open`, dan keduanya harus memiliki asisten yang sama. Keanggotaan kelas harus aktif serta cocok dengan UID mahasiswa, kelas, dan asisten sesi.
 
 **Permintaan** dengan header `Authorization` dan `Content-Type: application/json`. Kirim tepat dua properti bertipe `string`. Ambil `sessionId` dari halaman presensi dan kirim teks mentah hasil pemindaian kamera sebagai `qrPayload`.
 
@@ -74,7 +76,7 @@ Memeriksa apakah QR cocok dengan sesi yang diminta, masih aktif, dan belum kedal
 { "ok": true, "data": { "sessionId": "session123", "qrVerified": true } }
 ```
 
-`qrVerified: true` mengonfirmasi kredensial QR untuk sesi tersebut. Pemeriksaan kelayakan dan pencatatan presensi dilakukan pada tahap terpisah.
+`qrVerified: true` mengonfirmasi kredensial QR dan kelayakan mahasiswa untuk sesi tersebut. Validasi lokasi dan pencatatan presensi merupakan bagian dari alur check-in.
 
 ## Respons galat
 
@@ -90,22 +92,23 @@ Gunakan status HTTP dan `error.code` untuk menentukan tindakan di aplikasi.
 }
 ```
 
-| HTTP | `error.code`                                          | Arti                                                                   |
-| ---- | ----------------------------------------------------- | ---------------------------------------------------------------------- |
-| 400  | `INVALID_JSON`, `INVALID_REQUEST`, `VALIDATION_ERROR` | JSON, isi permintaan, atau `sessionId` tidak valid.                    |
-| 400  | `QR_INVALID`                                          | QR tidak valid, sudah digantikan, atau tidak cocok dengan token aktif. |
-| 400  | `QR_SESSION_MISMATCH`                                 | QR berasal dari sesi lain.                                             |
-| 401  | `UNAUTHENTICATED`                                     | ID token tidak dikirim atau ditolak.                                   |
-| 403  | `FORBIDDEN`                                           | Pengguna tidak berwenang menerbitkan QR untuk sesi ini.                |
-| 404  | `NOT_FOUND`                                           | Rute, sesi, atau kelas tidak ditemukan.                                |
-| 409  | `SESSION_NOT_OPEN`, `SESSION_CLOSED`                  | Sesi belum dibuka atau sudah ditutup.                                  |
-| 409  | `SESSION_ARCHIVED`, `CLASS_ARCHIVED`                  | Sesi atau kelas tidak aktif.                                           |
-| 410  | `QR_EXPIRED`                                          | Masa berlaku QR telah habis.                                           |
-| 413  | `PAYLOAD_TOO_LARGE`                                   | Isi JSON melebihi 16 KiB.                                              |
-| 415  | `UNSUPPORTED_MEDIA_TYPE`, `UNSUPPORTED_ENCODING`      | Tipe konten atau encoding tidak didukung.                              |
-| 429  | `RATE_LIMITED`                                        | Batas permintaan tercapai. Periksa header `Retry-After`.               |
-| 500  | `INTERNAL_ERROR`                                      | Terjadi galat pada server.                                             |
-| 503  | `SERVICE_UNAVAILABLE`                                 | Verifikasi Firebase Auth sedang tidak tersedia.                        |
+| HTTP | `error.code`                                          | Arti                                                                                                              |
+| ---- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 400  | `INVALID_JSON`, `INVALID_REQUEST`, `VALIDATION_ERROR` | JSON, isi permintaan, atau `sessionId` tidak valid.                                                               |
+| 400  | `QR_INVALID`                                          | QR tidak valid, sudah digantikan, atau tidak cocok dengan token aktif.                                            |
+| 400  | `QR_SESSION_MISMATCH`                                 | QR berasal dari sesi lain.                                                                                        |
+| 401  | `UNAUTHENTICATED`                                     | ID token tidak dikirim atau ditolak.                                                                              |
+| 403  | `FORBIDDEN`                                           | Pengguna tidak berwenang menerbitkan QR atau profilnya tidak memenuhi syarat sebagai mahasiswa untuk validasi QR. |
+| 403  | `NOT_ENROLLED`                                        | Keanggotaan kelas tidak ditemukan, tidak aktif, atau tidak cocok dengan UID mahasiswa, kelas, atau asisten sesi.  |
+| 404  | `NOT_FOUND`                                           | Rute, sesi, atau kelas tidak ditemukan.                                                                           |
+| 409  | `SESSION_NOT_OPEN`, `SESSION_CLOSED`                  | Sesi belum dibuka atau sudah ditutup.                                                                             |
+| 409  | `SESSION_ARCHIVED`, `CLASS_ARCHIVED`                  | Sesi atau kelas tidak aktif.                                                                                      |
+| 410  | `QR_EXPIRED`                                          | Masa berlaku QR telah habis.                                                                                      |
+| 413  | `PAYLOAD_TOO_LARGE`                                   | Isi JSON melebihi 16 KiB.                                                                                         |
+| 415  | `UNSUPPORTED_MEDIA_TYPE`, `UNSUPPORTED_ENCODING`      | Tipe konten atau encoding tidak didukung.                                                                         |
+| 429  | `RATE_LIMITED`                                        | Batas permintaan tercapai. Periksa header `Retry-After`.                                                          |
+| 500  | `INTERNAL_ERROR`                                      | Terjadi galat pada server, misalnya data asisten sesi dan kelas tidak konsisten.                                  |
+| 503  | `SERVICE_UNAVAILABLE`                                 | Verifikasi Firebase Auth sedang tidak tersedia.                                                                   |
 
 Rute `/api/v1` dibatasi 120 permintaan per menit per IP yang dilihat API.
 

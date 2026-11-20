@@ -19,6 +19,7 @@ export type QrVerificationErrorCode = AppErrorCode
   | "QR_INVALID"
   | "QR_SESSION_MISMATCH"
   | "QR_EXPIRED"
+  | "SESSION_NOT_OPEN"
   | "RATE_LIMITED";
 
 type QrVerificationResult =
@@ -150,13 +151,18 @@ export async function verifySessionAttendanceQr(
   const { response, body } = result.data;
   if (!response.ok) {
     const code = readErrorCode(body);
-    if (code === "QR_INVALID" || code === "QR_SESSION_MISMATCH" || code === "QR_EXPIRED") {
-      return { ok: false, error: { code, retryable: false } };
+    switch (code) {
+      case "QR_INVALID":
+      case "QR_SESSION_MISMATCH":
+      case "QR_EXPIRED":
+      case "NOT_ENROLLED":
+      case "SESSION_NOT_OPEN":
+        return { ok: false, error: { code, retryable: false } };
     }
     if (response.status === 429) {
       return { ok: false, error: { code: "RATE_LIMITED", retryable: true } };
     }
-    if (response.status === 404) {
+    if (response.status === 404 && code !== "NOT_FOUND") {
       return { ok: false, error: { code: "SERVICE_UNAVAILABLE", retryable: false } };
     }
     return qrRequestError(response.status, body);

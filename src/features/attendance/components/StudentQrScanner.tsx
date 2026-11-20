@@ -4,6 +4,7 @@ import { ActivityIndicator, AppState, Linking, Platform, Pressable, StyleSheet, 
 
 import { colors, radius, spacing } from '@/theme';
 import { getErrorMessage } from '@/utils/errors';
+import { CHECK_IN_ERROR_MESSAGES } from '@/utils/messages';
 
 import { checkSessionQrPayload } from '../qrPayload';
 import { verifySessionAttendanceQr, type QrVerificationErrorCode } from '../qrService';
@@ -24,6 +25,17 @@ function getVerificationMessage(code: QrVerificationErrorCode): string {
       return sessionMismatchMessage;
     case 'QR_EXPIRED':
       return 'Kode QR sudah kedaluwarsa. Minta kode baru kepada asisten.';
+    case 'FORBIDDEN':
+      return CHECK_IN_ERROR_MESSAGES.NOT_A_STUDENT;
+    case 'SESSION_NOT_OPEN':
+    case 'SESSION_CLOSED':
+      return CHECK_IN_ERROR_MESSAGES[code];
+    case 'SESSION_ARCHIVED':
+      return 'Sesi sudah diarsipkan. Presensi tidak dapat dilakukan.';
+    case 'CLASS_ARCHIVED':
+      return 'Kelas sudah diarsipkan. Presensi tidak dapat dilakukan.';
+    case 'NOT_FOUND':
+      return 'Sesi atau kelas praktikum tidak ditemukan.';
     case 'RATE_LIMITED':
       return 'Terlalu banyak percobaan. Tunggu sebentar sebelum mencoba lagi.';
     default:
@@ -211,7 +223,7 @@ export function StudentQrScanner({ sessionId }: { sessionId: string }) {
     <View style={styles.content}>
       {verified && (
         <Text accessibilityLiveRegion="polite" style={styles.body}>
-          Kode QR terverifikasi. Presensi belum tercatat.
+          Kode QR dan keanggotaan kelas terverifikasi. Presensi belum tercatat.
         </Text>
       )}
       {failed && (
