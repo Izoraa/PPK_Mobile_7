@@ -1,10 +1,11 @@
-import { Link, useLocalSearchParams } from 'expo-router';
+import { Link, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AsyncState } from '@/components/common/AsyncState';
 import { StatusBadge } from '@/components/common/StatusBadge';
+import { StudentQrScanner } from '@/features/attendance/components/StudentQrScanner';
 import { subscribeSession, type SessionDoc } from '@/features/practicum';
 import { colors, radius, spacing } from '@/theme';
 import type { AppErrorCode } from '@/types';
@@ -27,6 +28,7 @@ function mapSessionError(error: Error): LoadError {
 }
 
 function StudentAttendanceSession({ sessionId }: { sessionId: string }) {
+  const isFocused = useIsFocused();
   const [session, setSession] = useState<SessionDoc | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<LoadError | null>(null);
@@ -73,8 +75,8 @@ function StudentAttendanceSession({ sessionId }: { sessionId: string }) {
           <StatusBadge status={session.status} />
           {session.isArchived ? (
             <Text style={styles.body}>Sesi sudah diarsipkan.</Text>
-          ) : session.status === 'open' && !metadata.fromCache && !metadata.hasPendingWrites ? (
-            <Text style={styles.body}>Pemindai QR belum tersedia.</Text>
+          ) : isFocused && session.status === 'open' && !metadata.fromCache && !metadata.hasPendingWrites ? (
+            <StudentQrScanner />
           ) : null}
         </View>
       )}
