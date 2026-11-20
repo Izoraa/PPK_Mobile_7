@@ -1,11 +1,33 @@
 import { getFirebaseAuth } from "@/lib/firebase/client";
 import type { AppErrorCode, Result } from "@/types";
 
+const QR_VALIDITY_MS = 15 * 60 * 1000;
+const HTTP_DATE_PRECISION_MS = 1000;
+
 type SessionAttendanceQr = {
   sessionId: string;
   qrPayload: string;
   expiresAt: string;
+  displayUntil: number;
 };
+
+function isIssuedQrPayload(qrPayload: string, sessionId: string): boolean {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(qrPayload);
+  } catch {
+    return false;
+  }
+
+  return (
+    typeof payload === "object" &&
+    payload !== null &&
+    Object.keys(payload).length === 3 &&
+    "v" in payload && payload.v === 1 &&
+    "sessionId" in payload && payload.sessionId === sessionId &&
+    "token" in payload && typeof payload.token === "string" && payload.token.trim().length > 0
+  );
+}
 
 function qrRequestError(status: number, body: unknown): Result<never> {
   if (
@@ -51,6 +73,7 @@ export async function requestSessionAttendanceQr(
     }
 
     const idToken = await user.getIdToken();
+    const requestedAt = performance.now();
     const response = await fetch(`${baseUrl}/api/v1/attendance/qr/issue`, {
       method: "POST",
       headers: {
@@ -71,14 +94,26 @@ export async function requestSessionAttendanceQr(
     if (
       typeof body !== "object" || body === null ||
       !("sessionId" in body) || body.sessionId !== sessionId ||
-      !("qrPayload" in body) || typeof body.qrPayload !== "string" || !body.qrPayload ||
-      !("expiresAt" in body) || typeof body.expiresAt !== "string" || !body.expiresAt
+      !("qrPayload" in body) || typeof body.qrPayload !== "string" ||
+      !isIssuedQrPayload(body.qrPayload, sessionId) ||
+      !("expiresAt" in body) || typeof body.expiresAt !== "string"
     ) {
       return { ok: false, error: { code: "SERVICE_UNAVAILABLE", retryable: true } };
     }
 
     const { qrPayload, expiresAt } = body;
-    return { ok: true, data: { sessionId, qrPayload, expiresAt } };
+    const expiresAtMs = Date.parse(expiresAt);
+    if (!Number.isFinite(expiresAtMs)) {
+      return { ok: false, error: { code: "SERVICE_UNAVAILABLE", retryable: true } };
+    }
+
+    const responseTimeMs = Date.parse(response.headers.get("Date") ?? "");
+    const displayWindowMs = Number.isFinite(responseTimeMs)
+      ? Math.min(QR_VALIDITY_MS, expiresAtMs - responseTimeMs - HTTP_DATE_PRECISION_MS)
+      : QR_VALIDITY_MS;
+    // Start at the request to account for transit and avoid using the device wall clock.
+    const displayUntil = requestedAt + displayWindowMs;
+    return { ok: true, data: { sessionId, qrPayload, expiresAt, displayUntil } };
   } catch {
     return { ok: false, error: { code: "NETWORK_ERROR", retryable: true } };
   }

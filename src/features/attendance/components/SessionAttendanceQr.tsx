@@ -2,7 +2,7 @@ import { Image } from "expo-image";
 import { Bytes } from "firebase/firestore";
 import encodeQR from "qr";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { colors, radius, spacing } from "@/theme";
 import type { AppErrorCode } from "@/types";
@@ -13,7 +13,8 @@ import { requestSessionAttendanceQr } from "../qrService";
 type DisplayState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "ready"; imageUri: string }
+  | { status: "ready"; imageUri: string; expiresAt: string; displayUntil: number }
+  | { status: "expired" }
   | { status: "error"; message: string; retryable: boolean };
 
 const qrErrorMessages: Partial<Record<AppErrorCode, string>> = {
@@ -26,7 +27,35 @@ export function SessionAttendanceQr({ sessionId }: { sessionId: string }) {
   const [display, setDisplay] = useState<DisplayState>({ status: "idle" });
   const request = useRef<AbortController | null>(null);
 
-  useEffect(() => () => request.current?.abort(), []);
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "background") {
+        request.current?.abort();
+        setDisplay((current) =>
+          current.status === "loading" || current.status === "ready" ? { status: "idle" } : current,
+        );
+      }
+    });
+    return () => {
+      subscription.remove();
+      request.current?.abort();
+    };
+  }, []);
+
+  const displayUntil = display.status === "ready" ? display.displayUntil : null;
+  useEffect(() => {
+    if (displayUntil === null) return;
+
+    const timeout = setTimeout(() => {
+      setDisplay((current) =>
+        current.status === "ready" && current.displayUntil === displayUntil
+          ? { status: "expired" }
+          : current,
+      );
+    }, Math.ceil(Math.max(0, displayUntil - performance.now())));
+
+    return () => clearTimeout(timeout);
+  }, [displayUntil]);
 
   const showImageError = () => {
     setDisplay({
@@ -57,9 +86,20 @@ export function SessionAttendanceQr({ sessionId }: { sessionId: string }) {
         return;
       }
 
-      const gif = encodeQR(result.data.qrPayload, "gif", { border: 4, scale: 4 });
+      const { qrPayload, expiresAt, displayUntil } = result.data;
+      if (displayUntil <= performance.now()) {
+        setDisplay({ status: "expired" });
+        return;
+      }
+
+      const gif = encodeQR(qrPayload, "gif", { border: 4, scale: 4 });
       const base64 = Bytes.fromUint8Array(gif).toBase64();
-      setDisplay({ status: "ready", imageUri: `data:image/gif;base64,${base64}` });
+      setDisplay({
+        status: "ready",
+        imageUri: `data:image/gif;base64,${base64}`,
+        expiresAt,
+        displayUntil,
+      });
     } catch {
       if (!controller.signal.aborted) showImageError();
     } finally {
@@ -68,6 +108,7 @@ export function SessionAttendanceQr({ sessionId }: { sessionId: string }) {
   };
 
   const loading = display.status === "loading";
+  const expired = display.status === "expired";
 
   return (
     <View style={styles.card}>
@@ -75,20 +116,36 @@ export function SessionAttendanceQr({ sessionId }: { sessionId: string }) {
         Kode QR Presensi
       </Text>
       {display.status === "ready" ? (
-        <Image
-          accessible
-          accessibilityLabel="Kode QR presensi untuk sesi ini"
-          source={{ uri: display.imageUri }}
-          style={styles.image}
-          contentFit="contain"
-          cachePolicy="none"
-          onError={showImageError}
-        />
+        <>
+          <Image
+            accessible
+            accessibilityLabel="Kode QR presensi untuk sesi ini"
+            source={{ uri: display.imageUri }}
+            style={styles.image}
+            contentFit="contain"
+            cachePolicy="none"
+            onError={showImageError}
+          />
+          <Text style={styles.message}>
+            Berlaku sampai pukul{" "}
+            {new Date(display.expiresAt).toLocaleTimeString("id-ID", {
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+            })}
+            .
+          </Text>
+        </>
       ) : (
         <>
           {display.status === "error" && (
             <Text accessibilityRole="alert" style={styles.message}>
               {display.message}
+            </Text>
+          )}
+          {expired && (
+            <Text accessibilityRole="alert" style={styles.message}>
+              Kode QR presensi sudah kedaluwarsa.
             </Text>
           )}
           {(display.status !== "error" || display.retryable) && (
@@ -100,7 +157,7 @@ export function SessionAttendanceQr({ sessionId }: { sessionId: string }) {
               style={[styles.button, loading && styles.disabledButton]}
             >
               <Text style={styles.buttonLabel}>
-                {loading ? "Memuat kode QR…" : "Tampilkan Kode QR"}
+                {loading ? "Memuat kode QR…" : expired ? "Tampilkan Kode QR Baru" : "Tampilkan Kode QR"}
               </Text>
             </Pressable>
           )}
