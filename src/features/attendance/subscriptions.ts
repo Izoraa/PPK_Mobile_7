@@ -176,10 +176,8 @@ function useAttendanceSubscription(
 
 export function useSessionAttendance(sessionId: string | null): SubscriptionState<FirestoreAttendanceRecord> {
   const buildQuery = useCallback(() => {
-    return query(
-      collection(getAttendanceFirestore(), 'sessions', sessionId ?? '__missing__', 'participations'),
-      where('kind', '==', 'attendance'),
-    );
+    // Check-ins after a rejected leave keep kind: 'leave' on the participation.
+    return collection(getAttendanceFirestore(), 'sessions', sessionId ?? '__missing__', 'participations');
   }, [sessionId]);
 
   const state = useAttendanceSubscription(buildQuery, Boolean(sessionId));

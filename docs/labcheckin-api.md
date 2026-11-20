@@ -148,3 +148,14 @@ async function terbitkanQr(
 
 - Rilis `POST /api/v1/attendance/check-in` menunggu persetujuan kontrak geotag dan aturan akurasi GPS.
 - CORS belum dikonfigurasi. Expo Web yang dihosting pada origin berbeda memerlukan konfigurasi CORS. [Dokumentasi CORS Express](https://expressjs.com/en/resources/middleware/cors/)
+
+### Kebijakan partisipasi untuk check-in
+
+Check-in memakai satu dokumen di `sessions/{sessionId}/participations/{studentId}`, dengan ID mahasiswa dari Firebase Auth. Tabel ini berlaku saat rute check-in dirilis.
+
+| Dokumen partisipasi saat check-in                         | Hasil                                                                                                                                        |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dokumen belum ada                                         | Buat dokumen `kind: "attendance"` secara transaksional.                                                                                      |
+| Izin berstatus `rejected` dan kehadiran belum tercatat    | Tambahkan `attendanceCreatedAt`, `attendanceUpdatedAt`, dan `attendanceCheckedInAt` ke dokumen izin yang sama. Riwayat izin tetap tersimpan. |
+| Kehadiran sudah tercatat, termasuk pada izin yang ditolak | `409 ALREADY_CHECKED_IN`.                                                                                                                    |
+| Izin masih menunggu atau disetujui                        | `409 PARTICIPATION_CONFLICT`.                                                                                                                |
