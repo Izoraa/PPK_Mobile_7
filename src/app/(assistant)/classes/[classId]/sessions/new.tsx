@@ -14,8 +14,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { createSession } from '@/features/practicum';
+import { TabBarDivider } from '@/components/TabBarDivider';
+import { createSession, type ClassDoc } from '@/features/practicum';
 import { getFirebaseFirestore } from '@/lib/firebase/client';
+import { useApp } from '@/state/AppContext';
 import { colors, radius, spacing } from '@/theme';
 import DateTimePicker from '@expo/ui/community/datetime-picker';
 import { Picker } from '@expo/ui/community/picker';
@@ -119,7 +121,13 @@ function TimeField({
 
 export default function CreateSessionScreen() {
   const router = useRouter();
-  const { classId } = useLocalSearchParams<{ classId: string }>();
+  const { classId: routeClassId } = useLocalSearchParams<{ classId?: string }>();
+  const { currentUser } = useApp();
+
+  const isGlobalMode = !routeClassId || routeClassId === 'general';
+  const [selectedClassId, setSelectedClassId] = useState<string>(isGlobalMode ? '' : routeClassId);
+  const [classList, setClassList] = useState<ClassDoc[]>([]);
+  const [loadingClasses, setLoadingClasses] = useState<boolean>(isGlobalMode);
 
   const [title, setTitle] = useState('');
   const [room, setRoom] = useState('');
@@ -131,6 +139,43 @@ export default function CreateSessionScreen() {
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isGlobalMode) return;
+
+    const fetchAssistantClasses = async () => {
+      try {
+        setLoadingClasses(true);
+        const db = getFirebaseFirestore();
+        const classesRef = collection(db, 'classes');
+        const q = currentUser?.id
+          ? query(classesRef, where('assistantId', '==', currentUser.id), where('isArchived', '==', false))
+          : query(classesRef, where('isArchived', '==', false));
+
+        const snapshot = await getDocs(q);
+        const list: ClassDoc[] = snapshot.docs.map((d) => ({
+          id: d.id,
+          name: d.data().name || '',
+          code: d.data().code || '',
+          course: d.data().course || '',
+          timeZone: d.data().timeZone || 'Asia/Jakarta',
+          assistantId: d.data().assistantId || '',
+          isArchived: Boolean(d.data().isArchived),
+          createdAt: d.data().createdAt ?? null,
+          updatedAt: d.data().updatedAt ?? null,
+        }));
+
+        list.sort((a, b) => a.name.localeCompare(b.name, 'id'));
+        setClassList(list);
+      } catch (err) {
+        console.error('Gagal memuat kelas:', err);
+      } finally {
+        setLoadingClasses(false);
+      }
+    };
+
+    fetchAssistantClasses();
+  }, [isGlobalMode, currentUser?.id]);
 
   useEffect(() => {
     const fetchLaboratories = async () => {
@@ -158,7 +203,13 @@ export default function CreateSessionScreen() {
   }, []);
 
   const handleSubmit = async () => {
-    if (!classId) return;
+    const targetClassId = isGlobalMode ? selectedClassId : routeClassId;
+
+    if (!targetClassId) {
+      setErrorMsg('Silakan pilih kelas terlebih dahulu.');
+      return;
+    }
+
     setErrorMsg(null);
 
     const trimmedTitle = title.trim();
@@ -218,9 +269,17 @@ export default function CreateSessionScreen() {
       return;
     }
 
+    const handleNavigateBack = () => {
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace(isGlobalMode ? '/' : `/(assistant)/classes/${routeClassId}` as any);
+      }
+    };
+
     setLoading(true);
     const result = await createSession({
-      classId,
+      classId: targetClassId,
       title: trimmedTitle,
       room: trimmedRoom,
       startsAt,
@@ -230,23 +289,33 @@ export default function CreateSessionScreen() {
     setLoading(false);
 
     if (result.ok) {
-      router.back();
+      if (isGlobalMode) {
+        // Reset form input setelah berhasil menambah sesi via tab navbar
+        setTitle('');
+        setRoom('');
+        setErrorMsg(null);
+        router.push('/');
+      } else {
+        router.back();
+      }
     } else {
       setErrorMsg(result.error.message || 'Gagal membuat sesi.');
     }
   };
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.container}>
+    <SafeAreaView edges={isGlobalMode ? ['top', 'left', 'right'] : ['top', 'left', 'right', 'bottom']} style={styles.container}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardView}
       >
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-              <Text style={styles.backText}>← Batal</Text>
-            </TouchableOpacity>
+            {!isGlobalMode ? (
+              <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                <Text style={styles.backText}>← Batal</Text>
+              </TouchableOpacity>
+            ) : null}
             <Text style={styles.title}>Tambah Sesi Praktikum</Text>
             <Text style={styles.subtitle}>Sesi baru akan dibuat dengan status Belum Dibuka.</Text>
           </View>
@@ -254,6 +323,34 @@ export default function CreateSessionScreen() {
           {errorMsg ? (
             <View style={styles.errorBox}>
               <Text style={styles.errorText}>{errorMsg}</Text>
+            </View>
+          ) : null}
+
+          {/* Form Pemilihan Kelas (Hanya muncul jika diakses dari Navbar / Global Mode) */}
+          {isGlobalMode ? (
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Kelas Praktikum</Text>
+              {loadingClasses ? (
+                <View style={[styles.input, styles.loadingClassRow]}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={[styles.loadingClassText]}>Memuat daftar kelas...</Text>
+                </View>
+              ) : (
+                <Picker
+                  selectedValue={selectedClassId}
+                  onValueChange={(value) => setSelectedClassId(String(value))}
+                  style={styles.input}
+                >
+                  <Picker.Item label="Pilih kelas..." value="" />
+                  {classList.map((c) => (
+                    <Picker.Item
+                      key={c.id}
+                      label={c.course ? `${c.name} (${c.course})` : c.name}
+                      value={c.id}
+                    />
+                  ))}
+                </Picker>
+              )}
             </View>
           ) : null}
 
@@ -352,6 +449,7 @@ export default function CreateSessionScreen() {
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+      {isGlobalMode ? <TabBarDivider /> : null}
     </SafeAreaView>
   );
 }
@@ -402,6 +500,15 @@ const styles = StyleSheet.create({
   },
   formGroup: {
     marginBottom: spacing.md,
+  },
+  loadingClassRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  loadingClassText: {
+    fontSize: 14,
+    color: colors.textMuted,
   },
   row: {
     flexDirection: 'row',
