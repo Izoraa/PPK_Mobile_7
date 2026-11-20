@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { SessionAttendanceQr } from "@/features/attendance/components/SessionAttendanceQr";
 import { SessionLeaveReviewList } from "@/features/leave-review/components/SessionLeaveReviewList";
 import { subscribeSession, type SessionDoc } from "@/features/practicum";
 import type { AppErrorCode } from "@/types";
@@ -190,6 +191,13 @@ export default function SessionDetailScreen() {
               {currentUser.role === "assistant" && (
                 <>
                   <SessionControl sessionId={session.id} />
+                  {liveSession?.status === "open" &&
+                    liveSession.id === sessionId &&
+                    !liveSession.isArchived &&
+                    !metadata.fromCache &&
+                    !metadata.hasPendingWrites && (
+                      <SessionAttendanceQr key={session.id} sessionId={session.id} />
+                    )}
                   <AttendanceList sessionId={session.id} />
                   <SessionLeaveReviewList sessionId={session.id} />
                 </>
