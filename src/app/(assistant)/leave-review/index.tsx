@@ -89,7 +89,7 @@ export default function LeaveReviewQueueScreen() {
       >
         <FlatList
           data={queue.records}
-          keyExtractor={(record) => record.id}
+          keyExtractor={(record, index) => `${record.sessionId}_${record.studentId}_${index}`}
           contentContainerStyle={styles.list}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           renderItem={({ item }) => {

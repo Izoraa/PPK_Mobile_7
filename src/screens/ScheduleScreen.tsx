@@ -126,7 +126,9 @@ export default function ScheduleScreen() {
               (classSessions) => {
                 if (!active || failed) return;
                 sessionLists.set(practicumClass.id, classSessions);
-                setSessions([...sessionLists.values()].flat());
+                const allSessions = [...sessionLists.values()].flat();
+                const unique = Array.from(new Map(allSessions.map((s) => [s.id, s])).values());
+                setSessions(unique);
               },
               onFailure,
               (snapshotMetadata) => {
@@ -180,7 +182,9 @@ export default function ScheduleScreen() {
             (classSessions) => {
               if (!active || failed) return;
               sessionLists.set(practicumClass.id, classSessions);
-              setSessions([...sessionLists.values()].flat());
+              const allSessions = [...sessionLists.values()].flat();
+              const unique = Array.from(new Map(allSessions.map((s) => [s.id, s])).values());
+              setSessions(unique);
             },
             onFailure,
             (snapshotMetadata) => {
@@ -254,7 +258,11 @@ export default function ScheduleScreen() {
   const remainingSlots = MAX_SUMMARY_ITEMS - displayedOpenSessions.length;
   const displayedUpcomingSessions = upcomingSessions.slice(0, remainingSlots);
 
-  const renderSummarySessionCard = (session: SessionDoc, isOpen: boolean) => {
+  const renderSummarySessionCard = (
+    session: SessionDoc,
+    isOpen: boolean,
+    cardKey?: string,
+  ) => {
     const cls = classMap.get(session.classId);
     const classTitle = cls?.name || cls?.course;
     const hintText = isAssistant
@@ -263,7 +271,7 @@ export default function ScheduleScreen() {
 
     return (
       <TouchableOpacity
-        key={session.id}
+        key={cardKey || session.id}
         style={[
           styles.sessionSummaryCard,
           isOpen && styles.sessionSummaryCardOpen,
@@ -340,7 +348,7 @@ export default function ScheduleScreen() {
       >
         <FlatList
           data={classes}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => `${item.id}_${index}`}
           contentContainerStyle={styles.content}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListHeaderComponent={
@@ -385,8 +393,8 @@ export default function ScheduleScreen() {
                     <View style={styles.liveIndicator} />
                     <Text style={styles.subSectionLabel}>Sedang Dibuka</Text>
                   </View>
-                  {displayedOpenSessions.map((session) =>
-                    renderSummarySessionCard(session, true),
+                  {displayedOpenSessions.map((session, index) =>
+                    renderSummarySessionCard(session, true, `open_${session.id}_${index}`),
                   )}
                 </View>
               )}
@@ -399,8 +407,8 @@ export default function ScheduleScreen() {
                       ? "Sesi Mendatang Terdekat"
                       : "Mendatang Terdekat"}
                   </Text>
-                  {displayedUpcomingSessions.map((session) =>
-                    renderSummarySessionCard(session, false),
+                  {displayedUpcomingSessions.map((session, index) =>
+                    renderSummarySessionCard(session, false, `upcoming_${session.id}_${index}`),
                   )}
                 </View>
               )}

@@ -105,7 +105,7 @@ export default function CoordinatorDashboard() {
       ) : (
         <FlatList
           data={activeClasses}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => `${item.id}_${index}`}
           contentContainerStyle={styles.content}
           ListHeaderComponent={
             <View>
@@ -174,8 +174,8 @@ export default function CoordinatorDashboard() {
                     </TouchableOpacity>
                   </View>
 
-                  {pendingAssistants.slice(0, 3).map((item) => (
-                    <View key={item.id} style={styles.pendingItem}>
+                  {pendingAssistants.slice(0, 3).map((item, index) => (
+                    <View key={`${item.id}_${index}`} style={styles.pendingItem}>
                       <View style={styles.pendingItemInfo}>
                         <Text style={styles.pendingItemName}>{item.name}</Text>
                         <Text style={styles.pendingItemEmail}>{item.email}</Text>

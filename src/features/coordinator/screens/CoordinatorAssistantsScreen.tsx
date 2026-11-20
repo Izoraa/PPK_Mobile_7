@@ -126,7 +126,7 @@ export default function CoordinatorAssistantsScreen() {
       ) : (
         <FlatList
           data={currentData}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => `${item.id}_${index}`}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => {
             const isProcessing = processingId === item.id;

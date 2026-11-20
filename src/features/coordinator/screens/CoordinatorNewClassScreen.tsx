@@ -154,8 +154,8 @@ export default function CoordinatorNewClassScreen() {
                 style={styles.input}
               >
                 <Picker.Item label="Pilih Asisten Pengampu..." value="" />
-                {assistants.map((ast) => (
-                  <Picker.Item key={ast.id} label={`${ast.name} (${ast.email})`} value={ast.id} />
+                {assistants.map((ast, index) => (
+                  <Picker.Item key={`${ast.id}_${index}`} label={`${ast.name} (${ast.email})`} value={ast.id} />
                 ))}
               </Picker>
             )}
