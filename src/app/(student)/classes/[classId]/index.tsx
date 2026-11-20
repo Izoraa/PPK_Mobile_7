@@ -204,7 +204,7 @@ export default function StudentClassDetailScreen() {
 
       <FlatList
         data={sortedSessions}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, index) => `${item.id}_${index}`}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
           <Text style={styles.sectionHeader}>Daftar Sesi Praktikum ({sessions.length})</Text>

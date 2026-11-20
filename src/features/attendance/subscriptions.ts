@@ -75,7 +75,7 @@ function readAttendanceRecord(
   ) return null;
 
   return {
-    id: snapshot.id,
+    id: `${data.sessionId}_${data.studentId}`,
     sessionId: data.sessionId,
     classId: data.classId,
     studentId: data.studentId,

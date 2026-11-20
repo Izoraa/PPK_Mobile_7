@@ -236,7 +236,7 @@ export default function ClassMembersScreen() {
         >
           <FlatList
             data={members}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item, index) => `${item.id}_${index}`}
             contentContainerStyle={styles.listContent}
             ListHeaderComponent={
               <Text style={styles.listHeader}>Daftar Peserta Terdaftar ({members.length})</Text>
@@ -324,7 +324,7 @@ export default function ClassMembersScreen() {
                       s.studentNumber.toLowerCase().includes(query)
                     );
                   })}
-                  keyExtractor={(item) => item.uid}
+                  keyExtractor={(item, index) => `${item.uid}_${index}`}
                   renderItem={({ item }) => {
                     const isAlreadyMember = members.some((m) => m.studentId === item.uid);
                     return (

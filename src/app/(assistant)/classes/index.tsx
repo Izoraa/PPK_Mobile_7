@@ -86,7 +86,7 @@ export default function AssistantClassesScreen() {
       >
         <FlatList
           data={classes}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => `${item.id}_${index}`}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (
             <TouchableOpacity
