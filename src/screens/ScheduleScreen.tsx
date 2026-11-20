@@ -1,4 +1,4 @@
-import { Link, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   FlatList,
@@ -21,7 +21,6 @@ import {
 import { useApp } from "@/state/AppContext";
 import { colors, radius, spacing } from "@/theme";
 import type { AppErrorCode } from "@/types";
-import SessionCard from "../components/session/SessionCard";
 
 type LoadStatus = "loading" | "ready" | "error";
 type DataMetadata = { fromCache: boolean; hasPendingWrites: boolean };
@@ -154,11 +153,6 @@ export default function ScheduleScreen() {
     // TAMPILAN MAHASISWA: Subscribe ke sesi kelas yang diikuti mahasiswa
     let unsubSessions: Array<() => void> = [];
     const sessionLists = new Map<string, SessionDoc[]>();
-    const sessionMetadata = new Map<string, DataMetadata>();
-    let classesMetadata: DataMetadata = {
-      fromCache: false,
-      hasPendingWrites: false,
-    };
 
     const unsubClasses = subscribeClasses(
       { studentId: currentUser.id },
@@ -167,40 +161,30 @@ export default function ScheduleScreen() {
         unsubSessions.forEach((unsubscribe) => unsubscribe());
         unsubSessions = [];
         sessionLists.clear();
-        sessionMetadata.clear();
-        setSessions([]);
-        setStatus("loading");
+        setClasses(classList);
 
         if (classList.length === 0) {
+          setSessions([]);
           setStatus("ready");
           return;
         }
 
-        const loadedClassIds = new Set<string>();
+        // Kelas sudah didapat, set status ready agar kelas langsung tampil
+        setStatus("ready");
+
+        // Subscribe ke sesi dari setiap kelas untuk ringkasan jadwal sesi aktif/mendatang
         classList.forEach((practicumClass) => {
           const unsubscribe = subscribeSessions(
             practicumClass.id,
             (classSessions) => {
               if (!active || failed) return;
               sessionLists.set(practicumClass.id, classSessions);
-              loadedClassIds.add(practicumClass.id);
               setSessions([...sessionLists.values()].flat());
-              if (loadedClassIds.size === classList.length) setStatus("ready");
             },
             onFailure,
             (snapshotMetadata) => {
               if (!active || failed) return;
-              sessionMetadata.set(practicumClass.id, snapshotMetadata);
-              setMetadata({
-                fromCache:
-                  classesMetadata.fromCache ||
-                  [...sessionMetadata.values()].some((item) => item.fromCache),
-                hasPendingWrites:
-                  classesMetadata.hasPendingWrites ||
-                  [...sessionMetadata.values()].some(
-                    (item) => item.hasPendingWrites,
-                  ),
-              });
+              setMetadata(snapshotMetadata);
             },
           );
           unsubSessions.push(unsubscribe);
@@ -209,15 +193,7 @@ export default function ScheduleScreen() {
       onFailure,
       (snapshotMetadata) => {
         if (!active || failed) return;
-        classesMetadata = snapshotMetadata;
-        setMetadata({
-          fromCache:
-            snapshotMetadata.fromCache ||
-            [...sessionMetadata.values()].some((item) => item.fromCache),
-          hasPendingWrites:
-            snapshotMetadata.hasPendingWrites ||
-            [...sessionMetadata.values()].some((item) => item.hasPendingWrites),
-        });
+        setMetadata(snapshotMetadata);
       },
     );
 
@@ -230,13 +206,19 @@ export default function ScheduleScreen() {
 
   if (!currentUser) return null;
 
-  const sortedSessions = [...sessions].sort(
-    (first, second) => first.startsAt.toMillis() - second.startsAt.toMillis(),
-  );
-  const detailPath =
-    currentUser.role === "assistant"
-      ? "/(assistant)/assistant/sessions/[sessionId]"
-      : "/(student)/sessions/[sessionId]";
+  const isAssistant = currentUser.role === "assistant";
+  const detailPath = isAssistant
+    ? "/(assistant)/assistant/sessions/[sessionId]"
+    : "/(student)/sessions/[sessionId]";
+  const sectionTitle = isAssistant
+    ? "Daftar Kelas yang Diampu"
+    : "Daftar Kelas yang Diikuti";
+  const emptyTitle = isAssistant
+    ? "Belum ada kelas aktif"
+    : "Belum terdaftar di kelas praktikum";
+  const emptyMessage = isAssistant
+    ? "Buat kelas pertama Anda untuk memulai pengelolaan jadwal dan peserta praktikum."
+    : "Anda belum terdaftar dalam kelas praktikum apa pun. Hubungi asisten praktikum Anda untuk mendaftarkan akun.";
 
   // Map classId -> ClassDoc untuk lookup nama kelas dan matkul
   const classMap = new Map<string, ClassDoc>(classes.map((c) => [c.id, c]));
@@ -273,7 +255,10 @@ export default function ScheduleScreen() {
 
   const renderSummarySessionCard = (session: SessionDoc, isOpen: boolean) => {
     const cls = classMap.get(session.classId);
-    const classTitle = cls ? `${cls.course} • ${cls.name}` : undefined;
+    const classTitle = cls?.name || cls?.course;
+    const hintText = isAssistant
+      ? (isOpen ? "Kelola presensi sesi ini →" : "Lihat detail sesi praktikum →")
+      : (isOpen ? "Masuk ke sesi presensi →" : "Lihat detail sesi praktikum →");
 
     return (
       <TouchableOpacity
@@ -309,11 +294,7 @@ export default function ScheduleScreen() {
         </Text>
 
         <View style={styles.sessionSummaryFooter}>
-          <Text style={styles.sessionSummaryHint}>
-            {isOpen
-              ? "Kelola presensi sesi ini →"
-              : "Lihat detail sesi praktikum →"}
-          </Text>
+          <Text style={styles.sessionSummaryHint}>{hintText}</Text>
         </View>
       </TouchableOpacity>
     );
@@ -321,15 +302,14 @@ export default function ScheduleScreen() {
 
   return (
     <SafeAreaView edges={["left", "right", "bottom"]} style={styles.screen}>
-      {currentUser.role === "assistant" ? (
-        // Header untuk Asisten
-        <View style={styles.headerRow}>
-          <View style={styles.headerLeft}>
-            <Text accessibilityRole="header" style={styles.title}>
-              Kelas Praktikum
-            </Text>
-            <Text style={styles.userName}>{currentUser.name}</Text>
-          </View>
+      <View style={styles.headerRow}>
+        <View style={styles.headerLeft}>
+          <Text accessibilityRole="header" style={styles.title}>
+            Kelas Praktikum
+          </Text>
+          <Text style={styles.userName}>{currentUser.name}</Text>
+        </View>
+        {isAssistant ? (
           <TouchableOpacity
             style={styles.addButton}
             onPress={() => router.push("/(assistant)/classes/new" as never)}
@@ -337,134 +317,106 @@ export default function ScheduleScreen() {
           >
             <Text style={styles.addButtonText}>+ Buat Kelas</Text>
           </TouchableOpacity>
-        </View>
-      ) : (
-        // Header untuk Mahasiswa
-        <View style={styles.header}>
-          <Text accessibilityRole="header" style={styles.title}>
-            Jadwal praktikum
-          </Text>
-          <Text style={styles.userName}>{currentUser.name}</Text>
-          <Link href="/(student)/leaves" style={styles.accountLink}>
-            Izin saya
-          </Link>
-        </View>
-      )}
+        ) : (
+          <TouchableOpacity
+            style={styles.leaveButton}
+            onPress={() => router.push("/(student)/leaves" as never)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.leaveButtonText}>Izin Saya</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
-      {currentUser.role === "assistant" ? (
-        // Konten untuk Asisten: List Kelas + Ringkasan Sesi Aktif/Mendatang
-        <AsyncState
-          status={status === "ready" && classes.length === 0 ? "empty" : status}
-          error={error}
-          fromCache={metadata.fromCache}
-          hasPendingWrites={metadata.hasPendingWrites}
-          onRetry={() => setAttempt((value) => value + 1)}
-          emptyTitle="Belum ada kelas aktif"
-          emptyMessage="Buat kelas pertama Anda untuk memulai pengelolaan jadwal dan peserta praktikum."
-        >
-          <FlatList
-            data={classes}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.content}
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
-            ListHeaderComponent={
-              <Text style={styles.sectionHeader}>Daftar Kelas yang Diampu</Text>
-            }
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.classCard}
-                onPress={() =>
-                  router.push(`/(assistant)/classes/${item.id}` as never)
+      <AsyncState
+        status={status === "ready" && classes.length === 0 ? "empty" : status}
+        error={error}
+        fromCache={metadata.fromCache}
+        hasPendingWrites={metadata.hasPendingWrites}
+        onRetry={() => setAttempt((value) => value + 1)}
+        emptyTitle={emptyTitle}
+        emptyMessage={emptyMessage}
+      >
+        <FlatList
+          data={classes}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.content}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListHeaderComponent={
+            <Text style={styles.sectionHeader}>{sectionTitle}</Text>
+          }
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.classCard}
+              onPress={() => {
+                if (isAssistant) {
+                  router.push(`/(assistant)/classes/${item.id}` as never);
+                } else {
+                  router.push(`/(student)/classes/${item.id}` as never);
                 }
-                activeOpacity={0.7}
-              >
-                <View style={styles.classCardTop}>
-                  <Text style={styles.courseName}>{item.course}</Text>
-                  <View style={styles.codeBadge}>
-                    <Text style={styles.codeText}>{item.code}</Text>
-                  </View>
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.classCardTop}>
+                <Text style={styles.courseName}>{item.course}</Text>
+                <View style={styles.codeBadge}>
+                  <Text style={styles.codeText}>{item.code}</Text>
                 </View>
-                <Text style={styles.className}>{item.name}</Text>
-                <Text style={styles.cardHint}>
-                  Ketuk untuk detail, sesi, dan peserta →
-                </Text>
-              </TouchableOpacity>
-            )}
-            ListFooterComponent={
-              <View style={styles.summarySectionContainer}>
-                <View style={styles.summarySectionHeader}>
-                  <Text style={styles.summarySectionTitle}>
-                    Jadwal Terdekat
-                  </Text>
-                </View>
-
-                {/* 1. Sesi yang sedang dibuka */}
-                {displayedOpenSessions.length > 0 && (
-                  <View style={styles.subSectionBlock}>
-                    <View style={styles.subSectionBadgeRow}>
-                      <View style={styles.liveIndicator} />
-                      <Text style={styles.subSectionLabel}>Sedang Dibuka</Text>
-                    </View>
-                    {displayedOpenSessions.map((session) =>
-                      renderSummarySessionCard(session, true),
-                    )}
-                  </View>
-                )}
-
-                {/* 2. Sesi mendatang terdekat */}
-                {displayedUpcomingSessions.length > 0 && (
-                  <View style={styles.subSectionBlock}>
-                    <Text style={styles.subSectionLabel}>
-                      {displayedOpenSessions.length > 0
-                        ? "Sesi Mendatang Terdekat"
-                        : "Mendatang Terdekat"}
-                    </Text>
-                    {displayedUpcomingSessions.map((session) =>
-                      renderSummarySessionCard(session, false),
-                    )}
-                  </View>
-                )}
-
-                {/* 3. Jika tidak ada sesi dibuka dan tidak ada sesi mendatang */}
-                {displayedOpenSessions.length === 0 &&
-                  displayedUpcomingSessions.length === 0 && (
-                    <View style={styles.emptySummaryCard}>
-                      <Text style={styles.emptySummaryText}>
-                        Tidak ada sesi yang sedang dibuka atau jadwal mendatang.
-                      </Text>
-                    </View>
-                  )}
               </View>
-            }
-          />
-        </AsyncState>
-      ) : (
-        // Konten List Sesi untuk Mahasiswa
-        <AsyncState
-          status={status === "ready" && sessions.length === 0 ? "empty" : status}
-          error={error}
-          fromCache={metadata.fromCache}
-          hasPendingWrites={metadata.hasPendingWrites}
-          onRetry={() => setAttempt((value) => value + 1)}
-          emptyTitle="Belum ada sesi praktikum"
-          emptyMessage="Sesi praktikum dari kelas yang Anda ikuti akan muncul di sini."
-        >
-          <FlatList
-            data={sortedSessions}
-            keyExtractor={(session) => session.id}
-            contentContainerStyle={styles.content}
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
-            renderItem={({ item }) => (
-              <SessionCard
-                session={item as never}
-                onPress={() =>
-                  router.push(detailPath.replace("[sessionId]", item.id) as never)
-                }
-              />
-            )}
-          />
-        </AsyncState>
-      )}
+              <Text style={styles.className}>{item.name}</Text>
+              <Text style={styles.cardHint}>
+                {isAssistant
+                  ? "Ketuk untuk detail, sesi, dan peserta →"
+                  : "Ketuk untuk melihat daftar sesi praktikum →"}
+              </Text>
+            </TouchableOpacity>
+          )}
+          ListFooterComponent={
+            <View style={styles.summarySectionContainer}>
+              <View style={styles.summarySectionHeader}>
+                <Text style={styles.summarySectionTitle}>Jadwal Terdekat</Text>
+              </View>
+
+              {/* 1. Sesi yang sedang dibuka */}
+              {displayedOpenSessions.length > 0 && (
+                <View style={styles.subSectionBlock}>
+                  <View style={styles.subSectionBadgeRow}>
+                    <View style={styles.liveIndicator} />
+                    <Text style={styles.subSectionLabel}>Sedang Dibuka</Text>
+                  </View>
+                  {displayedOpenSessions.map((session) =>
+                    renderSummarySessionCard(session, true),
+                  )}
+                </View>
+              )}
+
+              {/* 2. Sesi mendatang terdekat */}
+              {displayedUpcomingSessions.length > 0 && (
+                <View style={styles.subSectionBlock}>
+                  <Text style={styles.subSectionLabel}>
+                    {displayedOpenSessions.length > 0
+                      ? "Sesi Mendatang Terdekat"
+                      : "Mendatang Terdekat"}
+                  </Text>
+                  {displayedUpcomingSessions.map((session) =>
+                    renderSummarySessionCard(session, false),
+                  )}
+                </View>
+              )}
+
+              {/* 3. Jika tidak ada sesi dibuka dan tidak ada sesi mendatang */}
+              {displayedOpenSessions.length === 0 &&
+                displayedUpcomingSessions.length === 0 && (
+                  <View style={styles.emptySummaryCard}>
+                    <Text style={styles.emptySummaryText}>
+                      Tidak ada sesi yang sedang dibuka atau jadwal mendatang.
+                    </Text>
+                  </View>
+                )}
+            </View>
+          }
+        />
+      </AsyncState>
       <TabBarDivider />
     </SafeAreaView>
   );
@@ -497,6 +449,19 @@ const styles = StyleSheet.create({
   },
   addButtonText: {
     color: "#FFFFFF",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  leaveButton: {
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+  },
+  leaveButtonText: {
+    color: colors.primary,
     fontWeight: "600",
     fontSize: 14,
   },
