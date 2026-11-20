@@ -269,6 +269,11 @@ export default function EditSessionScreen() {
       return;
     }
 
+    if (startsAt.getTime() < Date.now()) {
+      setErrorMsg("Waktu mulai tidak boleh kurang dari waktu saat ini.");
+      return;
+    }
+
     setSaving(true);
     const res = await updateSession(sessionId, {
       title: trimmedTitle,

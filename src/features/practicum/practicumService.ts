@@ -1,32 +1,32 @@
 import {
+  addDoc,
   collection,
   doc,
   getDoc,
   getDocs,
-  setDoc,
-  addDoc,
-  updateDoc,
-  query,
-  where,
-  orderBy,
   onSnapshot,
+  query,
   runTransaction,
   serverTimestamp,
+  setDoc,
   Timestamp,
-  type Unsubscribe,
+  updateDoc,
+  where,
+  type Unsubscribe
 } from 'firebase/firestore';
 
 import { getFirebaseAuth, getFirebaseFirestore } from '@/lib/firebase/client';
 import type {
   ClassDoc,
-  MembershipDoc,
-  SessionDoc,
   CreateClassInput,
-  UpdateClassInput,
-  UpsertMembershipInput,
   CreateSessionInput,
-  UpdateSessionInput,
+  MembershipDoc,
   Result,
+  SessionDoc,
+  StudentUserItem,
+  UpdateClassInput,
+  UpdateSessionInput,
+  UpsertMembershipInput,
 } from './types';
 
 // Helper to map Firestore class doc
@@ -287,7 +287,7 @@ export function subscribeClasses(
 
   // Fallback: empty listener
   onChange([]);
-  return () => {};
+  return () => { };
 }
 
 // -------------------------------------------------------------
@@ -433,6 +433,31 @@ export async function createSession(input: CreateSessionInput): Promise<Result<{
       return { ok: false, error: { code: 'CLASS_ARCHIVED', message: 'Kelas sudah diarsipkan.', retryable: false } };
     }
 
+    const conflict = await findConflictingSession(room, input.startsAt, input.endsAt);
+    if (conflict) {
+      const fmtStart = conflict.startsAt.toTimeString().substring(0, 5);
+      const fmtEnd = conflict.endsAt.toTimeString().substring(0, 5);
+      return {
+        ok: false,
+        error: {
+          code: 'CONFLICT',
+          message: `Ruangan "${room}" sudah digunakan oleh sesi "${conflict.title}" pada ${fmtStart}–${fmtEnd}. Pilih ruangan atau waktu lain.`,
+          retryable: false,
+        },
+      };
+    }
+
+    if (input.startsAt.getTime() < Date.now()) {
+      return {
+        ok: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Waktu mulai tidak boleh kurang dari waktu saat ini.',
+          retryable: false,
+        },
+      };
+    }
+
     const docRef = await addDoc(collection(db, 'sessions'), {
       classId,
       assistantId: user.uid,
@@ -472,6 +497,17 @@ export async function updateSession(sessionId: string, input: UpdateSessionInput
       return { ok: false, error: { code: 'NOT_FOUND', message: 'Sesi tidak ditemukan.', retryable: false } };
     }
 
+    if (input.startsAt && input.startsAt.getTime() < Date.now()) {
+      return {
+        ok: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Waktu mulai tidak boleh kurang dari waktu saat ini.',
+          retryable: false,
+        },
+      };
+    }
+
     const current = snap.data();
     if (current.assistantId !== user.uid) {
       return { ok: false, error: { code: 'FORBIDDEN', message: 'Anda bukan pemilik sesi ini.', retryable: false } };
@@ -484,6 +520,31 @@ export async function updateSession(sessionId: string, input: UpdateSessionInput
     // S2-SRS-18: Metadata can only be edited when status is 'not_open'
     if (current.status !== 'not_open') {
       return { ok: false, error: { code: 'FORBIDDEN', message: 'Sesi yang sudah dibuka atau ditutup tidak dapat diubah.', retryable: false } };
+    }
+
+    const finalRoom = (input.room !== undefined ? input.room.trim() : current.room) as string;
+    const finalStartsAt = input.startsAt ?? current.startsAt?.toDate?.();
+    const finalEndsAt = input.endsAt ?? current.endsAt?.toDate?.();
+    // Cek konflik jadwal, kecualikan sesi ini sendiri (excludeId)
+    if (finalRoom && finalStartsAt && finalEndsAt) {
+      const conflict = await findConflictingSession(
+        finalRoom,
+        finalStartsAt,
+        finalEndsAt,
+        sessionId,  // <-- ini yang membuat sesi sendiri tidak dianggap konflik
+      );
+      if (conflict) {
+        const fmtStart = conflict.startsAt.toTimeString().substring(0, 5);
+        const fmtEnd = conflict.endsAt.toTimeString().substring(0, 5);
+        return {
+          ok: false,
+          error: {
+            code: 'CONFLICT',
+            message: `Ruangan "${finalRoom}" sudah digunakan oleh sesi "${conflict.title}" pada ${fmtStart}–${fmtEnd}. Pilih ruangan atau waktu lain.`,
+            retryable: false,
+          },
+        };
+      }
     }
 
     const updates: Record<string, any> = { updatedAt: serverTimestamp() };
@@ -703,3 +764,89 @@ export function subscribeSession(
   );
 }
 
+export async function getStudentUsers(): Promise<Result<StudentUserItem[]>> {
+  const auth = getFirebaseAuth();
+  const db = getFirebaseFirestore();
+
+  if (!auth.currentUser) {
+    return {
+      ok: false,
+      error: { code: 'UNAUTHENTICATED', message: 'Sesi berakhir.', retryable: false },
+    };
+  }
+
+  try {
+    // Query hanya user dengan role student
+    const q = query(
+      collection(db, 'users'),
+      where('role', '==', 'student')
+    );
+    const snapshot = await getDocs(q);
+
+    const students: StudentUserItem[] = [];
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      students.push({
+        uid: docSnap.id,
+        name: data.name || 'Tanpa Nama',
+        studentNumber: data.studentNumber || '-',
+        email: data.email || '',
+      });
+    });
+
+    // Urutkan berdasarkan NIM atau Nama secara alfabetis
+    students.sort((a, b) =>
+      (a.studentNumber || '').localeCompare(b.studentNumber || '') ||
+      a.name.localeCompare(b.name)
+    );
+
+    return { ok: true, data: students };
+  } catch (err: any) {
+    return {
+      ok: false,
+      error: { code: 'NETWORK_ERROR', message: err.message, retryable: true },
+    };
+  }
+}
+
+async function findConflictingSession(
+  room: string,
+  startsAt: Date,
+  endsAt: Date,
+  excludeId?: string,
+): Promise<{ title: string; startsAt: Date; endsAt: Date } | null> {
+  const db = getFirebaseFirestore();
+
+  // 1. Ambil semua sesi aktif di ruangan yang sama (lintas kelas & asisten)
+  const q = query(
+    collection(db, 'sessions'),
+    where('room', '==', room),
+    where('isArchived', '==', false),
+  );
+
+  const snapshot = await getDocs(q);
+
+  for (const docSnap of snapshot.docs) {
+    // Abaikan sesi yang sedang diedit ini sendiri
+    if (excludeId && docSnap.id === excludeId) continue;
+
+    const data = docSnap.data();
+    const existingStart: Date = data.startsAt?.toDate?.() ?? new Date(0);
+    const existingEnd: Date = data.endsAt?.toDate?.() ?? new Date(0);
+
+    // Cek apakah ada irisan jam (overlap)
+    const isOverlap =
+      startsAt.getTime() < existingEnd.getTime() &&
+      existingStart.getTime() < endsAt.getTime();
+
+    if (isOverlap) {
+      return {
+        title: data.title ?? 'Sesi tanpa judul',
+        startsAt: existingStart,
+        endsAt: existingEnd,
+      };
+    }
+  }
+
+  return null;
+}
