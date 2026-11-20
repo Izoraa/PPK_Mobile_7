@@ -12,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AsyncState } from "@/components/common/AsyncState";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { TabBarDivider } from "@/components/TabBarDivider";
+import CoordinatorDashboard from "@/features/coordinator/components/CoordinatorDashboard";
 import {
   subscribeClasses,
   subscribeSessions,
@@ -300,6 +301,14 @@ export default function ScheduleScreen() {
     );
   };
 
+  if (currentUser.role === 'coordinator') {
+    return (
+      <SafeAreaView edges={["top", "left", "right"]} style={styles.screen}>
+        <CoordinatorDashboard />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView edges={["left", "right", "bottom"]} style={styles.screen}>
       <View style={styles.headerRow}>
@@ -309,15 +318,7 @@ export default function ScheduleScreen() {
           </Text>
           <Text style={styles.userName}>{currentUser.name}</Text>
         </View>
-        {isAssistant ? (
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => router.push("/(assistant)/classes/new" as never)}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.addButtonText}>+ Buat Kelas</Text>
-          </TouchableOpacity>
-        ) : (
+        {isAssistant ? null : (
           <TouchableOpacity
             style={styles.leaveButton}
             onPress={() => router.push("/(student)/leaves" as never)}

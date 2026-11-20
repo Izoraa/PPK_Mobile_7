@@ -73,13 +73,6 @@ export default function AssistantClassesScreen() {
           <Text style={styles.title}>Kelas Praktikum</Text>
           <Text style={styles.subtitle}>Kelola praktikum dan peserta Anda</Text>
         </View>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => router.push('/(assistant)/classes/new' as any)}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.addButtonText}>+ Buat Kelas</Text>
-        </TouchableOpacity>
       </View>
 
       <AsyncState

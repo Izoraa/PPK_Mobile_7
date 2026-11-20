@@ -42,6 +42,7 @@ const profileStatusMessages: Record<ProfileStatus, string> = {
   student: 'Profil praktikan sudah tersimpan.',
   assistantPending: 'Permintaan akun asisten menunggu aktivasi oleh pengelola.',
   assistant: 'Akun asisten sudah aktif.',
+  coordinator: 'Akun koordinator laboratorium aktif.',
 };
 
 const registrationErrorMessages: Partial<Record<AppErrorCode, string>> = {

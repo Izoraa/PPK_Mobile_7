@@ -202,14 +202,6 @@ export default function AssistantClassDetailScreen() {
         <View style={styles.actionsRow}>
           <TouchableOpacity
             style={styles.actionOutlineBtn}
-            onPress={() => router.push(`/(assistant)/classes/${classId}/edit` as any)}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.actionOutlineText}>Ubah Kelas</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.actionOutlineBtn}
             onPress={() => router.push(`/(assistant)/classes/${classId}/members` as any)}
             activeOpacity={0.8}
           >

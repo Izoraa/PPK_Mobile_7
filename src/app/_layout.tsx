@@ -50,6 +50,9 @@ function RootNavigator() {
         <Stack.Protected guard={restoring || currentUser?.role === 'assistant'} redirectTo={roleFallback}>
           <Stack.Screen name="(assistant)" />
         </Stack.Protected>
+        <Stack.Protected guard={restoring || currentUser?.role === 'coordinator'} redirectTo={roleFallback}>
+          <Stack.Screen name="(coordinator)" />
+        </Stack.Protected>
       </Stack>
     </ThemeProvider>
   );
