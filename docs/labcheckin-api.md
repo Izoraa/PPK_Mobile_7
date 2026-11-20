@@ -2,10 +2,10 @@
 
 LabCheckIn menggunakan **REST API** mandiri berbasis HTTP dengan format **JSON**. Gunakan HTTPS di produksi. Rute aplikasi memakai awalan `/api/v1`.
 
-| Lingkungan | Base URL |
-| --- | --- |
-| Lokal | `http://127.0.0.1:3000` |
-| Produksi | `https://api.example.com` sebagai contoh. Ganti dengan domain API tim. |
+| Lingkungan | Base URL                                                               |
+| ---------- | ---------------------------------------------------------------------- |
+| Lokal      | `http://127.0.0.1:3000`                                                |
+| Produksi   | `https://api.example.com` sebagai contoh. Ganti dengan domain API tim. |
 
 ## Autentikasi
 
@@ -20,7 +20,7 @@ Rute publik untuk memeriksa apakah proses API merespons. Permintaan dapat dikiri
 **Respons `200 OK`**
 
 ```json
-{"status":"ok"}
+{ "status": "ok" }
 ```
 
 ### GET /api/v1/auth/me
@@ -30,7 +30,7 @@ Mengembalikan UID pengguna yang sudah terautentikasi. Permintaan hanya memerluka
 **Respons `200 OK`**
 
 ```json
-{"ok":true,"data":{"uid":"firebase-uid"}}
+{ "ok": true, "data": { "uid": "firebase-uid" } }
 ```
 
 ### POST /api/v1/attendance/qr/issue
@@ -40,7 +40,7 @@ Menerbitkan QR untuk asisten yang memiliki sesi dan kelas tersebut. Sesi dan kel
 **Permintaan** dengan header `Authorization` dan `Content-Type: application/json`. Isi JSON hanya memuat `sessionId` bertipe `string`, sesuai ID dokumen sesi di Firestore.
 
 ```json
-{"sessionId":"session123"}
+{ "sessionId": "session123" }
 ```
 
 **Respons `200 OK`**
@@ -54,6 +54,27 @@ Menerbitkan QR untuk asisten yang memiliki sesi dan kelas tersebut. Sesi dan kel
 ```
 
 Ketiga properti respons bertipe `string`. Gunakan nilai `qrPayload` langsung sebagai teks QR. Di dalamnya terdapat versi payload `v`, ID sesi, dan token. `expiresAt` memakai format ISO 8601 dalam UTC. QR berlaku 15 menit dan digantikan saat asisten menerbitkan QR baru. Hindari mencatat `qrPayload` ke log.
+
+### POST /api/v1/attendance/qr/validate
+
+Memeriksa apakah QR cocok dengan sesi yang diminta, masih aktif, dan belum kedaluwarsa menurut waktu server Firestore.
+
+**Permintaan** dengan header `Authorization` dan `Content-Type: application/json`. Kirim tepat dua properti bertipe `string`. Ambil `sessionId` dari halaman presensi dan kirim teks mentah hasil pemindaian kamera sebagai `qrPayload`.
+
+```json
+{
+  "sessionId": "session123",
+  "qrPayload": "{\"v\":1,\"sessionId\":\"session123\",\"token\":\"<token-acak>\"}"
+}
+```
+
+**Respons `200 OK`** dengan header `Cache-Control: no-store`.
+
+```json
+{ "ok": true, "data": { "sessionId": "session123", "qrVerified": true } }
+```
+
+`qrVerified: true` mengonfirmasi kredensial QR untuk sesi tersebut. Pemeriksaan kelayakan dan pencatatan presensi dilakukan pada tahap terpisah.
 
 ## Respons galat
 
@@ -69,19 +90,22 @@ Gunakan status HTTP dan `error.code` untuk menentukan tindakan di aplikasi.
 }
 ```
 
-| HTTP | `error.code` | Arti |
-| --- | --- | --- |
-| 400 | `INVALID_JSON`, `INVALID_REQUEST`, `VALIDATION_ERROR` | JSON, isi permintaan, atau `sessionId` tidak valid. |
-| 401 | `UNAUTHENTICATED` | ID token tidak dikirim atau ditolak. |
-| 403 | `FORBIDDEN` | Pengguna tidak berwenang menerbitkan QR untuk sesi ini. |
-| 404 | `NOT_FOUND` | Rute, sesi, atau kelas tidak ditemukan. |
-| 409 | `SESSION_NOT_OPEN`, `SESSION_CLOSED` | Sesi belum dibuka atau sudah ditutup. |
-| 409 | `SESSION_ARCHIVED`, `CLASS_ARCHIVED` | Sesi atau kelas tidak aktif. |
-| 413 | `PAYLOAD_TOO_LARGE` | Isi JSON melebihi 16 KiB. |
-| 415 | `UNSUPPORTED_MEDIA_TYPE`, `UNSUPPORTED_ENCODING` | Tipe konten atau encoding tidak didukung. |
-| 429 | `RATE_LIMITED` | Batas permintaan tercapai. Periksa header `Retry-After`. |
-| 500 | `INTERNAL_ERROR` | Terjadi galat pada server. |
-| 503 | `SERVICE_UNAVAILABLE` | Verifikasi Firebase Auth sedang tidak tersedia. |
+| HTTP | `error.code`                                          | Arti                                                                   |
+| ---- | ----------------------------------------------------- | ---------------------------------------------------------------------- |
+| 400  | `INVALID_JSON`, `INVALID_REQUEST`, `VALIDATION_ERROR` | JSON, isi permintaan, atau `sessionId` tidak valid.                    |
+| 400  | `QR_INVALID`                                          | QR tidak valid, sudah digantikan, atau tidak cocok dengan token aktif. |
+| 400  | `QR_SESSION_MISMATCH`                                 | QR berasal dari sesi lain.                                             |
+| 401  | `UNAUTHENTICATED`                                     | ID token tidak dikirim atau ditolak.                                   |
+| 403  | `FORBIDDEN`                                           | Pengguna tidak berwenang menerbitkan QR untuk sesi ini.                |
+| 404  | `NOT_FOUND`                                           | Rute, sesi, atau kelas tidak ditemukan.                                |
+| 409  | `SESSION_NOT_OPEN`, `SESSION_CLOSED`                  | Sesi belum dibuka atau sudah ditutup.                                  |
+| 409  | `SESSION_ARCHIVED`, `CLASS_ARCHIVED`                  | Sesi atau kelas tidak aktif.                                           |
+| 410  | `QR_EXPIRED`                                          | Masa berlaku QR telah habis.                                           |
+| 413  | `PAYLOAD_TOO_LARGE`                                   | Isi JSON melebihi 16 KiB.                                              |
+| 415  | `UNSUPPORTED_MEDIA_TYPE`, `UNSUPPORTED_ENCODING`      | Tipe konten atau encoding tidak didukung.                              |
+| 429  | `RATE_LIMITED`                                        | Batas permintaan tercapai. Periksa header `Retry-After`.               |
+| 500  | `INTERNAL_ERROR`                                      | Terjadi galat pada server.                                             |
+| 503  | `SERVICE_UNAVAILABLE`                                 | Verifikasi Firebase Auth sedang tidak tersedia.                        |
 
 Rute `/api/v1` dibatasi 120 permintaan per menit per IP yang dilihat API.
 
@@ -94,7 +118,11 @@ import type { User } from "firebase/auth";
 
 type ResponsQr = { sessionId: string; qrPayload: string; expiresAt: string };
 
-async function terbitkanQr(baseUrl: string, user: User, sessionId: string): Promise<ResponsQr> {
+async function terbitkanQr(
+  baseUrl: string,
+  user: User,
+  sessionId: string,
+): Promise<ResponsQr> {
   const idToken = await user.getIdToken();
   const response = await fetch(`${baseUrl}/api/v1/attendance/qr/issue`, {
     method: "POST",

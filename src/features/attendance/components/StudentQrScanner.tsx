@@ -3,13 +3,33 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, AppState, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, radius, spacing } from '@/theme';
+import { getErrorMessage } from '@/utils/errors';
 
 import { checkSessionQrPayload } from '../qrPayload';
+import { verifySessionAttendanceQr, type QrVerificationErrorCode } from '../qrService';
 
 type ScanState =
-  | { status: 'idle' | 'scanning' | 'camera-error' }
-  | { status: 'scanned'; payload: string }
-  | { status: 'rejected'; reason: 'invalid' | 'session-mismatch' };
+  | { status: 'idle' | 'scanning' | 'camera-error' | 'verified' }
+  | { status: 'verifying'; payload: string }
+  | { status: 'retryable-error'; payload: string; message: string }
+  | { status: 'rejected'; message: string };
+
+const sessionMismatchMessage = 'Kode QR ini untuk sesi praktikum lain.';
+
+function getVerificationMessage(code: QrVerificationErrorCode): string {
+  switch (code) {
+    case 'QR_INVALID':
+      return 'Kode QR presensi tidak valid atau sudah diganti. Pindai kode terbaru dari asisten.';
+    case 'QR_SESSION_MISMATCH':
+      return sessionMismatchMessage;
+    case 'QR_EXPIRED':
+      return 'Kode QR sudah kedaluwarsa. Minta kode baru kepada asisten.';
+    case 'RATE_LIMITED':
+      return 'Terlalu banyak percobaan. Tunggu sebentar sebelum mencoba lagi.';
+    default:
+      return getErrorMessage(code);
+  }
+}
 
 function ScannerButton({ label, onPress, disabled = false }: {
   label: string;
@@ -56,6 +76,28 @@ export function StudentQrScanner({ sessionId }: { sessionId: string }) {
     return () => subscription.remove();
   }, [refreshPermission]);
 
+  const pendingScan = scan.status === 'verifying' ? scan : null;
+  useEffect(() => {
+    if (!pendingScan) return;
+
+    const controller = new AbortController();
+    void verifySessionAttendanceQr(sessionId, pendingScan.payload, controller.signal).then((result) => {
+      if (controller.signal.aborted) return;
+
+      setScan((current) => {
+        if (current !== pendingScan) return current;
+        if (result.ok) return { status: 'verified' };
+
+        const message = getVerificationMessage(result.error.code);
+        return result.error.retryable
+          ? { status: 'retryable-error', payload: pendingScan.payload, message }
+          : { status: 'rejected', message };
+      });
+    });
+
+    return () => controller.abort();
+  }, [pendingScan, sessionId]);
+
   const startScan = async () => {
     if (!permission || requesting) return;
     if (permission.granted) {
@@ -82,8 +124,11 @@ export function StudentQrScanner({ sessionId }: { sessionId: string }) {
 
       const result = checkSessionQrPayload(data, sessionId);
       return result === 'matching'
-        ? { status: 'scanned', payload: data }
-        : { status: 'rejected', reason: result };
+        ? { status: 'verifying', payload: data }
+        : {
+          status: 'rejected',
+          message: result === 'session-mismatch' ? sessionMismatchMessage : 'Format kode QR presensi tidak valid.',
+        };
     });
   };
 
@@ -150,27 +195,40 @@ export function StudentQrScanner({ sessionId }: { sessionId: string }) {
     );
   }
 
-  const scanned = scan.status === 'scanned';
-  const rejected = scan.status === 'rejected';
+  if (scan.status === 'verifying') {
+    return (
+      <View style={styles.content}>
+        <ActivityIndicator accessibilityLabel="Memverifikasi kode QR" color={colors.primary} />
+        <Text style={styles.body}>Memverifikasi kode QR…</Text>
+      </View>
+    );
+  }
+
+  const verified = scan.status === 'verified';
+  const failed = scan.status === 'rejected' || scan.status === 'retryable-error';
   const cameraError = scan.status === 'camera-error';
   return (
     <View style={styles.content}>
-      {scanned && (
+      {verified && (
         <Text accessibilityLiveRegion="polite" style={styles.body}>
-          Kode QR dipindai. Verifikasi kode oleh server belum tersedia.
+          Kode QR terverifikasi. Presensi belum tercatat.
         </Text>
       )}
-      {rejected && (
-        <Text accessibilityRole="alert" style={styles.body}>
-          {scan.reason === 'session-mismatch'
-            ? 'Kode QR ini untuk sesi praktikum lain.'
-            : 'Format kode QR presensi tidak valid.'}
-        </Text>
+      {failed && (
+        <Text accessibilityRole="alert" style={styles.body}>{scan.message}</Text>
+      )}
+      {scan.status === 'retryable-error' && (
+        <ScannerButton
+          label="Coba Verifikasi Lagi"
+          onPress={() => setScan((current) => current.status === 'retryable-error'
+            ? { status: 'verifying', payload: current.payload }
+            : current)}
+        />
       )}
       {cameraError && (
         <Text accessibilityRole="alert" style={styles.body}>Kamera tidak dapat dibuka. Coba lagi.</Text>
       )}
-      <ScannerButton label={scanned || rejected ? 'Pindai Ulang' : 'Buka Kamera'} onPress={startScan} />
+      <ScannerButton label={verified || failed ? 'Pindai Ulang' : 'Buka Kamera'} onPress={startScan} />
     </View>
   );
 }
