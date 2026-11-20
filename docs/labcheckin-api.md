@@ -78,6 +78,33 @@ API menggunakan UID dari Firebase Auth. Profil pengguna harus memiliki `role` da
 
 `qrVerified: true` mengonfirmasi kredensial QR dan kelayakan mahasiswa untuk sesi tersebut. Validasi lokasi dan pencatatan presensi merupakan bagian dari alur check-in.
 
+### POST /api/v1/attendance/check-in
+
+**Permintaan** dengan header `Authorization` dan `Content-Type: application/json`. Kirim ID sesi dari halaman presensi, teks QR asli dari kamera, dan lokasi perangkat. Semua angka lokasi pada contoh hanya menunjukkan format permintaan.
+
+```json
+{
+  "sessionId": "session123",
+  "qrPayload": "{\"v\":1,\"sessionId\":\"session123\",\"token\":\"<token-acak>\"}",
+  "location": { "latitude": 0, "longitude": 0, "accuracyMeters": 12.5 }
+}
+```
+
+API mengambil UID mahasiswa dari Firebase Auth. Setelah pemeriksaan QR, sesi, kelas, dan keanggotaan lolos, permintaan saat ini berhenti dengan `503 SERVICE_UNAVAILABLE` karena verifikasi lokasi masih menunggu kontrak yang disetujui.
+
+**Respons `200 OK` setelah verifikasi lokasi tersedia** dengan header `Cache-Control: no-store`. API membaca `checkedInAt` dari dokumen yang sudah disimpan dan mengembalikannya sebagai ISO 8601 UTC.
+
+```json
+{
+  "ok": true,
+  "data": {
+    "sessionId": "session123",
+    "status": "present",
+    "checkedInAt": "2026-11-20T12:00:00.000Z"
+  }
+}
+```
+
 ## Respons galat
 
 Gunakan status HTTP dan `error.code` untuk menentukan tindakan di aplikasi.
@@ -106,9 +133,10 @@ Gunakan status HTTP dan `error.code` untuk menentukan tindakan di aplikasi.
 | 410  | `QR_EXPIRED`                                          | Masa berlaku QR telah habis.                                                                                      |
 | 413  | `PAYLOAD_TOO_LARGE`                                   | Isi JSON melebihi 16 KiB.                                                                                         |
 | 415  | `UNSUPPORTED_MEDIA_TYPE`, `UNSUPPORTED_ENCODING`      | Tipe konten atau encoding tidak didukung.                                                                         |
+| 422  | `LOCATION_UNAVAILABLE`                                | Lokasi perangkat wajib disertakan untuk check-in.                                                                 |
 | 429  | `RATE_LIMITED`                                        | Batas permintaan tercapai. Periksa header `Retry-After`.                                                          |
 | 500  | `INTERNAL_ERROR`                                      | Terjadi galat pada server, misalnya data asisten sesi dan kelas tidak konsisten.                                  |
-| 503  | `SERVICE_UNAVAILABLE`                                 | Verifikasi Firebase Auth sedang tidak tersedia.                                                                   |
+| 503  | `SERVICE_UNAVAILABLE`                                 | Verifikasi Firebase Auth, verifikasi lokasi check-in, atau konfirmasi waktu presensi sedang tidak tersedia.       |
 
 Rute `/api/v1` dibatasi 120 permintaan per menit per IP yang dilihat API.
 
@@ -146,12 +174,14 @@ async function terbitkanQr(
 
 ## Status integrasi
 
-- Rilis `POST /api/v1/attendance/check-in` menunggu persetujuan kontrak geotag dan aturan akurasi GPS.
+- Aplikasi Expo membaca `EXPO_PUBLIC_LABCHECKIN_API_URL` sebagai base URL tanpa `/api/v1`. Gunakan alamat yang dapat dijangkau dari perangkat atau emulator dan HTTPS di produksi.
+- Setelah QR terverifikasi dan mahasiswa memilih **Lanjutkan Presensi**, aplikasi meminta izin lokasi saat digunakan dan mengirim pembacaan lokasi ke endpoint check-in. Aplikasi menampilkan waktu presensi dari respons API atau dari data Firestore yang sudah dikonfirmasi server.
+- Verifikasi lokasi menunggu skema Firestore dan tautan lokasi pada sesi, koordinat dan radius resmi, aturan batas radius, ambang akurasi, batas usia pembacaan GPS, perlakuan geotag yang hilang atau dinonaktifkan, dan kebijakan lokasi tiruan untuk platform yang mendukungnya.
 - CORS belum dikonfigurasi. Expo Web yang dihosting pada origin berbeda memerlukan konfigurasi CORS. [Dokumentasi CORS Express](https://expressjs.com/en/resources/middleware/cors/)
 
 ### Kebijakan partisipasi untuk check-in
 
-Check-in memakai satu dokumen di `sessions/{sessionId}/participations/{studentId}`, dengan ID mahasiswa dari Firebase Auth. Tabel ini berlaku saat rute check-in dirilis.
+Check-in memakai satu dokumen di `sessions/{sessionId}/participations/{studentId}`, dengan ID mahasiswa dari Firebase Auth. Hasil berikut berlaku setelah verifikasi lokasi lolos.
 
 | Dokumen partisipasi saat check-in                         | Hasil                                                                                                                                        |
 | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -159,3 +189,9 @@ Check-in memakai satu dokumen di `sessions/{sessionId}/participations/{studentId
 | Izin berstatus `rejected` dan kehadiran belum tercatat    | Tambahkan `attendanceCreatedAt`, `attendanceUpdatedAt`, dan `attendanceCheckedInAt` ke dokumen izin yang sama. Riwayat izin tetap tersimpan. |
 | Kehadiran sudah tercatat, termasuk pada izin yang ditolak | `409 ALREADY_CHECKED_IN`.                                                                                                                    |
 | Izin masih menunggu atau disetujui                        | `409 PARTICIPATION_CONFLICT`.                                                                                                                |
+
+### Migrasi penulisan presensi
+
+Pada `PPK_Mobile_7/firestore.rules`, aturan `allow create` melalui `validParticipation` masih mengizinkan mahasiswa membuat dokumen `kind: "attendance"` secara langsung. Aturan `allow update` pada versi repositori saat ini hanya mengizinkan peninjauan izin oleh asisten. Izin klien untuk menambah stempel presensi pada izin yang ditolak sudah dihapus dari versi tersebut. Status aturan yang diterapkan di Firebase perlu dikonfirmasi sebelum rilis.
+
+Saat migrasi, arahkan penulisan presensi Expo ke API dan batasi pembuatan presensi langsung di Firestore. Jika aturan lama masih diterapkan, batasi juga pembaruan stempel presensi izin ditolak oleh klien. Pertahankan pembuatan dan peninjauan izin serta akses baca untuk status mahasiswa, riwayat, dan rekap asisten. Koordinasikan perubahan dengan pengembang mobile dan PM.

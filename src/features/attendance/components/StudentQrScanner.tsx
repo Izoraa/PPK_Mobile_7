@@ -1,47 +1,21 @@
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, radius, spacing } from '@/theme';
-import { getErrorMessage } from '@/utils/errors';
-import { CHECK_IN_ERROR_MESSAGES } from '@/utils/messages';
 
+import { readAttendanceLocation } from '../location';
 import { checkSessionQrPayload } from '../qrPayload';
-import { verifySessionAttendanceQr, type QrVerificationErrorCode } from '../qrService';
+import { getAttendanceApiErrorMessage, requestSessionAttendanceCheckIn, verifySessionAttendanceQr } from '../qrService';
 
 type ScanState =
   | { status: 'idle' | 'scanning' | 'camera-error' }
   | { status: 'verifying'; payload: string }
   | { status: 'retryable-error'; payload: string; message: string }
+  | { status: 'location-ready'; payload: string; message?: string }
+  | { status: 'reading-location' | 'submitting' }
+  | { status: 'submitted-error'; message: string }
   | { status: 'rejected'; message: string };
-
-const sessionMismatchMessage = 'Kode QR ini untuk sesi praktikum lain.';
-
-function getVerificationMessage(code: QrVerificationErrorCode): string {
-  switch (code) {
-    case 'QR_INVALID':
-      return 'Kode QR presensi tidak valid atau sudah diganti. Pindai kode terbaru dari asisten.';
-    case 'QR_SESSION_MISMATCH':
-      return sessionMismatchMessage;
-    case 'QR_EXPIRED':
-      return 'Kode QR sudah kedaluwarsa. Minta kode baru kepada asisten.';
-    case 'FORBIDDEN':
-      return CHECK_IN_ERROR_MESSAGES.NOT_A_STUDENT;
-    case 'SESSION_NOT_OPEN':
-    case 'SESSION_CLOSED':
-      return CHECK_IN_ERROR_MESSAGES[code];
-    case 'SESSION_ARCHIVED':
-      return 'Sesi sudah diarsipkan. Presensi tidak dapat dilakukan.';
-    case 'CLASS_ARCHIVED':
-      return 'Kelas sudah diarsipkan. Presensi tidak dapat dilakukan.';
-    case 'NOT_FOUND':
-      return 'Sesi atau kelas praktikum tidak ditemukan.';
-    case 'RATE_LIMITED':
-      return 'Terlalu banyak percobaan. Tunggu sebentar sebelum mencoba lagi.';
-    default:
-      return getErrorMessage(code);
-  }
-}
 
 function ScannerButton({ label, onPress, disabled = false }: {
   label: string;
@@ -61,11 +35,15 @@ function ScannerButton({ label, onPress, disabled = false }: {
   );
 }
 
-export function StudentQrScanner({ sessionId }: { sessionId: string }) {
+export function StudentQrScanner({ sessionId, onConfirmed }: {
+  sessionId: string;
+  onConfirmed: (checkedInAt: string) => void;
+}) {
   const [permission, requestPermission, getPermission] = useCameraPermissions({ get: false });
   const [scan, setScan] = useState<ScanState>({ status: 'idle' });
   const [requesting, setRequesting] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  const checkInRequest = useRef<AbortController | null>(null);
   const [appActive, setAppActive] = useState(() =>
     !AppState.currentState || AppState.currentState === 'active',
   );
@@ -88,6 +66,11 @@ export function StudentQrScanner({ sessionId }: { sessionId: string }) {
     return () => subscription.remove();
   }, [refreshPermission]);
 
+  useEffect(() => () => {
+    checkInRequest.current?.abort();
+    checkInRequest.current = null;
+  }, [sessionId]);
+
   const pendingScan = scan.status === 'verifying' ? scan : null;
   useEffect(() => {
     if (!pendingScan) return;
@@ -99,13 +82,10 @@ export function StudentQrScanner({ sessionId }: { sessionId: string }) {
       setScan((current) => {
         if (current !== pendingScan) return current;
         if (result.ok) {
-          return {
-            status: 'rejected',
-            message: 'Kode QR dan keanggotaan kelas terverifikasi. Lokasi laboratorium belum dapat diverifikasi.',
-          };
+          return { status: 'location-ready', payload: pendingScan.payload };
         }
 
-        const message = getVerificationMessage(result.error.code);
+        const message = getAttendanceApiErrorMessage(result.error.code);
         return result.error.retryable
           ? { status: 'retryable-error', payload: pendingScan.payload, message }
           : { status: 'rejected', message };
@@ -114,6 +94,52 @@ export function StudentQrScanner({ sessionId }: { sessionId: string }) {
 
     return () => controller.abort();
   }, [pendingScan, sessionId]);
+
+  const submitAttendance = async () => {
+    if (scan.status !== 'location-ready' || !appActive || checkInRequest.current) return;
+
+    const { payload } = scan;
+    const controller = new AbortController();
+    const { signal } = controller;
+    checkInRequest.current = controller;
+    setScan({ status: 'reading-location' });
+
+    try {
+      const reading = await readAttendanceLocation(signal);
+      if (signal.aborted) return;
+      if (!reading.ok) {
+        setScan({ status: 'location-ready', payload, message: reading.message });
+        return;
+      }
+      if (AppState.currentState && AppState.currentState !== 'active') {
+        setScan({ status: 'location-ready', payload, message: 'Buka kembali aplikasi dan coba ambil lokasi lagi.' });
+        return;
+      }
+
+      setScan({ status: 'submitting' });
+      const result = await requestSessionAttendanceCheckIn({
+        sessionId,
+        qrPayload: payload,
+        location: reading.location,
+      }, signal);
+      if (signal.aborted) return;
+
+      if (result.ok) {
+        onConfirmed(result.data.checkedInAt);
+        return;
+      }
+
+      const { code, message, retryable } = result.error;
+      const feedback = code === 'NETWORK_ERROR' || code === 'SERVICE_UNAVAILABLE'
+        ? `${message} Status presensi belum dapat dikonfirmasi.`
+        : message;
+      setScan(retryable
+        ? { status: 'location-ready', payload, message: feedback }
+        : { status: 'submitted-error', message: feedback });
+    } finally {
+      if (checkInRequest.current === controller) checkInRequest.current = null;
+    }
+  };
 
   const startScan = async () => {
     if (!permission || requesting) return;
@@ -144,7 +170,9 @@ export function StudentQrScanner({ sessionId }: { sessionId: string }) {
         ? { status: 'verifying', payload: data }
         : {
           status: 'rejected',
-          message: result === 'session-mismatch' ? sessionMismatchMessage : 'Format kode QR presensi tidak valid.',
+          message: result === 'session-mismatch'
+            ? getAttendanceApiErrorMessage('QR_SESSION_MISMATCH')
+            : 'Format kode QR presensi tidak valid.',
         };
     });
   };
@@ -221,6 +249,31 @@ export function StudentQrScanner({ sessionId }: { sessionId: string }) {
     );
   }
 
+  if (scan.status === 'location-ready') {
+    return (
+      <View style={styles.content}>
+        <Text style={styles.body}>Lokasi digunakan untuk memeriksa apakah Anda berada di laboratorium.</Text>
+        {scan.message && <Text accessibilityRole="alert" style={styles.body}>{scan.message}</Text>}
+        <ScannerButton
+          label={scan.message ? 'Coba Presensi Lagi' : 'Lanjutkan Presensi'}
+          onPress={submitAttendance}
+          disabled={!appActive}
+        />
+        <ScannerButton label="Pindai Ulang" onPress={startScan} />
+      </View>
+    );
+  }
+
+  if (scan.status === 'reading-location' || scan.status === 'submitting') {
+    const label = scan.status === 'reading-location' ? 'Mengambil lokasi…' : 'Mengirim presensi…';
+    return (
+      <View style={styles.content}>
+        <ActivityIndicator accessibilityLabel={label} color={colors.primary} />
+        <Text style={styles.body}>{label}</Text>
+      </View>
+    );
+  }
+
   const failed = scan.status === 'rejected' || scan.status === 'retryable-error';
   const cameraError = scan.status === 'camera-error';
   return (
@@ -229,6 +282,9 @@ export function StudentQrScanner({ sessionId }: { sessionId: string }) {
         <Text accessibilityRole="alert" style={styles.body}>
           {scan.message} Presensi tidak dicatat.
         </Text>
+      )}
+      {scan.status === 'submitted-error' && (
+        <Text accessibilityRole="alert" style={styles.body}>{scan.message}</Text>
       )}
       {scan.status === 'retryable-error' && (
         <ScannerButton
@@ -241,7 +297,7 @@ export function StudentQrScanner({ sessionId }: { sessionId: string }) {
       {cameraError && (
         <Text accessibilityRole="alert" style={styles.body}>Kamera tidak dapat dibuka. Coba lagi.</Text>
       )}
-      <ScannerButton label={failed ? 'Pindai Ulang' : 'Buka Kamera'} onPress={startScan} />
+      <ScannerButton label={failed || scan.status === 'submitted-error' ? 'Pindai Ulang' : 'Buka Kamera'} onPress={startScan} />
     </View>
   );
 }

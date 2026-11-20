@@ -32,7 +32,8 @@ function mapSessionError(error: Error): LoadError {
 function StudentAttendanceSession({ sessionId }: { sessionId: string }) {
   const isFocused = useIsFocused();
   const attendance = useMyConfirmedSessionAttendance(sessionId);
-  const checkedInAt = attendance.status === 'ready' ? attendance.checkedInAt : null;
+  const [apiCheckedInAt, setApiCheckedInAt] = useState<string | null>(null);
+  const checkedInAt = (attendance.status === 'ready' ? attendance.checkedInAt : null) ?? apiCheckedInAt;
   const [session, setSession] = useState<SessionDoc | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<LoadError | null>(null);
@@ -82,16 +83,16 @@ function StudentAttendanceSession({ sessionId }: { sessionId: string }) {
               Presensi tercatat pada {formatAttendanceTimestamp(checkedInAt)}.
             </Text>
           )}
-          {attendance.status === 'unconfirmed' && (
+          {!checkedInAt && attendance.status === 'unconfirmed' && (
             <Text style={styles.body}>Status presensi menunggu konfirmasi server.</Text>
           )}
-          {attendance.status === 'error' && (
+          {!checkedInAt && attendance.status === 'error' && (
             <Text style={styles.body}>Status presensi belum dapat diperiksa.</Text>
           )}
           {session.isArchived ? (
             <Text style={styles.body}>Sesi sudah diarsipkan.</Text>
           ) : isFocused && !checkedInAt && session.status === 'open' && !metadata.fromCache && !metadata.hasPendingWrites ? (
-            <StudentQrScanner sessionId={session.id} />
+            <StudentQrScanner sessionId={session.id} onConfirmed={setApiCheckedInAt} />
           ) : null}
         </View>
       )}
