@@ -26,6 +26,15 @@ export default function AppTabs() {
           <TabTrigger name="home" href="/" asChild>
             <TabButton iconName={{ web: "home" }}>Beranda</TabButton>
           </TabTrigger>
+          {currentUser?.role === "assistant" && (
+            <TabTrigger
+              name="new-session"
+              href="/new-session"
+              asChild
+            >
+              <TabButton iconName={{ web: "add" }}>Tambah Sesi</TabButton>
+            </TabTrigger>
+          )}
           <TabTrigger name="attendance" href="/attendance" asChild>
             <TabButton iconName={{ web: "checklist" }}>Presensi</TabButton>
           </TabTrigger>

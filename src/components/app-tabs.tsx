@@ -30,6 +30,14 @@ export default function AppTabs() {
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger
+        name="new-session"
+        hidden={currentUser?.role !== "assistant"}
+      >
+        <NativeTabs.Trigger.Label>Tambah Sesi</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="plus" md="add" selectedColor={selectedIconColor} />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger
         name="attendance-history"
         hidden={currentUser?.role !== "student"}
       >
