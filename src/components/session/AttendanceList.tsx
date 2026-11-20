@@ -96,7 +96,7 @@ export function AttendanceList({
         {remote.hasPendingWrites ? <Text style={styles.dataNotice}>Perubahan sedang disinkronkan.</Text> : null}
         <FlatList
           data={remote.records}
-          keyExtractor={(record) => record.id}
+          keyExtractor={(record, index) => `${record.id || record.studentId || index}_${index}`}
           contentContainerStyle={remote.records.length === 0 ? styles.emptyList : styles.list}
           ListEmptyComponent={<EmptyState title={emptyTitle} message={emptyMessage} />}
           renderItem={({ item }) => (
@@ -120,7 +120,7 @@ export function AttendanceList({
   return (
     <FlatList
       data={records}
-      keyExtractor={(attendance) => attendance.id}
+      keyExtractor={(attendance, index) => `${attendance.id || attendance.studentId || index}_${index}`}
       contentContainerStyle={records.length === 0 ? styles.emptyList : styles.list}
       ListEmptyComponent={<EmptyState title={emptyTitle} message={emptyMessage} />}
       renderItem={({ item }) => {

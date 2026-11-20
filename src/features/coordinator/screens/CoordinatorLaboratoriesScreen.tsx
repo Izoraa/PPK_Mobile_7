@@ -96,7 +96,7 @@ export default function CoordinatorLaboratoriesScreen() {
       ) : (
         <FlatList
           data={laboratories}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => `${item.id}_${index}`}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => {
             const isToggling = togglingId === item.id;

@@ -299,7 +299,7 @@ export default function EditSessionScreen() {
     setSaving(false);
 
     if (res.ok) {
-      router.replace("/(assistant)/classes" as any);
+      router.replace("/" as any);
     } else {
       setErrorMsg(res.error.message || "Gagal mengarsipkan sesi.");
     }

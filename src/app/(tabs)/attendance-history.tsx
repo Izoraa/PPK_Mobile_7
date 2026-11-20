@@ -86,7 +86,7 @@ export default function AttendanceHistoryScreen() {
         >
           <FlatList
             data={historyState.records}
-            keyExtractor={(attendance) => attendance.id}
+            keyExtractor={(attendance, index) => `${attendance.sessionId}_${attendance.studentId || attendance.id}_${index}`}
             contentContainerStyle={styles.listContent}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
             renderItem={({ item }) => {

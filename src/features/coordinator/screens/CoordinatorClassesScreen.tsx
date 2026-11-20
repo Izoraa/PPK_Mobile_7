@@ -120,7 +120,7 @@ export default function CoordinatorClassesScreen() {
       ) : (
         <FlatList
           data={filteredClasses}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => `${item.id}_${index}`}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => {
             const assistantName = assistantMap.get(item.assistantId) || 'Asisten belum ditetapkan';

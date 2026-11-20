@@ -241,7 +241,8 @@ export function subscribeClasses(
       memQuery,
       { includeMetadataChanges: true },
       async (memSnap) => {
-        const classIds = memSnap.docs.map((d) => d.data().classId).filter(Boolean);
+        const rawClassIds = memSnap.docs.map((d) => d.data().classId).filter(Boolean);
+        const classIds = Array.from(new Set(rawClassIds));
         if (classIds.length === 0) {
           onChange([]);
           onMetadata?.({
@@ -268,7 +269,8 @@ export function subscribeClasses(
               }
             }
           }
-          onChange(classDocs);
+          const uniqueClassDocs = Array.from(new Map(classDocs.map((c) => [c.id, c])).values());
+          onChange(uniqueClassDocs);
           onMetadata?.({
             fromCache: memSnap.metadata.fromCache || classDocsFromCache,
             hasPendingWrites: memSnap.metadata.hasPendingWrites

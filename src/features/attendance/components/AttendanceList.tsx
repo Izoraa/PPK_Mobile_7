@@ -16,7 +16,7 @@ export function AttendanceList({ records }: AttendanceListProps) {
   return (
     <FlatList
       data={records}
-      keyExtractor={(record) => record.id}
+      keyExtractor={(record, index) => `${record.id || index}_${index}`}
       contentContainerStyle={records.length === 0 ? styles.emptyList : styles.list}
       ListEmptyComponent={<AttendanceEmptyState />}
       renderItem={({ item }) => (

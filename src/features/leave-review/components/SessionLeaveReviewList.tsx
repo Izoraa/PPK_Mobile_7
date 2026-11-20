@@ -49,12 +49,12 @@ export function SessionLeaveReviewList({ sessionId }: Props) {
         emptyMessage="Semua pengajuan izin sesi ini akan muncul di sini, termasuk yang sudah diputuskan."
       >
         <View style={styles.list}>
-          {queue.records.map((record) => {
+          {queue.records.map((record, index) => {
             const key = `${record.sessionId}:${record.classId}`;
 
             return (
               <LeaveReviewCard
-                key={record.id}
+                key={`${record.sessionId}_${record.studentId}_${index}`}
                 record={record}
                 metadata={metadata[key]}
                 onPress={() => {
