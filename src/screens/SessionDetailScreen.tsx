@@ -1,6 +1,7 @@
 import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -40,6 +41,8 @@ export default function SessionDetailScreen() {
     fromCache: false,
     hasPendingWrites: false,
   });
+  const [showAttendanceModal, setShowAttendanceModal] = useState(false);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
 
   useEffect(() => {
     if (!sessionId || typeof sessionId !== "string") {
@@ -121,7 +124,7 @@ export default function SessionDetailScreen() {
 
   const session =
     currentUser.role === "assistant" &&
-    sessionData?.assistantId !== currentUser.id
+      sessionData?.assistantId !== currentUser.id
       ? null
       : sessionData;
 
@@ -186,12 +189,94 @@ export default function SessionDetailScreen() {
                 <Text style={styles.label}>Status sesi</Text>
                 <StatusBadge status={session.status} />
               </View>
-
               {currentUser.role === "assistant" && (
                 <>
                   <SessionControl sessionId={session.id} />
-                  <AttendanceList sessionId={session.id} />
-                  <SessionLeaveReviewList sessionId={session.id} />
+
+                  {/* 1. Card Ringkasan Sesi */}
+                  <AttendanceList sessionId={session.id} onlySummary />
+
+                  {/* 2. Dua Tombol Bersebelahan */}
+                  <View style={styles.buttonRow}>
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.attendanceBtn]}
+                      onPress={() => setShowAttendanceModal(true)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.actionBtnText}>Daftar Hadir</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.leaveBtn]}
+                      onPress={() => setShowLeaveModal(true)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.actionBtnText}>Daftar Izin</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* 3. Bottom Sheet: Daftar Praktikan Hadir */}
+                  <Modal
+                    visible={showAttendanceModal}
+                    animationType="slide"
+                    transparent={true}
+                    onRequestClose={() => setShowAttendanceModal(false)}
+                  >
+                    <View style={styles.sheetBackdrop}>
+                      <Pressable
+                        style={styles.sheetDismissArea}
+                        onPress={() => setShowAttendanceModal(false)}
+                      />
+                      <View style={styles.bottomSheet}>
+                        <View style={styles.handleBar} />
+                        <View style={styles.sheetHeader}>
+                          <Text style={styles.sheetTitle}>Daftar Praktikan Hadir</Text>
+                          <TouchableOpacity
+                            onPress={() => setShowAttendanceModal(false)}
+                            style={styles.sheetCloseButton}
+                          >
+                            <Text style={styles.sheetCloseText}>Tutup</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <View style={styles.sheetBody}>
+                          <AttendanceList sessionId={session.id} hideSummary />
+                        </View>
+                      </View>
+                    </View>
+                  </Modal>
+
+                  {/* 4. Bottom Sheet: Daftar Pengajuan Izin */}
+                  <Modal
+                    visible={showLeaveModal}
+                    animationType="slide"
+                    transparent={true}
+                    onRequestClose={() => setShowLeaveModal(false)}
+                  >
+                    <View style={styles.sheetBackdrop}>
+                      <Pressable
+                        style={styles.sheetDismissArea}
+                        onPress={() => setShowLeaveModal(false)}
+                      />
+                      <View style={styles.bottomSheet}>
+                        <View style={styles.handleBar} />
+                        <View style={styles.sheetHeader}>
+                          <Text style={styles.sheetTitle}>Pengajuan Izin Sesi</Text>
+                          <TouchableOpacity
+                            onPress={() => setShowLeaveModal(false)}
+                            style={styles.sheetCloseButton}
+                          >
+                            <Text style={styles.sheetCloseText}>Tutup</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <ScrollView
+                          style={styles.sheetBody}
+                          contentContainerStyle={{ paddingBottom: spacing.lg }}
+                        >
+                          <SessionLeaveReviewList sessionId={session.id} />
+                        </ScrollView>
+                      </View>
+                    </View>
+                  </Modal>
                 </>
               )}
               {currentUser.role === "student" && (
@@ -256,4 +341,93 @@ const styles = StyleSheet.create({
   value: { color: colors.text, fontSize: 16 },
   times: { flexDirection: "row", flexWrap: "wrap", gap: spacing.lg },
   time: { gap: spacing.sm },
+  buttonRow: {
+    flexDirection: "row",
+    gap: spacing.md,
+    marginTop: spacing.xs,
+  },
+  actionBtn: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  attendanceBtn: {
+    backgroundColor: colors.primary,
+  },
+  leaveBtn: {
+    backgroundColor: "#2563EB",
+  },
+  actionBtnText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.45)",
+    justifyContent: "flex-end",
+  },
+  sheetDismissArea: {
+    flex: 1,
+  },
+  bottomSheet: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    width: "100%",
+    maxWidth: 680,
+    alignSelf: "center",
+    height: "75%",
+    maxHeight: "88%",
+    minHeight: 350,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.lg,
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+  },
+  handleBar: {
+    width: 44,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: colors.border,
+    alignSelf: "center",
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  sheetHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    marginBottom: spacing.sm,
+  },
+  sheetTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  sheetCloseButton: {
+    padding: spacing.xs,
+  },
+  sheetCloseText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  sheetBody: {
+    flex: 1,
+    width: "100%",
+  },
 });
