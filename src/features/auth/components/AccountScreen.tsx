@@ -6,8 +6,8 @@ import { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { logout } from '@/features/auth/authService';
 import { TabBarDivider } from '@/components/TabBarDivider';
+import { logout } from '@/features/auth/authService';
 import { useApp } from '@/state/AppContext';
 import { spacing } from '@/theme';
 
@@ -59,7 +59,11 @@ export default function AccountScreen() {
     .slice(0, 2)
     .map((part) => part[0]?.toLocaleUpperCase() ?? '')
     .join('');
-  const roleLabel = currentUser.role === 'assistant' ? 'Asisten praktikum' : 'Praktikan';
+  const roleLabel = currentUser.role === 'coordinator'
+    ? 'Koordinator Laboratorium'
+    : currentUser.role === 'assistant'
+      ? 'Asisten praktikum'
+      : 'Praktikan';
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.screen}>

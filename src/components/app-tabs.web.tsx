@@ -47,6 +47,31 @@ export default function AppTabs() {
               <TabButton iconName={{ web: "history" }}>Riwayat</TabButton>
             </TabTrigger>
           )}
+          {currentUser?.role === "coordinator" && (
+            <>
+              <TabTrigger
+                name="coordinator-classes"
+                href="/coordinator-classes"
+                asChild
+              >
+                <TabButton iconName={{ web: "school" }}>Kelas</TabButton>
+              </TabTrigger>
+              <TabTrigger
+                name="coordinator-assistants"
+                href="/coordinator-assistants"
+                asChild
+              >
+                <TabButton iconName={{ web: "group" }}>Asisten</TabButton>
+              </TabTrigger>
+              <TabTrigger
+                name="coordinator-laboratories"
+                href="/coordinator-laboratories"
+                asChild
+              >
+                <TabButton iconName={{ web: "domain" }}>Ruang Lab</TabButton>
+              </TabTrigger>
+            </>
+          )}
           <TabTrigger name="account" href="/account" asChild>
             <TabButton iconName={{ web: "person" }}>Profil</TabButton>
           </TabTrigger>

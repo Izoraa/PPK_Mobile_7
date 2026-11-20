@@ -7,7 +7,7 @@ import type { Result, User } from '@/types';
 
 import { validateProfile, type RegistrationProfileInput } from './validation';
 
-export type ProfileStatus = 'student' | 'assistantPending' | 'assistant';
+export type ProfileStatus = 'student' | 'assistantPending' | 'assistant' | 'coordinator';
 
 interface ProfileAccount {
   uid: string;
@@ -23,6 +23,9 @@ function readProfileStatus(data: Record<string, unknown>, uid: string, email: st
     || profileEmail.trim().toLowerCase() !== email.toLowerCase()
     || typeof name !== 'string' || !name.trim()) return null;
 
+  if (role === 'coordinator') {
+    return 'coordinator';
+  }
   if (role === 'student' && requestedRole === 'student' && typeof studentNumber === 'string' && studentNumber.trim()) {
     return 'student';
   }
@@ -51,7 +54,14 @@ export async function getActiveProfileAccount(expectedUid?: string): Promise<Res
     const profileStatus = data ? readProfileStatus(data, user.uid, user.email) : null;
     let applicationUser: User | null = null;
     if (typeof name === 'string' && name.trim()) {
-      if (profileStatus === 'assistant') {
+      if (profileStatus === 'coordinator') {
+        applicationUser = {
+          id: user.uid,
+          name,
+          ...(typeof studentNumber === 'string' && studentNumber.trim() ? { studentNumber } : {}),
+          role: 'coordinator',
+        };
+      } else if (profileStatus === 'assistant') {
         applicationUser = {
           id: user.uid,
           name,

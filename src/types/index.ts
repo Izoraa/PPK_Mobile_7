@@ -1,4 +1,4 @@
-export type Role = 'student' | 'assistant';
+export type Role = 'student' | 'assistant' | 'coordinator';
 
 export type AppErrorCode =
   | 'UNAUTHENTICATED'
