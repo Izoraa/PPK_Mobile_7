@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useFonts } from 'expo-font';
-import { FlatList, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Inter_400Regular, Inter_500Medium } from '@expo-google-fonts/inter';
 import { Poppins_600SemiBold } from '@expo-google-fonts/poppins';
 
@@ -75,17 +76,14 @@ export default function MyLeavesScreen() {
     : state.status;
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <View style={styles.header}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={styles.screen}>
+      <View style={styles.topBar}>
         <Pressable
           onPress={() => router.replace('/')}
           accessibilityRole="button"
           accessibilityLabel="Kembali"
           hitSlop={10}
-          style={({ pressed }) => [
-            styles.backButton,
-            pressed && styles.pressed,
-          ]}
+          style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
         >
           <Text style={styles.backArrow}>←</Text>
         </Pressable>
@@ -93,6 +91,9 @@ export default function MyLeavesScreen() {
         <Text accessibilityRole="header" style={[styles.title, fontsLoaded && styles.poppins]}>
           Izin saya
         </Text>
+        <View style={styles.topBarSpacer} />
+      </View>
+      <View style={styles.body}>
         <Text style={[styles.subtitle, fontsLoaded && styles.inter]}>
           Lihat status pengajuan izin Anda.
         </Text>
@@ -164,9 +165,11 @@ export default function MyLeavesScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#F5F7FC' },
-  header: { gap: spacing.xs, paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.lg },
-  title: { color: brand.blue, fontSize: 25, fontWeight: '600' },
+  screen: { flex: 1, backgroundColor: brand.white },
+  topBar: { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, backgroundColor: brand.white, borderBottomWidth: 1, borderBottomColor: '#E6EAF2' },
+  title: { position: 'absolute', left: 64, right: 64, textAlign: 'center', color: brand.blue, fontSize: 18, fontWeight: '600' },
+  topBarSpacer: { width: 48, height: 48 },
+  body: { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.lg, backgroundColor: '#F5F7FC' },
   subtitle: { color: brand.muted, fontSize: 14, lineHeight: 20 },
   poppins: { fontFamily: 'Poppins_600SemiBold' },
   inter: { fontFamily: 'Inter_400Regular' },
@@ -195,8 +198,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.sm,
   },
-  backButton: { padding: spacing.xs },
-  backArrow: { color: brand.blue, fontSize: 28, lineHeight: 32 },
+  backButton: { width: 48, height: 48, alignItems: 'flex-start', justifyContent: 'center' },
+  backArrow: { color: brand.blue, fontSize: 30, lineHeight: 36, transform: [{ translateY: -7 }] },
   cardHeading: { flex: 1, gap: spacing.xs },
   cardTitle: { color: brand.ink, fontSize: 16, fontWeight: '600' },
   date: { color: brand.muted, fontSize: 12, lineHeight: 18 },

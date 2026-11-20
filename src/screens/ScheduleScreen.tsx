@@ -11,6 +11,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AsyncState } from "@/components/common/AsyncState";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { TabBarDivider } from "@/components/TabBarDivider";
 import {
   subscribeClasses,
   subscribeSessions,
@@ -464,6 +465,7 @@ export default function ScheduleScreen() {
           />
         </AsyncState>
       )}
+      <TabBarDivider />
     </SafeAreaView>
   );
 }

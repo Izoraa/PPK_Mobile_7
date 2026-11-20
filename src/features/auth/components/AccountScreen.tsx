@@ -7,6 +7,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { logout } from '@/features/auth/authService';
+import { TabBarDivider } from '@/components/TabBarDivider';
 import { useApp } from '@/state/AppContext';
 import { spacing } from '@/theme';
 
@@ -61,16 +62,13 @@ export default function AccountScreen() {
   const roleLabel = currentUser.role === 'assistant' ? 'Asisten praktikum' : 'Praktikan';
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.heading}>
-          <Text accessibilityRole="header" style={[styles.title, fontsLoaded && styles.poppins]}>
-            Profil akun
-          </Text>
-          <Text style={[styles.description, fontsLoaded && styles.inter]}>
-            Informasi akun LabCheckIn Anda.
-          </Text>
-        </View>
+    <SafeAreaView edges={['top', 'left', 'right']} style={styles.screen}>
+      <View style={styles.topBar}>
+        <Text accessibilityRole="header" style={[styles.topBarTitle, fontsLoaded && styles.poppins]}>
+          Profil akun
+        </Text>
+      </View>
+      <ScrollView style={styles.body} contentContainerStyle={styles.content}>
 
         <View style={styles.profileCard}>
           <View pointerEvents="none" style={styles.profileAccent} />
@@ -136,23 +134,33 @@ export default function AccountScreen() {
           </Link>
         )}
       </ScrollView>
+      <TabBarDivider />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#F5F7FD' },
+  screen: { flex: 1, backgroundColor: brand.white },
+  body: { flex: 1, backgroundColor: '#F5F7FD' },
+  topBar: {
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: brand.white,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E6EAF2',
+  },
+  topBarTitle: { textAlign: 'center', color: brand.blue, fontSize: 18, fontWeight: '600' },
   content: {
     alignSelf: 'center',
     width: '100%',
     maxWidth: 480,
     padding: spacing.lg,
-    paddingTop: spacing.xl,
+    paddingTop: spacing.md,
     paddingBottom: 40,
-    gap: spacing.md,
+    gap: spacing.sm,
   },
-  heading: { gap: spacing.xs, marginBottom: spacing.sm },
-  title: { color: brand.blue, fontSize: 28, fontWeight: '600' },
+  heading: { marginBottom: 0 },
   description: { color: brand.muted, fontSize: 14, lineHeight: 21 },
   poppins: { fontFamily: 'Poppins_600SemiBold' },
   inter: { fontFamily: 'Inter_400Regular' },
