@@ -16,6 +16,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   getAttendanceAuth,
   getAttendanceFirestore,
+  getAttendanceParticipationReference,
   getAttendanceSessionReference,
 } from './service';
 import type {
@@ -205,6 +206,56 @@ export function useMyAttendanceHistory(enabled = true): SubscriptionState<Firest
   }, []);
 
   return useAttendanceSubscription(buildQuery, enabled);
+}
+
+type ConfirmedSessionAttendance =
+  | { status: 'loading' | 'unconfirmed' | 'error' }
+  | { status: 'ready'; checkedInAt: string | null };
+
+export function useMyConfirmedSessionAttendance(sessionId: string): ConfirmedSessionAttendance {
+  const [state, setState] = useState<ConfirmedSessionAttendance>({ status: 'loading' });
+
+  useEffect(() => {
+    let active = true;
+    let unsubscribe = () => {};
+    const showError = () => {
+      if (active) setState({ status: 'error' });
+    };
+
+    try {
+      const uid = getAttendanceAuth().currentUser?.uid;
+      if (!uid) {
+        deferStateUpdate(showError);
+      } else {
+        unsubscribe = onSnapshot(
+          getAttendanceParticipationReference(sessionId, uid),
+          { includeMetadataChanges: true },
+          (snapshot) => {
+            if (!active) return;
+            if (snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) {
+              setState({ status: 'unconfirmed' });
+              return;
+            }
+
+            const attendance = snapshot.exists() ? readAttendanceRecord(snapshot) : null;
+            setState(attendance && !attendance.checkedInAt
+              ? { status: 'unconfirmed' }
+              : { status: 'ready', checkedInAt: attendance?.checkedInAt ?? null });
+          },
+          showError,
+        );
+      }
+    } catch {
+      deferStateUpdate(showError);
+    }
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [sessionId]);
+
+  return state;
 }
 
 export async function getAttendanceSessionMetadata(

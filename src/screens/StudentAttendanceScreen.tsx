@@ -6,6 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AsyncState } from '@/components/common/AsyncState';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { StudentQrScanner } from '@/features/attendance/components/StudentQrScanner';
+import { formatAttendanceTimestamp } from '@/features/attendance/format';
+import { useMyConfirmedSessionAttendance } from '@/features/attendance/subscriptions';
 import { subscribeSession, type SessionDoc } from '@/features/practicum';
 import { colors, radius, spacing } from '@/theme';
 import type { AppErrorCode } from '@/types';
@@ -29,6 +31,8 @@ function mapSessionError(error: Error): LoadError {
 
 function StudentAttendanceSession({ sessionId }: { sessionId: string }) {
   const isFocused = useIsFocused();
+  const attendance = useMyConfirmedSessionAttendance(sessionId);
+  const checkedInAt = attendance.status === 'ready' ? attendance.checkedInAt : null;
   const [session, setSession] = useState<SessionDoc | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<LoadError | null>(null);
@@ -73,9 +77,20 @@ function StudentAttendanceSession({ sessionId }: { sessionId: string }) {
             })}
           </Text>
           <StatusBadge status={session.status} />
+          {checkedInAt && (
+            <Text accessibilityLiveRegion="polite" style={styles.attendanceStatus}>
+              Presensi tercatat pada {formatAttendanceTimestamp(checkedInAt)}.
+            </Text>
+          )}
+          {attendance.status === 'unconfirmed' && (
+            <Text style={styles.body}>Status presensi menunggu konfirmasi server.</Text>
+          )}
+          {attendance.status === 'error' && (
+            <Text style={styles.body}>Status presensi belum dapat diperiksa.</Text>
+          )}
           {session.isArchived ? (
             <Text style={styles.body}>Sesi sudah diarsipkan.</Text>
-          ) : isFocused && session.status === 'open' && !metadata.fromCache && !metadata.hasPendingWrites ? (
+          ) : isFocused && !checkedInAt && session.status === 'open' && !metadata.fromCache && !metadata.hasPendingWrites ? (
             <StudentQrScanner sessionId={session.id} />
           ) : null}
         </View>
@@ -126,5 +141,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
   },
   sessionTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },
+  attendanceStatus: { color: colors.text, fontSize: 14, fontWeight: '600' },
   body: { color: colors.textMuted, fontSize: 14, lineHeight: 20 },
 });

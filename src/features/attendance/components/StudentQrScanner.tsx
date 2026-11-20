@@ -10,7 +10,7 @@ import { checkSessionQrPayload } from '../qrPayload';
 import { verifySessionAttendanceQr, type QrVerificationErrorCode } from '../qrService';
 
 type ScanState =
-  | { status: 'idle' | 'scanning' | 'camera-error' | 'verified' }
+  | { status: 'idle' | 'scanning' | 'camera-error' }
   | { status: 'verifying'; payload: string }
   | { status: 'retryable-error'; payload: string; message: string }
   | { status: 'rejected'; message: string };
@@ -98,7 +98,12 @@ export function StudentQrScanner({ sessionId }: { sessionId: string }) {
 
       setScan((current) => {
         if (current !== pendingScan) return current;
-        if (result.ok) return { status: 'verified' };
+        if (result.ok) {
+          return {
+            status: 'rejected',
+            message: 'Kode QR dan keanggotaan kelas terverifikasi. Lokasi laboratorium belum dapat diverifikasi.',
+          };
+        }
 
         const message = getVerificationMessage(result.error.code);
         return result.error.retryable
@@ -216,18 +221,14 @@ export function StudentQrScanner({ sessionId }: { sessionId: string }) {
     );
   }
 
-  const verified = scan.status === 'verified';
   const failed = scan.status === 'rejected' || scan.status === 'retryable-error';
   const cameraError = scan.status === 'camera-error';
   return (
     <View style={styles.content}>
-      {verified && (
-        <Text accessibilityLiveRegion="polite" style={styles.body}>
-          Kode QR dan keanggotaan kelas terverifikasi. Presensi belum tercatat.
-        </Text>
-      )}
       {failed && (
-        <Text accessibilityRole="alert" style={styles.body}>{scan.message}</Text>
+        <Text accessibilityRole="alert" style={styles.body}>
+          {scan.message} Presensi tidak dicatat.
+        </Text>
       )}
       {scan.status === 'retryable-error' && (
         <ScannerButton
@@ -240,7 +241,7 @@ export function StudentQrScanner({ sessionId }: { sessionId: string }) {
       {cameraError && (
         <Text accessibilityRole="alert" style={styles.body}>Kamera tidak dapat dibuka. Coba lagi.</Text>
       )}
-      <ScannerButton label={verified || failed ? 'Pindai Ulang' : 'Buka Kamera'} onPress={startScan} />
+      <ScannerButton label={failed ? 'Pindai Ulang' : 'Buka Kamera'} onPress={startScan} />
     </View>
   );
 }
