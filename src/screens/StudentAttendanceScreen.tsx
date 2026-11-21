@@ -9,7 +9,7 @@ import { StudentQrScanner } from '@/features/attendance/components/StudentQrScan
 import { formatAttendanceTimestamp } from '@/features/attendance/format';
 import { useMyConfirmedSessionAttendance } from '@/features/attendance/subscriptions';
 import { subscribeSession, type SessionDoc } from '@/features/practicum';
-import { colors, radius, spacing } from '@/theme';
+import { colors, radius, spacing, shadows } from '@/theme';
 import type { AppErrorCode } from '@/types';
 
 type LoadError = { code: AppErrorCode; retryable: boolean };
@@ -64,35 +64,56 @@ function StudentAttendanceSession({ sessionId }: { sessionId: string }) {
         setStatus('loading');
         setAttempt((value) => value + 1);
       }}
-      emptyTitle="Sesi tidak ditemukan"
-      emptyMessage="Kembali ke jadwal untuk memilih sesi praktikum."
+      emptyTitle="Sesi Tidak Ditemukan"
+      emptyMessage="Kembali ke jadwal untuk memilih sesi praktikum yang tersedia."
     >
       {session && (
         <View style={styles.card}>
-          <Text accessibilityRole="header" style={styles.sessionTitle}>{session.title}</Text>
-          <Text style={styles.body}>{session.room}</Text>
-          <Text style={styles.body}>
-            {session.startsAt?.toDate?.().toLocaleString('id-ID', {
-              dateStyle: 'medium',
-              timeStyle: 'short',
-            })}
-          </Text>
-          <StatusBadge status={session.status} />
-          {checkedInAt && (
-            <Text accessibilityLiveRegion="polite" style={styles.attendanceStatus}>
-              Presensi tercatat pada {formatAttendanceTimestamp(checkedInAt)}.
+          <View style={styles.cardHeader}>
+            <Text accessibilityRole="header" style={styles.sessionTitle}>{session.title}</Text>
+            <StatusBadge status={session.status} size="sm" />
+          </View>
+
+          <View style={styles.metaRow}>
+            <Text style={styles.roomBadge}>Ruang {session.room}</Text>
+            <Text style={styles.metaBullet}>•</Text>
+            <Text style={styles.metaText}>
+              {session.startsAt?.toDate?.().toLocaleString('id-ID', {
+                dateStyle: 'medium',
+                timeStyle: 'short',
+              })}
             </Text>
+          </View>
+
+          {checkedInAt && (
+            <View style={styles.confirmedBox}>
+              <Text style={styles.confirmedIcon}>✅</Text>
+              <Text accessibilityLiveRegion="polite" style={styles.attendanceStatus}>
+                Presensi Anda berhasil tercatat pada {formatAttendanceTimestamp(checkedInAt)}.
+              </Text>
+            </View>
           )}
+
           {!checkedInAt && attendance.status === 'unconfirmed' && (
-            <Text style={styles.body}>Status presensi menunggu konfirmasi server.</Text>
+            <View style={styles.noticeBox}>
+              <Text style={styles.noticeText}>⏳ Status presensi menunggu konfirmasi server.</Text>
+            </View>
           )}
+
           {!checkedInAt && attendance.status === 'error' && (
-            <Text style={styles.body}>Status presensi belum dapat diperiksa.</Text>
+            <View style={styles.errorBox}>
+              <Text style={styles.errorText}>⚠️ Status presensi belum dapat diperiksa dari server.</Text>
+            </View>
           )}
+
           {session.isArchived ? (
-            <Text style={styles.body}>Sesi sudah diarsipkan.</Text>
+            <View style={styles.noticeBox}>
+              <Text style={styles.noticeText}>Sesi praktikum ini sudah diarsipkan.</Text>
+            </View>
           ) : isFocused && !checkedInAt && session.status === 'open' && !metadata.fromCache && !metadata.hasPendingWrites ? (
-            <StudentQrScanner sessionId={session.id} onConfirmed={setApiCheckedInAt} />
+            <View style={styles.scannerContainer}>
+              <StudentQrScanner sessionId={session.id} onConfirmed={setApiCheckedInAt} />
+            </View>
           ) : null}
         </View>
       )}
@@ -113,7 +134,7 @@ export default function StudentAttendanceScreen() {
           asChild
         >
           <Pressable accessibilityRole="button" style={styles.backButton}>
-            <Text style={styles.backLabel}>{id ? 'Kembali ke detail sesi' : 'Kembali ke jadwal'}</Text>
+            <Text style={styles.backLabel}>← {id ? 'Kembali ke detail sesi' : 'Kembali ke jadwal'}</Text>
           </Pressable>
         </Link>
         <Text accessibilityRole="header" style={styles.title}>Presensi Praktikum</Text>
@@ -130,18 +151,105 @@ export default function StudentAttendanceScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   content: { flexGrow: 1, padding: spacing.md, gap: spacing.md },
-  title: { color: colors.text, fontSize: 24, fontWeight: '700' },
-  backButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
-  backLabel: { color: colors.primary, fontSize: 14, fontWeight: '600' },
+  title: { color: colors.text, fontSize: 22, fontWeight: '700', letterSpacing: -0.3 },
+  backButton: {
+    alignSelf: 'flex-start',
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+  },
+  backLabel: { color: colors.text, fontSize: 13, fontWeight: '600' },
   card: {
     gap: spacing.sm,
-    padding: spacing.md,
+    padding: spacing.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface,
+    ...shadows.sm,
   },
-  sessionTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },
-  attendanceStatus: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  body: { color: colors.textMuted, fontSize: 14, lineHeight: 20 },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  sessionTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '700',
+    flex: 1,
+    letterSpacing: -0.2,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: spacing.xs,
+  },
+  roomBadge: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  metaBullet: {
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+  metaText: {
+    color: colors.textMuted,
+    fontSize: 13,
+  },
+  confirmedBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.successBg,
+    borderWidth: 1,
+    borderColor: colors.successBorder,
+    marginTop: spacing.xs,
+  },
+  confirmedIcon: {
+    fontSize: 20,
+  },
+  attendanceStatus: {
+    color: colors.successText,
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+    lineHeight: 20,
+  },
+  noticeBox: {
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.neutralBg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  noticeText: {
+    color: colors.neutralText,
+    fontSize: 13,
+  },
+  errorBox: {
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.dangerBg,
+    borderWidth: 1,
+    borderColor: colors.dangerBorder,
+  },
+  errorText: {
+    color: colors.dangerText,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  scannerContainer: {
+    marginTop: spacing.sm,
+  },
 });

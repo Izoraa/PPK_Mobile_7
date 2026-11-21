@@ -4,7 +4,7 @@ import encodeQR from "qr";
 import { useEffect, useRef, useState } from "react";
 import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { colors, radius, spacing } from "@/theme";
+import { colors, radius, spacing, shadows } from "@/theme";
 import type { AppErrorCode } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
 
@@ -101,98 +101,187 @@ export function SessionAttendanceQr({ sessionId }: { sessionId: string }) {
         displayUntil,
       });
     } catch {
-      if (!controller.signal.aborted) showImageError();
+      if (controller.signal.aborted) return;
+      setDisplay({
+        status: "error",
+        message: "Pengambilan kode QR bermasalah.",
+        retryable: true,
+      });
     } finally {
-      request.current = null;
+      if (request.current === controller) {
+        request.current = null;
+      }
     }
   };
-
-  const loading = display.status === "loading";
-  const expired = display.status === "expired";
 
   return (
     <View style={styles.card}>
       <Text accessibilityRole="header" style={styles.title}>
-        Kode QR Presensi
+        Tiket Presensi QR Sesi
       </Text>
-      {display.status === "ready" ? (
-        <>
-          <Image
-            accessible
-            accessibilityLabel="Kode QR presensi untuk sesi ini"
-            source={{ uri: display.imageUri }}
-            style={styles.image}
-            contentFit="contain"
-            cachePolicy="none"
-            onError={showImageError}
-          />
-          <Text style={styles.message}>
-            Berlaku sampai pukul{" "}
-            {new Date(display.expiresAt).toLocaleTimeString("id-ID", {
-              hour: "2-digit",
-              minute: "2-digit",
-              second: "2-digit",
-            })}
-            .
-          </Text>
-        </>
-      ) : (
-        <>
-          {display.status === "error" && (
-            <Text accessibilityRole="alert" style={styles.message}>
-              {display.message}
+      <Text style={styles.subtitle}>
+        Tampilkan kode QR dinamis ini kepada praktikan di dalam laboratorium untuk presensi kehadiran.
+      </Text>
+
+      {display.status === "ready" && (
+        <View style={styles.qrContainer}>
+          <View style={styles.qrFrame}>
+            <Image
+              accessibilityLabel="Kode QR presensi sesi"
+              contentFit="contain"
+              onError={showImageError}
+              source={{ uri: display.imageUri }}
+              style={styles.qrImage}
+            />
+          </View>
+          <View style={styles.activeBadge}>
+            <View style={styles.activeDot} />
+            <Text style={styles.activeBadgeText}>
+              Kode aktif hingga {new Date(display.expiresAt).toLocaleTimeString("id-ID")}
             </Text>
-          )}
-          {expired && (
-            <Text accessibilityRole="alert" style={styles.message}>
-              Kode QR presensi sudah kedaluwarsa.
-            </Text>
-          )}
-          {(display.status !== "error" || display.retryable) && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ busy: loading, disabled: loading }}
-              disabled={loading}
-              onPress={showQr}
-              style={[styles.button, loading && styles.disabledButton]}
-            >
-              <Text style={styles.buttonLabel}>
-                {loading ? "Memuat kode QR…" : expired ? "Tampilkan Kode QR Baru" : "Tampilkan Kode QR"}
-              </Text>
-            </Pressable>
-          )}
-        </>
+          </View>
+        </View>
       )}
+
+      {display.status === "expired" && (
+        <View style={styles.expiredBox}>
+          <Text style={styles.expiredText}>⏰ Masa aktif tiket QR telah berakhir. Perbarui untuk menampilkan tiket baru.</Text>
+        </View>
+      )}
+
+      {display.status === "error" && (
+        <View style={styles.errorBox}>
+          <Text accessibilityRole="alert" style={styles.errorText}>
+            ⚠️ {display.message}
+          </Text>
+        </View>
+      )}
+
+      <Pressable
+        accessibilityRole="button"
+        disabled={display.status === "loading"}
+        onPress={showQr}
+        style={({ pressed }) => [
+          styles.button,
+          display.status === "loading" && styles.disabledButton,
+          pressed && styles.pressed,
+        ]}
+      >
+        <Text style={styles.buttonText}>
+          {display.status === "loading"
+            ? "Menyiapkan Kode QR…"
+            : display.status === "ready"
+              ? "Perbarui Kode QR"
+              : "Tampilkan Kode QR Presensi"}
+        </Text>
+      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    padding: spacing.md,
     gap: spacing.sm,
-    borderRadius: radius.md,
-    backgroundColor: colors.card,
+    padding: spacing.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
+    marginBottom: spacing.md,
+    ...shadows.sm,
   },
-  title: { color: colors.text, fontSize: 18, fontWeight: "700" },
-  image: {
-    alignSelf: "center",
-    width: "100%",
-    maxWidth: 248,
-    aspectRatio: 1,
+  title: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: colors.text,
+    letterSpacing: -0.2,
+  },
+  subtitle: {
+    fontSize: 13,
+    color: colors.textMuted,
+    lineHeight: 19,
+  },
+  qrContainer: {
+    alignItems: "center",
+    marginVertical: spacing.sm,
+    gap: spacing.sm,
+  },
+  qrFrame: {
+    padding: spacing.md,
     backgroundColor: "#FFFFFF",
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.md,
   },
-  message: { color: colors.textMuted, fontSize: 14 },
-  button: {
-    alignSelf: "flex-start",
-    justifyContent: "center",
-    minHeight: 44,
-    borderRadius: radius.sm,
+  qrImage: {
+    width: 220,
+    height: 220,
+  },
+  activeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     paddingHorizontal: spacing.md,
-    backgroundColor: colors.primary,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.full,
+    backgroundColor: colors.successBg,
+    borderWidth: 1,
+    borderColor: colors.successBorder,
   },
-  disabledButton: { opacity: 0.65 },
-  buttonLabel: { color: "#FFFFFF", fontSize: 14, fontWeight: "600" },
+  activeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.success,
+  },
+  activeBadgeText: {
+    color: colors.successText,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  expiredBox: {
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.warningBg,
+    borderWidth: 1,
+    borderColor: colors.warningBorder,
+  },
+  expiredText: {
+    color: colors.warningText,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  errorBox: {
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.dangerBg,
+    borderWidth: 1,
+    borderColor: colors.dangerBorder,
+  },
+  errorText: {
+    color: colors.dangerText,
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  button: {
+    minHeight: 48,
+    borderRadius: radius.md,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.xs,
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  pressed: {
+    opacity: 0.85,
+  },
+  buttonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "700",
+  },
 });
