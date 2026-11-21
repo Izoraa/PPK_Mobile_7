@@ -19,7 +19,11 @@ export function StudentSessionActions({ sessionId, sessionTitle, sessionIsLive }
     <>
       {sessionIsLive && (
         <Link href={`/(student)/attendance/${encodeURIComponent(sessionId)}` as Href} asChild>
-          <Pressable accessibilityRole="button" style={styles.attendanceButton}>
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.attendanceButton, pressed && styles.pressed]}
+          >
+            <Text style={styles.attendanceIcon}>📷</Text>
             <Text style={styles.attendanceLabel}>Buka Presensi QR</Text>
           </Pressable>
         </Link>
@@ -37,12 +41,25 @@ export function StudentSessionActions({ sessionId, sessionTitle, sessionIsLive }
 
 const styles = StyleSheet.create({
   attendanceButton: {
-    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 44,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.sm,
+    gap: spacing.sm,
+    minHeight: 48,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
     backgroundColor: colors.primary,
+    marginBottom: spacing.xs,
   },
-  attendanceLabel: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  pressed: {
+    opacity: 0.85,
+  },
+  attendanceIcon: {
+    fontSize: 18,
+  },
+  attendanceLabel: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
 });

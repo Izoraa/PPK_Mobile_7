@@ -1,6 +1,6 @@
 import React from 'react';
 import { Text, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { colors, radius, spacing } from '@/theme';
+import { colors, radius, spacing, shadows } from '@/theme';
 import { StatusBadge, type SessionStatus } from '@/components/common/StatusBadge';
 
 export interface SessionCardProps {
@@ -40,26 +40,30 @@ export function SessionCard({ session, onPress }: SessionCardProps) {
     <TouchableOpacity
       style={styles.card}
       onPress={onPress}
-      activeOpacity={0.8}
+      activeOpacity={0.75}
     >
       <View style={styles.headerRow}>
         <Text style={styles.title} numberOfLines={1}>{displayTitle}</Text>
-        <StatusBadge status={session.status} />
+        <StatusBadge status={session.status} size="sm" />
       </View>
-      <Text style={styles.room}>Ruang: {session.room}</Text>
-      {timeDisplay ? <Text style={styles.time}>{timeDisplay}</Text> : null}
+
+      <View style={styles.metaRow}>
+        <Text style={styles.roomBadge}>Ruang {session.room}</Text>
+        {timeDisplay ? <Text style={styles.timeText}>• {timeDisplay}</Text> : null}
+      </View>
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.surface,
     padding: spacing.md,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: spacing.sm,
+    ...shadows.sm,
   },
   headerRow: {
     flexDirection: 'row',
@@ -73,16 +77,23 @@ const styles = StyleSheet.create({
     color: colors.text,
     flex: 1,
     marginRight: spacing.sm,
+    letterSpacing: -0.2,
   },
-  room: {
-    fontSize: 14,
-    color: colors.textMuted,
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
     marginTop: 2,
   },
-  time: {
+  roomBadge: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  timeText: {
     fontSize: 13,
     color: colors.textMuted,
-    marginTop: 4,
   },
 });
 

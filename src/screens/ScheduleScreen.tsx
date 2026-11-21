@@ -20,7 +20,7 @@ import {
   type SessionDoc,
 } from "@/features/practicum";
 import { useApp } from "@/state/AppContext";
-import { colors, radius, spacing } from "@/theme";
+import { colors, radius, spacing, shadows } from "@/theme";
 import type { AppErrorCode } from "@/types";
 
 type LoadStatus = "loading" | "ready" | "error";
@@ -279,7 +279,7 @@ export default function ScheduleScreen() {
         onPress={() =>
           router.push(detailPath.replace("[sessionId]", session.id) as never)
         }
-        activeOpacity={0.7}
+        activeOpacity={0.75}
       >
         <View style={styles.sessionSummaryHeader}>
           {classTitle ? (
@@ -289,18 +289,20 @@ export default function ScheduleScreen() {
           ) : (
             <View style={{ flex: 1 }} />
           )}
-          <StatusBadge status={session.status} />
+          <StatusBadge status={session.status} size="sm" />
         </View>
 
         <Text style={styles.sessionSummaryTitle} numberOfLines={1}>
           {session.title || "Sesi Praktikum"}
         </Text>
 
-        <Text style={styles.sessionSummaryRoom}>Ruang: {session.room}</Text>
-
-        <Text style={styles.sessionSummaryTime}>
-          {formatSessionSchedule(session.startsAt, session.endsAt)}
-        </Text>
+        <View style={styles.sessionSummaryMetaRow}>
+          <Text style={styles.sessionSummaryRoom}>Ruang: {session.room}</Text>
+          <Text style={styles.sessionSummaryBullet}>•</Text>
+          <Text style={styles.sessionSummaryTime}>
+            {formatSessionSchedule(session.startsAt, session.endsAt)}
+          </Text>
+        </View>
 
         <View style={styles.sessionSummaryFooter}>
           <Text style={styles.sessionSummaryHint}>{hintText}</Text>
@@ -321,6 +323,9 @@ export default function ScheduleScreen() {
     <SafeAreaView edges={["left", "right", "bottom"]} style={styles.screen}>
       <View style={styles.headerRow}>
         <View style={styles.headerLeft}>
+          <View style={styles.brandBadge}>
+            <Text style={styles.brandBadgeText}>LABCHECKIN</Text>
+          </View>
           <Text accessibilityRole="header" style={styles.title}>
             Kelas Praktikum
           </Text>
@@ -438,13 +443,29 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
   },
   headerLeft: {
     flex: 1,
   },
-  title: { color: colors.text, fontSize: 24, fontWeight: "700" },
-  userName: { color: colors.textMuted, fontSize: 15, marginTop: 2 },
+  brandBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+    marginBottom: spacing.xs,
+  },
+  brandBadgeText: {
+    color: colors.primary,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+  },
+  title: { color: colors.text, fontSize: 24, fontWeight: "700", letterSpacing: -0.3 },
+  userName: { color: colors.textMuted, fontSize: 14, marginTop: 2 },
   accountLink: {
     color: colors.primary,
     fontSize: 16,
@@ -462,17 +483,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   leaveButton: {
-    backgroundColor: "#EFF6FF",
+    backgroundColor: colors.primaryLight,
     borderWidth: 1,
-    borderColor: "#BFDBFE",
+    borderColor: '#C7D7FE',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: radius.md,
+    borderRadius: radius.full,
   },
   leaveButtonText: {
     color: colors.primary,
-    fontWeight: "600",
-    fontSize: 14,
+    fontWeight: "700",
+    fontSize: 13,
   },
   content: {
     flexGrow: 1,
@@ -481,19 +502,21 @@ const styles = StyleSheet.create({
   },
   separator: { height: spacing.sm },
   sectionHeader: {
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 13,
+    fontWeight: "700",
     color: colors.textMuted,
-    marginBottom: spacing.xs,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
   classCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    padding: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.md + 2,
     borderWidth: 1,
     borderColor: colors.border,
+    ...shadows.sm,
   },
   classCardTop: {
     flexDirection: "row",
@@ -502,22 +525,25 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   courseName: {
-    fontSize: 14,
+    fontSize: 13,
+    fontWeight: "600",
     color: colors.textMuted,
     flex: 1,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
   codeBadge: {
-    backgroundColor: colors.background,
+    backgroundColor: colors.primaryLight,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: radius.sm,
+    paddingVertical: 3,
+    borderRadius: radius.full,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#C7D7FE',
   },
   codeText: {
     fontSize: 12,
-    fontWeight: "600",
-    color: colors.text,
+    fontWeight: "700",
+    color: colors.primary,
   },
   className: {
     fontSize: 18,
@@ -526,9 +552,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   cardHint: {
-    fontSize: 12,
+    fontSize: 13,
     color: colors.primary,
-    fontWeight: "500",
+    fontWeight: "600",
     marginTop: spacing.xs,
   },
 
@@ -546,6 +572,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: colors.text,
+    letterSpacing: -0.2,
   },
   summarySectionSubtitle: {
     fontSize: 13,
@@ -570,24 +597,25 @@ const styles = StyleSheet.create({
   },
   subSectionLabel: {
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
     color: colors.textMuted,
     marginBottom: spacing.xs,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   sessionSummaryCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
     padding: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
+    ...shadows.sm,
   },
   sessionSummaryCardOpen: {
-    borderColor: colors.success,
+    borderColor: colors.successBorder,
     borderWidth: 1.5,
-    backgroundColor: "#F0FDF4",
+    backgroundColor: colors.successBg,
   },
   sessionSummaryHeader: {
     flexDirection: "row",
@@ -597,7 +625,7 @@ const styles = StyleSheet.create({
   },
   sessionSummaryClass: {
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "700",
     color: colors.primary,
     flex: 1,
     marginRight: spacing.sm,
@@ -607,31 +635,40 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: colors.text,
   },
-  sessionSummaryRoom: {
-    fontSize: 14,
+  sessionSummaryMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 4,
+  },
+  sessionSummaryBullet: {
     color: colors.textMuted,
-    marginTop: 2,
+    fontSize: 12,
+  },
+  sessionSummaryRoom: {
+    fontSize: 13,
+    color: colors.textMuted,
   },
   sessionSummaryTime: {
     fontSize: 13,
     color: colors.textMuted,
-    marginTop: 4,
   },
   sessionSummaryFooter: {
     marginTop: spacing.sm,
-    paddingTop: spacing.xs,
+    paddingTop: spacing.xs + 2,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
   sessionSummaryHint: {
     fontSize: 12,
     color: colors.primary,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   emptySummaryCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    padding: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
     borderWidth: 1,
     borderColor: colors.border,
     borderStyle: "dashed",
