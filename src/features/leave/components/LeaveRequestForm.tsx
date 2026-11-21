@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { colors, radius, spacing } from '@/theme';
+import { colors, radius, spacing, shadows } from '@/theme';
 import type { Result, SessionStatus } from '@/types';
 import { getErrorMessage } from '@/utils/errors';
 
@@ -75,60 +75,70 @@ export function LeaveRequestForm({
   return (
     <View style={styles.card}>
       <Text accessibilityRole="header" style={styles.heading}>
-        Ajukan izin
+        Ajukan Izin Praktikum
       </Text>
 
-      <Text style={styles.label}>Sesi</Text>
-      <Text style={styles.session}>{sessionTitle}</Text>
+      <View style={styles.sessionBox}>
+        <Text style={styles.sessionLabel}>Sesi Praktikum:</Text>
+        <Text style={styles.sessionTitle}>{sessionTitle}</Text>
+      </View>
 
       <AiSupportNotice />
 
       {!sessionAcceptsLeave ? (
-        <Text style={styles.error}>Izin tidak dapat diajukan untuk sesi yang sudah ditutup.</Text>
+        <View style={styles.errorBox}>
+          <Text style={styles.error}>Izin tidak dapat diajukan untuk sesi yang sudah ditutup.</Text>
+        </View>
       ) : !isEligible ? (
-        <Text style={styles.error}>
-          {eligibilityMessage ?? 'Anda belum dapat mengajukan izin untuk sesi ini.'}
-        </Text>
+        <View style={styles.errorBox}>
+          <Text style={styles.error}>
+            {eligibilityMessage ?? 'Anda belum dapat mengajukan izin untuk sesi ini.'}
+          </Text>
+        </View>
       ) : null}
 
-      <Text style={styles.label}>Alasan izin</Text>
-      <TextInput
-        accessibilityLabel="Alasan izin"
-        value={reason}
-        onChangeText={(value) => {
-          setReason(value);
-          setSubmitError(null);
-        }}
-        editable={!isSubmitting && !isSubmitted}
-        multiline
-        maxLength={1000}
-        placeholder="Jelaskan alasan izin (10–1.000 karakter)"
-        placeholderTextColor={colors.textMuted}
-        textAlignVertical="top"
-        style={styles.input}
-      />
-      <Text style={styles.counter}>{Array.from(reason.trim()).length}/1.000 karakter</Text>
+      <View style={styles.field}>
+        <Text style={styles.label}>Alasan Izin</Text>
+        <TextInput
+          accessibilityLabel="Alasan izin"
+          value={reason}
+          onChangeText={(value) => {
+            setReason(value);
+            setSubmitError(null);
+          }}
+          editable={!isSubmitting && !isSubmitted}
+          multiline
+          maxLength={1000}
+          placeholder="Jelaskan alasan izin Anda secara jelas (10–1.000 karakter)"
+          placeholderTextColor="#98A2B3"
+          textAlignVertical="top"
+          style={styles.input}
+        />
+        <Text style={styles.counter}>{Array.from(reason.trim()).length}/1.000 karakter</Text>
+      </View>
 
-      {validationMessage ? <Text style={styles.error}>{validationMessage}</Text> : null}
-      {submitError ? <Text accessibilityRole="alert" style={styles.error}>{submitError}</Text> : null}
+      {validationMessage ? <Text style={styles.errorText}>⚠️ {validationMessage}</Text> : null}
+      {submitError ? <Text accessibilityRole="alert" style={styles.errorText}>⚠️ {submitError}</Text> : null}
       {isSubmitted ? (
-        <Text accessibilityRole="alert" style={styles.success}>
-          Pengajuan izin berhasil dikirim.
-        </Text>
+        <View style={styles.successBox}>
+          <Text accessibilityRole="alert" style={styles.success}>
+            ✅ Pengajuan izin berhasil dikirimkan.
+          </Text>
+        </View>
       ) : null}
 
       <Text style={styles.notice}>
-        Periksa alasan sebelum mengirim. Pengajuan tidak dapat diedit atau dibatalkan setelah dikirim.
+        Catatan: Periksa alasan sebelum mengirim. Pengajuan tidak dapat diedit setelah dikirim.
       </Text>
 
       <Pressable
         accessibilityRole="button"
         onPress={handleSubmit}
         disabled={!canSubmit}
-        style={[styles.button, !canSubmit && styles.buttonDisabled]}
+        style={({ pressed }) => [styles.button, !canSubmit && styles.buttonDisabled, pressed && canSubmit && styles.pressed]}
       >
         <Text style={styles.buttonText}>
-          {isSubmitting ? 'Mengirim…' : isSubmitted ? 'Sudah dikirim' : 'Kirim pengajuan izin'}
+          {isSubmitting ? 'Mengirimkan…' : isSubmitted ? 'Sudah Dikirim' : 'Kirim Pengajuan Izin'}
         </Text>
       </Pressable>
     </View>
@@ -137,38 +147,68 @@ export function LeaveRequestForm({
 
 const styles = StyleSheet.create({
   card: {
-    gap: spacing.sm,
+    gap: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.sm,
+  },
+  heading: { color: colors.text, fontSize: 18, fontWeight: '700', letterSpacing: -0.2 },
+  sessionBox: {
     padding: spacing.md,
     borderRadius: radius.md,
-    backgroundColor: colors.card,
+    backgroundColor: colors.neutralBg,
     borderWidth: 1,
     borderColor: colors.border,
+    gap: 2,
   },
-  heading: { color: colors.text, fontSize: 20, fontWeight: '700' },
-  label: { color: colors.text, fontSize: 14, fontWeight: '600', marginTop: spacing.sm },
-  session: { color: colors.text, fontSize: 16 },
+  sessionLabel: { color: colors.textMuted, fontSize: 12, fontWeight: '600' },
+  sessionTitle: { color: colors.primary, fontSize: 15, fontWeight: '700' },
+  field: {
+    gap: spacing.xs,
+  },
+  label: { color: colors.text, fontSize: 14, fontWeight: '600' },
   input: {
-    minHeight: 140,
+    minHeight: 120,
     padding: spacing.md,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
     color: colors.text,
-    backgroundColor: colors.background,
-    fontSize: 16,
+    backgroundColor: colors.surface,
+    fontSize: 15,
+    lineHeight: 22,
   },
   counter: { color: colors.textMuted, fontSize: 12, textAlign: 'right' },
-  error: { color: colors.danger, fontSize: 14 },
-  success: { color: colors.success, fontSize: 14 },
-  notice: { color: colors.textMuted, fontSize: 14, lineHeight: 20 },
+  errorBox: {
+    padding: spacing.sm + 2,
+    borderRadius: radius.md,
+    backgroundColor: colors.dangerBg,
+    borderWidth: 1,
+    borderColor: colors.dangerBorder,
+  },
+  error: { color: colors.dangerText, fontSize: 13, fontWeight: '500' },
+  errorText: { color: colors.dangerText, fontSize: 13, fontWeight: '600' },
+  successBox: {
+    padding: spacing.sm + 2,
+    borderRadius: radius.md,
+    backgroundColor: colors.successBg,
+    borderWidth: 1,
+    borderColor: colors.successBorder,
+  },
+  success: { color: colors.successText, fontSize: 14, fontWeight: '600' },
+  notice: { color: colors.textMuted, fontSize: 13, lineHeight: 18 },
   button: {
     minHeight: 48,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: spacing.md,
-    borderRadius: radius.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
     backgroundColor: colors.primary,
   },
   buttonDisabled: { opacity: 0.5 },
-  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  buttonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  pressed: { opacity: 0.85 },
 });

@@ -3,10 +3,10 @@ import {
   FlatList,
   Modal,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AttendanceList } from '@/components/session/AttendanceList';
 import { CheckInPanel } from '@/components/session/CheckInPanel';
@@ -36,7 +36,7 @@ export default function AttendanceScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
         <View style={styles.header}>
           <ThemedText style={styles.appName}>LabCheckIn</ThemedText>
         </View>

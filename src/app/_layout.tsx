@@ -4,6 +4,7 @@ import { useColorScheme } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import SessionRestoration from '@/features/auth/components/SessionRestoration';
+import { useNotifications } from '@/features/notifications';
 import { AuthProvider, useAuthRestoration } from '@/providers/AuthProvider';
 import { AppProvider, useApp } from '@/state/AppContext';
 
@@ -23,6 +24,7 @@ function RootNavigator() {
   const colorScheme = useColorScheme();
   const { currentUser } = useApp();
   const { state } = useAuthRestoration();
+  useNotifications();
   // The screen layout holds initial deep links until restoration resolves.
   const restoring = state.status === 'initializing' || state.status === 'error';
   const hasIdentity = currentUser !== null;
