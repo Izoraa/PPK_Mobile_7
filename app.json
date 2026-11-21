@@ -51,6 +51,13 @@
           "locationFullAccuracyPermission": false,
           "motionUsagePermission": false
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#208AEF"
+        }
       ]
     ],
     "experiments": {
