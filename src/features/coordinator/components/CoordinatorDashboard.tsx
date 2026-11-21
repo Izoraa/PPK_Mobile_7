@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  headerLeft: { flex: 1 },
+  headerLeft: { flex: 1, marginRight: spacing.sm },
   title: { color: colors.text, fontSize: 22, fontWeight: '700' },
   userName: { color: colors.textMuted, fontSize: 14, marginTop: 2 },
   addButton: {
@@ -241,6 +241,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radius.md,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   addButtonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 13 },
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
