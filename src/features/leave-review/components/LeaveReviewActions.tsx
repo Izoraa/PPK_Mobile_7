@@ -12,7 +12,7 @@ import {
 import { ConfirmModal } from '@/components/common/ConfirmModal';
 import { approveLeave, rejectLeave } from '../service';
 import type { LeaveReviewRecord } from '../types';
-import { colors, radius, spacing } from '@/theme';
+import { colors, radius, spacing, shadows } from '@/theme';
 
 export interface LeaveReviewActionsProps {
   record: LeaveReviewRecord;
@@ -73,25 +73,45 @@ export function LeaveReviewActions({ record, onSuccess, onError }: LeaveReviewAc
           accessibilityRole="button"
           disabled={processing !== null}
           onPress={() => setApproveVisible(true)}
-          style={[styles.button, styles.approve, processing !== null && styles.disabled]}
+          style={({ pressed }) => [
+            styles.button,
+            styles.approve,
+            processing !== null && styles.disabled,
+            pressed && styles.pressed,
+          ]}
         >
-          {processing === 'approve' ? <ActivityIndicator color={colors.card} /> : <Text style={styles.buttonText}>Setujui</Text>}
+          {processing === 'approve' ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <Text style={styles.buttonText}>✓ Setujui Izin</Text>
+          )}
         </Pressable>
+
         <Pressable
           accessibilityRole="button"
           disabled={processing !== null}
           onPress={() => setRejectVisible(true)}
-          style={[styles.button, styles.reject, processing !== null && styles.disabled]}
+          style={({ pressed }) => [
+            styles.button,
+            styles.reject,
+            processing !== null && styles.disabled,
+            pressed && styles.pressed,
+          ]}
         >
-          {processing === 'reject' ? <ActivityIndicator color={colors.card} /> : <Text style={styles.buttonText}>Tolak</Text>}
+          {processing === 'reject' ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <Text style={styles.buttonText}>✕ Tolak Izin</Text>
+          )}
         </Pressable>
       </View>
 
       <ConfirmModal
         visible={approveVisible}
-        title="Setujui pengajuan izin?"
-        message="Keputusan ini akan disimpan sebagai keputusan manual asisten. Hasil AI tidak menentukan keputusan ini."
-        confirmLabel="Setujui"
+        title="Setujui Pengajuan Izin?"
+        message="Keputusan ini akan disimpan sebagai keputusan manual asisten. Praktikan akan ditandai hadir dengan status izin."
+        confirmLabel="Setujui Sekarang"
+        cancelLabel="Batal"
         onCancel={() => setApproveVisible(false)}
         onConfirm={confirmApprove}
       />
@@ -99,14 +119,15 @@ export function LeaveReviewActions({ record, onSuccess, onError }: LeaveReviewAc
       <Modal visible={rejectVisible} transparent animationType="fade" onRequestClose={() => setRejectVisible(false)}>
         <View style={styles.backdrop}>
           <View style={styles.dialog}>
-            <Text style={styles.title}>Tolak pengajuan izin?</Text>
-            <Text style={styles.message}>Masukkan alasan keputusan. Catatan wajib berisi 5–500 karakter.</Text>
+            <Text style={styles.title}>Tolak Pengajuan Izin?</Text>
+            <Text style={styles.message}>Masukkan alasan penolakan untuk praktikan (5–500 karakter).</Text>
             <TextInput
               accessibilityLabel="Catatan penolakan"
               multiline
               maxLength={500}
               onChangeText={(value) => { setReviewNote(value); setNoteError(null); }}
-              placeholder="Catatan reviewer"
+              placeholder="Contoh: Surat keterangan dokter belum dilampirkan atau tidak valid"
+              placeholderTextColor="#98A2B3"
               style={styles.input}
               value={reviewNote}
             />
@@ -117,7 +138,7 @@ export function LeaveReviewActions({ record, onSuccess, onError }: LeaveReviewAc
                 <Text style={styles.cancelText}>Batal</Text>
               </Pressable>
               <Pressable accessibilityRole="button" onPress={confirmReject} style={styles.rejectButton}>
-                <Text style={styles.buttonText}>Tolak</Text>
+                <Text style={styles.buttonText}>Tolak Izin</Text>
               </Pressable>
             </View>
           </View>
@@ -128,21 +149,71 @@ export function LeaveReviewActions({ record, onSuccess, onError }: LeaveReviewAc
 }
 
 const styles = StyleSheet.create({
-  actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  button: { flex: 1, minHeight: 48, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', padding: spacing.sm },
+  actions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
+  button: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+  },
   approve: { backgroundColor: colors.success },
   reject: { backgroundColor: colors.danger },
   disabled: { opacity: 0.55 },
-  buttonText: { color: colors.card, fontSize: 15, fontWeight: '700' },
-  backdrop: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.5)', justifyContent: 'center', padding: spacing.md },
-  dialog: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.lg, gap: spacing.sm },
-  title: { color: colors.text, fontSize: 18, fontWeight: '700' },
-  message: { color: colors.textMuted, fontSize: 14, lineHeight: 20 },
-  input: { minHeight: 100, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, color: colors.text, padding: spacing.sm, textAlignVertical: 'top' },
+  pressed: { opacity: 0.85 },
+  buttonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(16, 24, 40, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  dialog: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.lg,
+  },
+  title: { color: colors.text, fontSize: 18, fontWeight: '700', letterSpacing: -0.2 },
+  message: { color: colors.textMuted, fontSize: 13, lineHeight: 19 },
+  input: {
+    minHeight: 100,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    color: colors.text,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    fontSize: 14,
+    textAlignVertical: 'top',
+  },
   counter: { color: colors.textMuted, fontSize: 12, textAlign: 'right' },
-  error: { color: colors.danger, fontSize: 13 },
-  dialogActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.sm },
-  cancelButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md },
-  cancelText: { color: colors.textMuted, fontWeight: '600' },
-  rejectButton: { minHeight: 44, minWidth: 80, borderRadius: radius.sm, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  error: { color: colors.dangerText, fontSize: 13, fontWeight: '600' },
+  dialogActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.xs },
+  cancelButton: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+  },
+  cancelText: { color: colors.text, fontWeight: '600', fontSize: 14 },
+  rejectButton: {
+    minHeight: 44,
+    minWidth: 100,
+    borderRadius: radius.md,
+    backgroundColor: colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+  },
 });
