@@ -2,6 +2,7 @@ import { FirebaseError, getApp, getApps } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import {
   doc,
+  getDoc,
   getDocFromServer,
   getFirestore,
   runTransaction,
@@ -256,15 +257,29 @@ export async function checkIn(sessionId: string): Promise<AttendanceResult<Fires
 
     if (!transactionResult.ok) return transactionResult;
 
-    const confirmedSnapshot = await getDocFromServer(participationReference);
-    const confirmed = confirmedSnapshot.data() as (Partial<CheckInRecord> & {
-      attendanceCheckedInAt?: unknown;
-    }) | undefined;
-    const checkedInAt = timestampToIso(rejectedLeaveCheckIn
-      ? confirmed?.attendanceCheckedInAt
-      : confirmed?.checkedInAt);
-    if (!confirmedSnapshot.exists() || !checkedInAt) {
-      return { ok: false, error: { code: 'SERVICE_UNAVAILABLE', retryable: true } };
+    let checkedInAt = new Date().toISOString();
+    const confirmedData = transactionResult.data;
+
+    try {
+      let confirmedSnapshot;
+      try {
+        confirmedSnapshot = await getDocFromServer(participationReference);
+      } catch {
+        confirmedSnapshot = await getDoc(participationReference);
+      }
+      if (confirmedSnapshot.exists()) {
+        const confirmed = confirmedSnapshot.data() as (Partial<CheckInRecord> & {
+          attendanceCheckedInAt?: unknown;
+        }) | undefined;
+        const serverIso = timestampToIso(rejectedLeaveCheckIn
+          ? confirmed?.attendanceCheckedInAt
+          : confirmed?.checkedInAt);
+        if (serverIso) {
+          checkedInAt = serverIso;
+        }
+      }
+    } catch {
+      // Non-fatal: the transaction already committed and attendance is recorded
     }
 
     return {
@@ -272,11 +287,11 @@ export async function checkIn(sessionId: string): Promise<AttendanceResult<Fires
       data: {
         id: participationReference.id,
         sessionId,
-        classId: String(confirmed?.classId ?? ''),
-        assistantId: String(confirmed?.assistantId ?? ''),
+        classId: confirmedData.classId,
+        assistantId: confirmedData.assistantId,
         studentId: user.uid,
-        studentName: String(confirmed?.studentName ?? ''),
-        studentNumber: typeof confirmed?.studentNumber === 'string' ? confirmed.studentNumber : null,
+        studentName: confirmedData.studentName,
+        studentNumber: confirmedData.studentNumber,
         kind: 'attendance',
         checkedInAt,
       },

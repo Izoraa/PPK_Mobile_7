@@ -127,25 +127,29 @@ export function CheckInPanel({ sessionId, attendanceState: sharedAttendanceState
     setIsSubmitting(true);
     setRetryableError(false);
 
-    try {
-      const result = await checkIn(sessionId);
-      if (result.ok) {
+    if (result.ok) {
+      setModalTitle('Presensi Berhasil');
+      setModalMessage(CHECK_IN_SUCCESS_MESSAGE(formatTime(result.data.checkedInAt)));
+    } else {
+      if (alreadyCheckedIn || participation?.kind === 'attendance') {
         setModalTitle('Presensi Berhasil');
-        setModalMessage(CHECK_IN_SUCCESS_MESSAGE(formatTime(result.data.checkedInAt)));
-        setModalVisible(true);
+        setModalMessage('Presensi kamu sudah berhasil tercatat.');
       } else {
+        const message = result.error.code === 'CONFLICT'
+          ? 'Presensi atau pengajuan untuk sesi ini sudah tercatat.'
+          : result.error.code === 'FORBIDDEN'
+            ? 'Kamu belum terdaftar sebagai anggota aktif kelas ini.'
+            : result.error.code === 'UNAUTHENTICATED'
+              ? 'Sesi login sudah berakhir. Masuk kembali untuk melanjutkan.'
+              : session.status === 'closed'
+                ? CHECK_IN_ERROR_MESSAGES.SESSION_CLOSED
+                : session.status === 'not_open'
+                  ? CHECK_IN_ERROR_MESSAGES.SESSION_NOT_OPEN
+                  : 'Status presensi belum dapat dipastikan. Periksa koneksi, lalu muat ulang status sebelum mencoba lagi.';
         setModalTitle('Presensi Gagal');
-        setModalMessage(getErrorMessage(result.error.code));
+        setModalMessage(message);
         setRetryableError(result.error.retryable);
-        setModalVisible(true);
       }
-    } catch {
-      setModalTitle('Presensi Gagal');
-      setModalMessage('Terjadi kesalahan. Silakan coba lagi.');
-      setRetryableError(true);
-      setModalVisible(true);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
