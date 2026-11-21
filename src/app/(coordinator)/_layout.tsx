@@ -7,6 +7,8 @@ export default function CoordinatorLayout() {
       <Stack.Screen name="classes/[classId]/edit" />
       <Stack.Screen name="laboratories/new" />
       <Stack.Screen name="laboratories/[labId]/edit" />
+      <Stack.Screen name="manage-laboratories" />
+      <Stack.Screen name="geotags" />
     </Stack>
   );
 }

@@ -1,1 +1,1 @@
-export { default } from '@/features/coordinator/screens/CoordinatorLaboratoriesScreen';
+export { default } from '@/features/geotag/screens/MapsScreen';

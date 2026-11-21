@@ -61,7 +61,6 @@ export default function AppTabs() {
 
       <NativeTabs.Trigger
         name="coordinator-laboratories"
-        hidden={currentUser?.role !== "coordinator"}
       >
         <NativeTabs.Trigger.Label>Ruang Lab</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="building.2" md="meeting_room" selectedColor={selectedIconColor} />
