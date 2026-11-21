@@ -60,6 +60,11 @@ export function SessionControl({ sessionId, initialSession, onStatusChanged }: S
     setSubmitting(true);
 
     if (action === 'open') {
+      if (!isStarted()) {
+        setErrorMsg(`Sesi hanya bisa dibuka setelah melewati atau sama dengan jam mulai (${formatDateTime(session.startsAt)}).`);
+        setSubmitting(false);
+        return;
+      }
       const res = await openSessionService(sessionId);
       if (!res.ok) {
         setErrorMsg(res.error.message || 'Gagal membuka sesi.');
@@ -75,9 +80,31 @@ export function SessionControl({ sessionId, initialSession, onStatusChanged }: S
 
   const formatTimestamp = (ts: any) => {
     if (!ts) return '';
-    const date = ts.toDate ? ts.toDate() : new Date(ts);
+    const date = typeof ts?.toDate === 'function' ? ts.toDate() : new Date(ts);
     return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
   };
+
+  const formatDateTime = (ts: any) => {
+    if (!ts) return '';
+    const date = typeof ts?.toDate === 'function' ? ts.toDate() : new Date(ts);
+    return date.toLocaleDateString('id-ID', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const isStarted = () => {
+    if (!session?.startsAt) return true;
+    const startTime = typeof (session.startsAt as any)?.toDate === 'function'
+      ? (session.startsAt as any).toDate().getTime()
+      : new Date(session.startsAt as any).getTime();
+    return Date.now() >= startTime;
+  };
+
+  const canOpen = isStarted();
 
   return (
     <View style={styles.container}>
@@ -100,16 +127,35 @@ export function SessionControl({ sessionId, initialSession, onStatusChanged }: S
           <Text style={styles.description}>
             Sesi praktikum belum dibuka. Buka sesi agar praktikan dapat mulai memindai kode QR atau mengajukan izin.
           </Text>
+          {!canOpen && (
+            <View style={styles.notStartedNotice}>
+              <Text style={styles.notStartedText}>
+                ⚠️ Sesi hanya bisa dibuka setelah melewati atau sama dengan jam mulai ({formatDateTime(session.startsAt)}).
+              </Text>
+            </View>
+          )}
           <TouchableOpacity
-            style={[styles.button, styles.openButton, submitting && styles.disabledButton]}
-            onPress={() => setPendingAction('open')}
-            disabled={submitting}
+            style={[
+              styles.button,
+              styles.openButton,
+              (!canOpen || submitting) && styles.disabledButton,
+            ]}
+            onPress={() => {
+              if (!canOpen) {
+                setErrorMsg(`Sesi hanya bisa dibuka setelah melewati atau sama dengan jam mulai (${formatDateTime(session.startsAt)}).`);
+                return;
+              }
+              setPendingAction('open');
+            }}
+            disabled={submitting || !canOpen}
             activeOpacity={0.8}
           >
             {submitting ? (
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
-              <Text style={styles.buttonText}>Buka Sesi Praktikum</Text>
+              <Text style={styles.buttonText}>
+                {canOpen ? 'Buka Sesi' : 'Belum Memasuki Jam Mulai'}
+              </Text>
             )}
           </TouchableOpacity>
         </View>
@@ -245,6 +291,20 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
+    backgroundColor: '#94A3B8',
+  },
+  notStartedNotice: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    borderRadius: radius.sm,
+    padding: spacing.sm,
+  },
+  notStartedText: {
+    color: '#92400E',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
   },
   buttonText: {
     color: '#FFFFFF',

@@ -644,6 +644,13 @@ export async function openSession(sessionId: string): Promise<Result<void>> {
         throw new Error(`CONFLICT: Sesi sudah dalam status ${data.status}.`);
       }
 
+      if (data.startsAt) {
+        const startsAtDate = data.startsAt.toDate ? data.startsAt.toDate() : new Date(data.startsAt);
+        if (Date.now() < startsAtDate.getTime()) {
+          throw new Error('NOT_STARTED: Sesi hanya bisa dibuka setelah melewati atau sama dengan jam mulai.');
+        }
+      }
+
       txn.update(sessionRef, {
         status: 'open',
         openedAt: serverTimestamp(),
@@ -672,6 +679,9 @@ export async function openSession(sessionId: string): Promise<Result<void>> {
     }
     if (msg.includes('CONFLICT')) {
       return { ok: false, error: { code: 'CONFLICT', message: 'Sesi tidak dapat dibuka kembali atau sudah ditutup.', retryable: false } };
+    }
+    if (msg.includes('NOT_STARTED')) {
+      return { ok: false, error: { code: 'NOT_STARTED' as any, message: 'Sesi hanya bisa dibuka setelah melewati atau sama dengan jam mulai.', retryable: false } };
     }
     return { ok: false, error: { code: 'NETWORK_ERROR', message: msg, retryable: true } };
   }
