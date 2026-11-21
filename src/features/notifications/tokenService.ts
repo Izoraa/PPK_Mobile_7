@@ -30,7 +30,7 @@ export async function setupNotificationChannel(): Promise<void> {
       name: 'Pemberitahuan Praktikum',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#208AEF',
+      lightColor: '#0D21A1',
     });
   }
 }
