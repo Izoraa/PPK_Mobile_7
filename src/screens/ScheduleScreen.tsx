@@ -320,7 +320,7 @@ export default function ScheduleScreen() {
   }
 
   return (
-    <SafeAreaView edges={["left", "right", "bottom"]} style={styles.screen}>
+    <SafeAreaView edges={["top", "left", "right"]} style={styles.screen}>
       <View style={styles.headerRow}>
         <View style={styles.headerLeft}>
           <View style={styles.brandBadge}>
