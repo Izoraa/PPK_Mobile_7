@@ -29,7 +29,7 @@ export default function AppTabs() {
           {currentUser?.role === "assistant" && (
             <TabTrigger
               name="new-session"
-              href="/new-session"
+              href={"/new-session" as any}
               asChild
             >
               <TabButton iconName={{ web: "add" }}>Tambah Sesi</TabButton>
@@ -51,21 +51,21 @@ export default function AppTabs() {
             <>
               <TabTrigger
                 name="coordinator-classes"
-                href="/coordinator-classes"
+                href={"/coordinator-classes" as any}
                 asChild
               >
                 <TabButton iconName={{ web: "school" }}>Kelas</TabButton>
               </TabTrigger>
               <TabTrigger
                 name="coordinator-assistants"
-                href="/coordinator-assistants"
+                href={"/coordinator-assistants" as any}
                 asChild
               >
                 <TabButton iconName={{ web: "group" }}>Asisten</TabButton>
               </TabTrigger>
               <TabTrigger
                 name="coordinator-laboratories"
-                href="/coordinator-laboratories"
+                href={"/coordinator-laboratories" as any}
                 asChild
               >
                 <TabButton iconName={{ web: "domain" }}>Ruang Lab</TabButton>

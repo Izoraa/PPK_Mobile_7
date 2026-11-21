@@ -19,7 +19,7 @@ import {
   subscribeAllClasses,
 } from '@/features/coordinator/coordinatorService';
 import type { ClassDoc } from '@/features/practicum';
-import { colors, radius, spacing } from '@/theme';
+import { colors, radius, spacing, shadows } from '@/theme';
 
 export default function CoordinatorClassesScreen() {
   const router = useRouter();
@@ -105,8 +105,8 @@ export default function CoordinatorClassesScreen() {
 
         <TextInput
           style={styles.searchInput}
-          placeholder="Cari kelas, kode, atau asisten..."
-          placeholderTextColor={colors.textMuted}
+          placeholder="Cari kelas, kode, atau asisten pengampu…"
+          placeholderTextColor="#98A2B3"
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
@@ -115,69 +115,59 @@ export default function CoordinatorClassesScreen() {
       {loading ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Memuat daftar kelas...</Text>
+          <Text style={styles.loadingText}>Memuat daftar kelas…</Text>
         </View>
       ) : (
         <FlatList
           data={filteredClasses}
-          keyExtractor={(item, index) => `${item.id}_${index}`}
+          keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => {
-            const assistantName = assistantMap.get(item.assistantId) || 'Asisten belum ditetapkan';
+            const assistantName = assistantMap.get(item.assistantId) || 'Belum ada asisten';
             return (
               <View style={[styles.card, item.isArchived && styles.cardArchived]}>
                 <View style={styles.cardHeader}>
-                  <Text style={styles.courseName}>{item.course}</Text>
-                  <View style={[styles.badge, item.isArchived ? styles.badgeArchived : styles.badgeActive]}>
-                    <Text style={[styles.badgeText, item.isArchived ? styles.badgeTextArchived : styles.badgeTextActive]}>
-                      {item.isArchived ? 'Diarsipkan' : 'Aktif'}
-                    </Text>
+                  <View style={styles.badgeRow}>
+                    <View style={styles.codeBadge}>
+                      <Text style={styles.codeText}>{item.code}</Text>
+                    </View>
+                    {item.isArchived && (
+                      <View style={styles.archivedBadge}>
+                        <Text style={styles.archivedText}>Diarsipkan</Text>
+                      </View>
+                    )}
                   </View>
+                  <Text style={styles.courseName}>{item.course}</Text>
                 </View>
 
                 <Text style={styles.className}>{item.name}</Text>
-                <Text style={styles.codeText}>Kode: {item.code}</Text>
+                <Text style={styles.assistantText}>👨‍🏫 Asisten: {assistantName}</Text>
 
-                <View style={styles.divider} />
+                <View style={styles.actionRow}>
+                  <TouchableOpacity
+                    style={styles.editBtn}
+                    onPress={() => router.push(`/(coordinator)/classes/${item.id}/edit` as any)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.editBtnText}>Ubah / Pindah Asisten</Text>
+                  </TouchableOpacity>
 
-                <View style={styles.cardFooter}>
-                  <View style={styles.assistantInfo}>
-                    <Text style={styles.assistantLabel}>Asisten Pengampu:</Text>
-                    <Text style={styles.assistantName}>👨‍🏫 {assistantName}</Text>
-                  </View>
-
-                  <View style={styles.cardActions}>
+                  {!item.isArchived && (
                     <TouchableOpacity
-                      style={styles.editBtn}
-                      onPress={() => router.push({
-                        pathname: '/(coordinator)/classes/[classId]/edit' as any,
-                        params: { classId: item.id },
-                      })}
+                      style={styles.archiveBtn}
+                      onPress={() => handleArchive(item)}
                       activeOpacity={0.7}
                     >
-                      <Text style={styles.editBtnText}>Ubah</Text>
+                      <Text style={styles.archiveBtnText}>Arsipkan</Text>
                     </TouchableOpacity>
-
-                    {!item.isArchived ? (
-                      <TouchableOpacity
-                        style={styles.archiveBtn}
-                        onPress={() => handleArchive(item)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.archiveBtnText}>Arsipkan</Text>
-                      </TouchableOpacity>
-                    ) : null}
-                  </View>
+                  )}
                 </View>
               </View>
             );
           }}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyTitle}>Belum ada kelas praktikum</Text>
-              <Text style={styles.emptySubtitle}>
-                Klik tombol "+ Kelas Baru" di atas untuk membuka kelas praktikum.
-              </Text>
+              <Text style={styles.emptyText}>Tidak ada kelas yang sesuai pencarian.</Text>
             </View>
           }
         />
@@ -212,66 +202,84 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addButtonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 13 },
+  addButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
   searchInput: {
-    backgroundColor: colors.background,
+    minHeight: 46,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderStrong,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    fontSize: 14,
+    backgroundColor: colors.surface,
     color: colors.text,
+    fontSize: 14,
   },
-  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
+  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: spacing.sm, color: colors.textMuted, fontSize: 14 },
-  listContent: { padding: spacing.md, gap: spacing.md },
+  listContent: { padding: spacing.md, paddingBottom: spacing.xl, gap: spacing.sm },
   card: {
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
     padding: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
+    ...shadows.sm,
   },
-  cardArchived: {
-    opacity: 0.6,
-    backgroundColor: '#F8FAFC',
+  cardArchived: { opacity: 0.65 },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
   },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
-  courseName: { fontSize: 13, color: colors.primary, fontWeight: '600', flex: 1 },
-  className: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 2 },
-  codeText: { fontSize: 13, color: colors.textMuted },
-  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.sm },
-  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  assistantInfo: { flex: 1 },
-  assistantLabel: { fontSize: 11, color: colors.textMuted },
-  assistantName: { fontSize: 13, fontWeight: '600', color: colors.text, marginTop: 1 },
-  badge: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.sm },
-  badgeActive: { backgroundColor: '#DCFCE7' },
-  badgeArchived: { backgroundColor: '#F1F5F9' },
-  badgeText: { fontSize: 11, fontWeight: '600' },
-  badgeTextActive: { color: '#16A34A' },
-  badgeTextArchived: { color: colors.textMuted },
-  cardActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  badgeRow: { flexDirection: 'row', gap: spacing.xs, alignItems: 'center' },
+  codeBadge: {
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: '#C7D7FE',
+  },
+  codeText: { fontSize: 11, fontWeight: '700', color: colors.primary },
+  archivedBadge: {
+    backgroundColor: colors.neutralBg,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+  },
+  archivedText: { fontSize: 11, fontWeight: '600', color: colors.textMuted },
+  courseName: { fontSize: 13, color: colors.textMuted, fontWeight: '600' },
+  className: { fontSize: 17, fontWeight: '700', color: colors.text, marginBottom: 4 },
+  assistantText: { fontSize: 13, color: colors.textMuted, marginBottom: spacing.md },
+  actionRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
   editBtn: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: radius.sm,
+    flex: 1,
+    minHeight: 40,
+    backgroundColor: colors.primaryLight,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
+    borderColor: '#C7D7FE',
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  editBtnText: { fontSize: 12, color: colors.text, fontWeight: '600' },
+  editBtnText: { color: colors.primary, fontWeight: '700', fontSize: 13 },
   archiveBtn: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: radius.sm,
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.dangerBg,
     borderWidth: 1,
-    borderColor: '#F87171',
-    backgroundColor: '#FEF2F2',
+    borderColor: colors.dangerBorder,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  archiveBtnText: { fontSize: 12, color: colors.danger, fontWeight: '600' },
+  archiveBtnText: { color: colors.dangerText, fontWeight: '700', fontSize: 13 },
   emptyContainer: { alignItems: 'center', paddingVertical: spacing.xl },
-  emptyTitle: { fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: spacing.xs },
-  emptySubtitle: { fontSize: 13, color: colors.textMuted, textAlign: 'center', maxWidth: 280 },
+  emptyText: { color: colors.textMuted, fontSize: 14 },
 });

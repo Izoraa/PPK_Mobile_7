@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'rea
 
 import { ConfirmModal } from '@/components/common/ConfirmModal';
 import { CONFIRM_OPEN_SESSION, CONFIRM_CLOSE_SESSION } from '@/utils/messages';
-import { colors, radius, spacing } from '@/theme';
+import { colors, radius, spacing, shadows } from '@/theme';
 import {
   openSession as openSessionService,
   closeSession as closeSessionService,
@@ -108,11 +108,16 @@ export function SessionControl({ sessionId, initialSession, onStatusChanged }: S
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Pengelolaan Sesi</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.header}>Pengelolaan Sesi</Text>
+        <View style={styles.roleTag}>
+          <Text style={styles.roleTagText}>Akses Asisten</Text>
+        </View>
+      </View>
 
       {errorMsg ? (
         <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{errorMsg}</Text>
+          <Text style={styles.errorText}>⚠️ {errorMsg}</Text>
         </View>
       ) : null}
 
@@ -120,7 +125,7 @@ export function SessionControl({ sessionId, initialSession, onStatusChanged }: S
       {session.status === 'not_open' && (
         <View style={styles.content}>
           <Text style={styles.description}>
-            Sesi praktikum belum dibuka. Buka sesi agar praktikan dapat mulai melakukan presensi.
+            Sesi praktikum belum dibuka. Buka sesi agar praktikan dapat mulai memindai kode QR atau mengajukan izin.
           </Text>
           {!canOpen && (
             <View style={styles.notStartedNotice}>
@@ -159,9 +164,15 @@ export function SessionControl({ sessionId, initialSession, onStatusChanged }: S
       {/* S2-SRS-20: Sesi open -> Tutup Sesi */}
       {session.status === 'open' && (
         <View style={styles.content}>
+          <View style={styles.liveBanner}>
+            <View style={styles.liveDot} />
+            <Text style={styles.liveBannerText}>
+              Sesi sedang berlangsung
+              {session.openedAt ? ` (sejak ${formatTimestamp(session.openedAt)})` : ''}
+            </Text>
+          </View>
           <Text style={styles.description}>
-            Sesi praktikum sedang berlangsung.
-            {session.openedAt && ` Dibuka pukul ${formatTimestamp(session.openedAt)}.`}
+            Tutup sesi setelah seluruh rangkaian praktikum dan presensi selesai dilakukan.
           </Text>
           <TouchableOpacity
             style={[styles.button, styles.closeButton, submitting && styles.disabledButton]}
@@ -172,37 +183,27 @@ export function SessionControl({ sessionId, initialSession, onStatusChanged }: S
             {submitting ? (
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
-              <Text style={styles.buttonText}>Tutup Sesi</Text>
+              <Text style={styles.buttonText}>Tutup Sesi Praktikum</Text>
             )}
           </TouchableOpacity>
         </View>
       )}
 
-      {/* S2-SRS-20: Sesi closed -> Tidak dapat dibuka kembali */}
+      {/* Sesi closed */}
       {session.status === 'closed' && (
-        <View style={styles.closedBanner}>
-          <Text style={styles.closedTitle}>Sesi Telah Ditutup</Text>
-          <Text style={styles.closedDescription}>
-            Kegiatan praktikum telah selesai
-            {session.closedAt && ` pada pukul ${formatTimestamp(session.closedAt)}`}. Sesi yang telah ditutup tidak dapat dibuka kembali.
+        <View style={styles.closedInfoBox}>
+          <Text style={styles.closedInfoTitle}>Sesi Telah Ditutup</Text>
+          <Text style={styles.closedInfoText}>
+            Presensi telah dikunci. Anda masih dapat meninjau rekap kehadiran dan verifikasi izin praktikan.
           </Text>
         </View>
       )}
 
-      {/* Konfirmasi modal sebelum membuka atau menutup sesi */}
       <ConfirmModal
         visible={pendingAction !== null}
-        title={
-          pendingAction === 'open'
-            ? CONFIRM_OPEN_SESSION.title
-            : CONFIRM_CLOSE_SESSION.title
-        }
-        message={
-          pendingAction === 'open'
-            ? CONFIRM_OPEN_SESSION.message
-            : CONFIRM_CLOSE_SESSION.message
-        }
-        confirmLabel={pendingAction === 'open' ? 'Buka Sekarang' : 'Tutup Sesi'}
+        title={pendingAction === 'open' ? CONFIRM_OPEN_SESSION.title : CONFIRM_CLOSE_SESSION.title}
+        message={pendingAction === 'open' ? CONFIRM_OPEN_SESSION.message : CONFIRM_CLOSE_SESSION.message}
+        confirmLabel={pendingAction === 'open' ? 'Buka Sekarang' : 'Tutup Sekarang'}
         cancelLabel="Batal"
         isDestructive={pendingAction === 'close'}
         onConfirm={handleConfirm}
@@ -214,33 +215,73 @@ export function SessionControl({ sessionId, initialSession, onStatusChanged }: S
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    padding: spacing.md,
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: colors.border,
+    marginBottom: spacing.md,
+    ...shadows.sm,
   },
-  header: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.text,
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: spacing.sm,
   },
+  header: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: colors.text,
+    letterSpacing: -0.2,
+  },
+  roleTag: {
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+  },
+  roleTagText: {
+    color: colors.primary,
+    fontSize: 11,
+    fontWeight: '700',
+  },
   content: {
-    gap: spacing.sm,
+    gap: spacing.md,
   },
   description: {
     fontSize: 14,
     color: colors.textMuted,
     lineHeight: 20,
   },
-  button: {
-    paddingVertical: spacing.sm,
+  liveBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
     paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.successBg,
+    borderWidth: 1,
+    borderColor: colors.successBorder,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.success,
+  },
+  liveBannerText: {
+    color: colors.successText,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  button: {
+    minHeight: 48,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 44,
+    paddingHorizontal: spacing.lg,
   },
   openButton: {
     backgroundColor: colors.success,
@@ -268,37 +309,38 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '600',
-  },
-  closedBanner: {
-    backgroundColor: colors.background,
-    padding: spacing.md,
-    borderRadius: radius.sm,
-    borderLeftWidth: 4,
-    borderLeftColor: colors.neutral,
-  },
-  closedTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: spacing.xs,
-  },
-  closedDescription: {
-    fontSize: 13,
-    color: colors.textMuted,
-    lineHeight: 18,
+    fontWeight: '700',
   },
   errorBox: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: colors.dangerBg,
+    borderColor: colors.dangerBorder,
     borderWidth: 1,
-    borderColor: '#F87171',
-    borderRadius: radius.sm,
-    padding: spacing.sm,
+    borderRadius: radius.md,
+    padding: spacing.md,
     marginBottom: spacing.sm,
   },
   errorText: {
-    color: colors.danger,
+    color: colors.dangerText,
     fontSize: 13,
+    fontWeight: '500',
+  },
+  closedInfoBox: {
+    backgroundColor: colors.neutralBg,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  closedInfoTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  closedInfoText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.textMuted,
   },
 });
 

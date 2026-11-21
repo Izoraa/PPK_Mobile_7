@@ -20,7 +20,7 @@ import {
 import type { AssistantUser, LaboratoryDoc } from '@/features/coordinator/types';
 import type { ClassDoc } from '@/features/practicum';
 import { useApp } from '@/state/AppContext';
-import { colors, radius, spacing } from '@/theme';
+import { colors, radius, spacing, shadows } from '@/theme';
 
 export default function CoordinatorDashboard() {
   const router = useRouter();
@@ -85,8 +85,11 @@ export default function CoordinatorDashboard() {
       {/* Header */}
       <View style={styles.headerRow}>
         <View style={styles.headerLeft}>
+          <View style={styles.brandBadge}>
+            <Text style={styles.brandBadgeText}>LABCHECKIN</Text>
+          </View>
           <Text style={styles.title}>Dashboard Koordinator</Text>
-          <Text style={styles.userName}>{currentUser?.name} • Admin Lab</Text>
+          <Text style={styles.userName}>{currentUser?.name} • Administrator Lab</Text>
         </View>
         <TouchableOpacity
           style={styles.addButton}
@@ -100,7 +103,7 @@ export default function CoordinatorDashboard() {
       {loading ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Memuat statistik laboratorium...</Text>
+          <Text style={styles.loadingText}>Memuat statistik laboratorium…</Text>
         </View>
       ) : (
         <FlatList
@@ -115,7 +118,7 @@ export default function CoordinatorDashboard() {
                 <TouchableOpacity
                   style={styles.statCard}
                   onPress={() => router.push('/(tabs)/coordinator-classes' as any)}
-                  activeOpacity={0.7}
+                  activeOpacity={0.75}
                 >
                   <Text style={styles.statNumber}>{activeClasses.length}</Text>
                   <Text style={styles.statLabel}>Kelas Aktif</Text>
@@ -126,7 +129,7 @@ export default function CoordinatorDashboard() {
                 <TouchableOpacity
                   style={[styles.statCard, pendingAssistants.length > 0 && styles.statCardWarning]}
                   onPress={() => router.push('/(tabs)/coordinator-assistants' as any)}
-                  activeOpacity={0.7}
+                  activeOpacity={0.75}
                 >
                   <Text style={[styles.statNumber, pendingAssistants.length > 0 && styles.statNumberWarning]}>
                     {pendingAssistants.length}
@@ -141,7 +144,7 @@ export default function CoordinatorDashboard() {
                 <TouchableOpacity
                   style={styles.statCard}
                   onPress={() => router.push('/(tabs)/coordinator-assistants' as any)}
-                  activeOpacity={0.7}
+                  activeOpacity={0.75}
                 >
                   <Text style={styles.statNumber}>{activeAssistants.length}</Text>
                   <Text style={styles.statLabel}>Asisten Aktif</Text>
@@ -152,30 +155,29 @@ export default function CoordinatorDashboard() {
                 <TouchableOpacity
                   style={styles.statCard}
                   onPress={() => router.push('/(tabs)/coordinator-laboratories' as any)}
-                  activeOpacity={0.7}
+                  activeOpacity={0.75}
                 >
                   <Text style={styles.statNumber}>{activeLabs.length}</Text>
                   <Text style={styles.statLabel}>Ruang Lab Aktif</Text>
-                  <Text style={styles.statHint}>Kelola Lab →</Text>
+                  <Text style={styles.statHint}>Kelola Ruangan →</Text>
                 </TouchableOpacity>
               </View>
 
-              {/* Notifikasi Asisten Pending (Jika Ada) */}
-              {pendingAssistants.length > 0 ? (
+              {/* Pending Approvals Quick Section */}
+              {pendingAssistants.length > 0 && (
                 <View style={styles.pendingSection}>
                   <View style={styles.pendingSectionHeader}>
                     <Text style={styles.pendingSectionTitle}>
-                      ⚠️ Pendaftaran Asisten Butuh ACC ({pendingAssistants.length})
+                      ⚠️ Permohonan Akun Asisten ({pendingAssistants.length})
                     </Text>
                     <TouchableOpacity
                       onPress={() => router.push('/(tabs)/coordinator-assistants' as any)}
                     >
-                      <Text style={styles.seeAllText}>Lihat Semua</Text>
+                      <Text style={styles.seeAllText}>Lihat Semua →</Text>
                     </TouchableOpacity>
                   </View>
-
-                  {pendingAssistants.slice(0, 3).map((item, index) => (
-                    <View key={`${item.id}_${index}`} style={styles.pendingItem}>
+                  {pendingAssistants.slice(0, 3).map((item) => (
+                    <View key={item.id} style={styles.pendingItem}>
                       <View style={styles.pendingItemInfo}>
                         <Text style={styles.pendingItemName}>{item.name}</Text>
                         <Text style={styles.pendingItemEmail}>{item.email}</Text>
@@ -185,18 +187,18 @@ export default function CoordinatorDashboard() {
                         onPress={() => handleQuickApprove(item.id)}
                         activeOpacity={0.8}
                       >
-                        <Text style={styles.quickApproveText}>✓ ACC</Text>
+                        <Text style={styles.quickApproveText}>ACC Cepat</Text>
                       </TouchableOpacity>
                     </View>
                   ))}
                 </View>
-              ) : null}
+              )}
 
-              <Text style={styles.sectionHeader}>Daftar Seluruh Kelas Praktikum ({activeClasses.length})</Text>
+              <Text style={styles.sectionHeader}>Daftar Kelas Praktikum Aktif</Text>
             </View>
           }
           renderItem={({ item }) => {
-            const assistantName = assistantMap.get(item.assistantId) || 'Asisten belum ditetapkan';
+            const assistantName = assistantMap.get(item.assistantId) || 'Belum ditentukan';
             return (
               <View style={styles.classCard}>
                 <View style={styles.classCardTop}>
@@ -228,8 +230,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: spacing.md,
-    backgroundColor: colors.card,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -245,7 +249,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addButtonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 13 },
+  addButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
   loadingText: { marginTop: spacing.sm, color: colors.textMuted, fontSize: 14 },
   content: { padding: spacing.md, paddingBottom: spacing.xl },
@@ -259,29 +263,30 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flexBasis: '48%',
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
     padding: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
+    ...shadows.sm,
   },
   statCardWarning: {
-    borderColor: '#F59E0B',
-    backgroundColor: '#FFFBEB',
+    borderColor: colors.warningBorder,
+    backgroundColor: colors.warningBg,
   },
-  statNumber: { fontSize: 26, fontWeight: '700', color: colors.text },
-  statNumberWarning: { color: '#D97706' },
-  statLabel: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
-  statHint: { fontSize: 11, color: colors.primary, fontWeight: '600', marginTop: spacing.xs },
-  statHintWarning: { color: '#D97706' },
+  statNumber: { fontSize: 26, fontWeight: '800', color: colors.primary },
+  statNumberWarning: { color: colors.warningText },
+  statLabel: { fontSize: 13, color: colors.textMuted, marginTop: 2, fontWeight: '500' },
+  statHint: { fontSize: 12, color: colors.primary, fontWeight: '700', marginTop: spacing.xs },
+  statHintWarning: { color: colors.warningText },
 
   // Pending Section
   pendingSection: {
-    backgroundColor: '#FEF3C7',
-    borderRadius: radius.md,
+    backgroundColor: colors.warningBg,
+    borderRadius: radius.lg,
     padding: spacing.md,
     borderWidth: 1,
-    borderColor: '#F59E0B',
+    borderColor: colors.warningBorder,
     marginBottom: spacing.lg,
   },
   pendingSectionHeader: {
@@ -290,56 +295,59 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.sm,
   },
-  pendingSectionTitle: { fontSize: 14, fontWeight: '700', color: '#92400E' },
-  seeAllText: { fontSize: 12, fontWeight: '600', color: colors.primary },
+  pendingSectionTitle: { fontSize: 14, fontWeight: '700', color: colors.warningText },
+  seeAllText: { fontSize: 12, fontWeight: '700', color: colors.primary },
   pendingItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: radius.sm,
-    padding: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.sm + 2,
     marginBottom: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   pendingItemInfo: { flex: 1 },
-  pendingItemName: { fontSize: 14, fontWeight: '600', color: colors.text },
+  pendingItemName: { fontSize: 14, fontWeight: '700', color: colors.text },
   pendingItemEmail: { fontSize: 12, color: colors.textMuted },
   quickApproveBtn: {
-    backgroundColor: '#16A34A',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
+    backgroundColor: colors.success,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
     borderRadius: radius.sm,
   },
   quickApproveText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
 
   // Class list
   sectionHeader: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
     color: colors.textMuted,
     marginBottom: spacing.sm,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
   classCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    padding: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.md + 2,
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: spacing.sm,
+    ...shadows.sm,
   },
-  classCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
-  courseName: { fontSize: 13, color: colors.primary, fontWeight: '600' },
+  classCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  courseName: { fontSize: 13, color: colors.primary, fontWeight: '700' },
   codeBadge: {
-    backgroundColor: colors.background,
+    backgroundColor: colors.primaryLight,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: radius.sm,
+    paddingVertical: 3,
+    borderRadius: radius.full,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#C7D7FE',
   },
-  codeText: { fontSize: 11, fontWeight: '600', color: colors.text },
+  codeText: { fontSize: 11, fontWeight: '700', color: colors.primary },
   className: { fontSize: 17, fontWeight: '700', color: colors.text, marginBottom: 4 },
   assistantText: { fontSize: 13, color: colors.textMuted },
   emptyContainer: { alignItems: 'center', paddingVertical: spacing.xl },
