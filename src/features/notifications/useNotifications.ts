@@ -7,20 +7,22 @@ import { useApp } from '@/state/AppContext';
 import { registerDeviceToken } from './tokenService';
 import type { NotificationPayload } from './types';
 
-// Configure foreground notification presentation
-try {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-      shouldShowBanner: true,
-      shouldShowList: true,
-      priority: Notifications.AndroidNotificationPriority.MAX,
-    }),
-  });
-} catch {
-  // Ignored in test / headless environments where native event emitters are unmocked
+// Configure foreground notification presentation (native mobile only)
+if (Platform.OS !== 'web') {
+  try {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+        shouldShowBanner: true,
+        shouldShowList: true,
+        priority: Notifications.AndroidNotificationPriority.MAX,
+      }),
+    });
+  } catch {
+    // Ignored in test / headless environments where native event emitters are unmocked
+  }
 }
 
 export function useNotifications() {
