@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { SessionAttendanceQr } from "@/features/attendance/components/SessionAttendanceQr";
 import { SessionLeaveReviewList } from "@/features/leave-review/components/SessionLeaveReviewList";
 import { subscribeSession, type SessionDoc } from "@/features/practicum";
 import type { AppErrorCode } from "@/types";
@@ -124,7 +125,7 @@ export default function SessionDetailScreen() {
 
   const session =
     currentUser.role === "assistant" &&
-      sessionData?.assistantId !== currentUser.id
+    sessionData?.assistantId !== currentUser.id
       ? null
       : sessionData;
 
@@ -192,7 +193,16 @@ export default function SessionDetailScreen() {
               {currentUser.role === "assistant" && (
                 <>
                   <SessionControl sessionId={session.id} />
-
+                  {liveSession?.status === "open" &&
+                    liveSession.id === sessionId &&
+                    !liveSession.isArchived &&
+                    !metadata.fromCache &&
+                    !metadata.hasPendingWrites && (
+                      <SessionAttendanceQr
+                        key={session.id}
+                        sessionId={session.id}
+                      />
+                    )}
                   {/* 1. Card Ringkasan Sesi */}
                   <AttendanceList sessionId={session.id} onlySummary />
 
@@ -230,7 +240,9 @@ export default function SessionDetailScreen() {
                       <View style={styles.bottomSheet}>
                         <View style={styles.handleBar} />
                         <View style={styles.sheetHeader}>
-                          <Text style={styles.sheetTitle}>Daftar Praktikan Hadir</Text>
+                          <Text style={styles.sheetTitle}>
+                            Daftar Praktikan Hadir
+                          </Text>
                           <TouchableOpacity
                             onPress={() => setShowAttendanceModal(false)}
                             style={styles.sheetCloseButton}
@@ -260,7 +272,9 @@ export default function SessionDetailScreen() {
                       <View style={styles.bottomSheet}>
                         <View style={styles.handleBar} />
                         <View style={styles.sheetHeader}>
-                          <Text style={styles.sheetTitle}>Pengajuan Izin Sesi</Text>
+                          <Text style={styles.sheetTitle}>
+                            Pengajuan Izin Sesi
+                          </Text>
                           <TouchableOpacity
                             onPress={() => setShowLeaveModal(false)}
                             style={styles.sheetCloseButton}

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
   StyleSheet,
@@ -114,6 +114,50 @@ export default function AssistantClassDetailScreen() {
     return () => { active = false; unsubscribe(); };
   }, [classId, attempt]);
 
+  const sortedSessions = useMemo(() => {
+    const getTime = (s: SessionDoc) => {
+      if (!s.startsAt) return 0;
+      if (typeof (s.startsAt as any).toMillis === 'function') {
+        return (s.startsAt as any).toMillis();
+      }
+      if (typeof (s.startsAt as any).toDate === 'function') {
+        return (s.startsAt as any).toDate().getTime();
+      }
+      if (s.startsAt instanceof Date) {
+        return s.startsAt.getTime();
+      }
+      const parsed = new Date(s.startsAt as any).getTime();
+      return Number.isNaN(parsed) ? 0 : parsed;
+    };
+
+    return [...sessions].sort((a, b) => {
+      const aClosed = a.status === 'closed';
+      const bClosed = b.status === 'closed';
+
+      // ATURAN UTAMA: Sesi yang belum ditutup (open atau not_open) MUTLAK berada di atas sesi yang sudah ditutup,
+      // meskipun jadwalnya secara waktu sudah lewat.
+      if (aClosed !== bClosed) {
+        return aClosed ? 1 : -1;
+      }
+
+      const aTime = getTime(a);
+      const bTime = getTime(b);
+
+      // Jika keduanya belum ditutup (not_open atau open):
+      if (!aClosed) {
+        // Sesi yang sedang dibuka ditaruh paling atas
+        if (a.status === 'open' && b.status !== 'open') return -1;
+        if (a.status !== 'open' && b.status === 'open') return 1;
+
+        // Untuk sesama not_open (atau sesama open), urutkan berdasarkan jadwal terdekat (startsAt menaik)
+        return aTime - bTime;
+      }
+
+      // Jika keduanya sudah ditutup: urutkan dari yang paling baru selesai/ditutup (startsAt menurun)
+      return bTime - aTime;
+    });
+  }, [sessions]);
+
   if (status !== 'ready' || !classData) {
     return (
       <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.centerContainer}>
@@ -128,8 +172,8 @@ export default function AssistantClassDetailScreen() {
         >
           <View />
         </AsyncState>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backText}>← Kembali ke Daftar Kelas</Text>
+        <TouchableOpacity onPress={() => router.replace('/' as any)} style={styles.backButton}>
+          <Text style={styles.backText}>← Kembali ke Jadwal</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -138,7 +182,7 @@ export default function AssistantClassDetailScreen() {
   return (
     <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.replace('/(assistant)/classes' as any)} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.replace('/' as any)} style={styles.backButton}>
           <Text style={styles.backText}>← Semua Kelas</Text>
         </TouchableOpacity>
         <View style={styles.titleRow}>
@@ -158,14 +202,6 @@ export default function AssistantClassDetailScreen() {
         <View style={styles.actionsRow}>
           <TouchableOpacity
             style={styles.actionOutlineBtn}
-            onPress={() => router.push(`/(assistant)/classes/${classId}/edit` as any)}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.actionOutlineText}>Ubah Kelas</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.actionOutlineBtn}
             onPress={() => router.push(`/(assistant)/classes/${classId}/members` as any)}
             activeOpacity={0.8}
           >
@@ -183,8 +219,8 @@ export default function AssistantClassDetailScreen() {
       </View>
 
       <FlatList
-        data={sessions}
-        keyExtractor={(item) => item.id}
+        data={sortedSessions}
+        keyExtractor={(item, index) => `${item.id}_${index}`}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
           <Text style={styles.sectionHeader}>Daftar Sesi Praktikum ({sessions.length})</Text>

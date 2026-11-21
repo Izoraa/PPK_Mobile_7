@@ -13,6 +13,10 @@ service cloud.firestore {
       return isSignedIn() && callerProfile().role == role;
     }
 
+    function isCoordinator() {
+      return hasRole('coordinator');
+    }
+
     function isStudent() {
       return hasRole('student') && callerProfile().requestedRole == 'student';
     }
@@ -49,7 +53,8 @@ service cloud.firestore {
     }
 
     match /laboratories/{labId} {
-      allow get, list: if hasRole('assistant');
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if isCoordinator();
     }
 
     match /users/{uid} {
@@ -65,17 +70,25 @@ service cloud.firestore {
           && profile.email is string && profile.email == request.auth.token.email
           && profile.name is string && profile.name.trim().size() > 0
           && profile.role == 'student'
-          && ((profile.requestedRole == 'student'
+          && (
+            (profile.requestedRole == 'student'
               && profile.studentNumber is string && profile.studentNumber.trim().size() > 0)
-            || (profile.requestedRole == 'assistant' && profile.studentNumber == null))
+            || (profile.requestedRole == 'assistant'
+              && (profile.studentNumber == null || (profile.studentNumber is string && profile.studentNumber.trim().size() > 0)))
+          )
           && profile.createdAt == request.time && profile.updatedAt == request.time;
       }
 
       // The enrolment form looks up a registered practicum student by UID.
-      allow get: if isOwner() || (hasRole('assistant')
+      allow get: if isOwner() || isCoordinator() || (hasRole('assistant')
         && resource.data.role == 'student' && resource.data.requestedRole == 'student');
-      allow list: if hasRole('assistant');
+      allow list: if isCoordinator() || hasRole('assistant');
       allow create: if isOwner() && isInitialProfile();
+      allow update: if isCoordinator()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'requestedRole', 'updatedAt'])
+        && request.resource.data.role in ['student', 'assistant']
+        && request.resource.data.requestedRole in ['student', 'assistant']
+        && request.resource.data.updatedAt == request.time;
     }
 
     match /classes/{classId} {
@@ -84,19 +97,21 @@ service cloud.firestore {
           && validText(data.course, 1, 200) && validText(data.timeZone, 1, 100);
       }
 
-      allow get: if (hasRole('assistant') && resource.data.assistantId == request.auth.uid)
+      allow get: if isCoordinator()
+        || (hasRole('assistant') && resource.data.assistantId == request.auth.uid)
         || (isStudent() && isActiveMember(classId));
-      allow list: if hasRole('assistant') && resource.data.assistantId == request.auth.uid;
-      allow create: if hasRole('assistant')
+      allow list: if isCoordinator()
+        || (hasRole('assistant') && resource.data.assistantId == request.auth.uid);
+      allow create: if (isCoordinator() || (hasRole('assistant') && request.resource.data.assistantId == request.auth.uid))
         && hasExactFields(request.resource.data,
           ['name', 'code', 'course', 'timeZone', 'assistantId', 'isArchived', 'createdAt', 'updatedAt'])
-        && request.resource.data.assistantId == request.auth.uid && request.resource.data.isArchived == false
+        && request.resource.data.isArchived == false
         && request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time
         && validClassDetails(request.resource.data);
-      allow update: if hasRole('assistant') && resource.data.assistantId == request.auth.uid
+      allow update: if (isCoordinator() || (hasRole('assistant') && resource.data.assistantId == request.auth.uid))
         && resource.data.isArchived == false && request.resource.data.isArchived is bool
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['name', 'code', 'course', 'timeZone', 'isArchived', 'updatedAt'])
+          .hasOnly(['name', 'code', 'course', 'timeZone', 'assistantId', 'isArchived', 'updatedAt'])
         && request.resource.data.updatedAt == request.time && validClassDetails(request.resource.data);
     }
 

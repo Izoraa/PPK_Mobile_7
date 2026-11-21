@@ -2,7 +2,7 @@ import { useFonts } from 'expo-font';
 import { Redirect } from 'expo-router';
 import { Inter_400Regular, Inter_500Medium } from '@expo-google-fonts/inter';
 import { Poppins_600SemiBold } from '@expo-google-fonts/poppins';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -10,9 +10,11 @@ import { AsyncState } from '@/components/common/AsyncState';
 import { TabBarDivider } from '@/components/TabBarDivider';
 import { formatAttendanceTimestamp } from '@/features/attendance/format';
 import {
+  useAttendanceClassNames,
   useAttendanceSessionMetadata,
   useMyAttendanceHistory,
 } from '@/features/attendance/subscriptions';
+import { subscribeClasses, type ClassDoc } from '@/features/practicum';
 import { useApp } from '@/state/AppContext';
 import { spacing } from '@/theme';
 
@@ -29,12 +31,32 @@ const brand = {
 export default function AttendanceHistoryScreen() {
   const [fontsLoaded] = useFonts({ Poppins_600SemiBold, Inter_400Regular, Inter_500Medium });
   const { currentUser } = useApp();
+  const [studentClasses, setStudentClasses] = useState<ClassDoc[]>([]);
   const historyState = useMyAttendanceHistory(currentUser?.role === 'student');
   const sessionIds = useMemo(
     () => historyState.records.map((record) => record.sessionId),
     [historyState.records],
   );
+  const classIds = useMemo(
+    () => historyState.records.map((record) => record.classId).filter(Boolean),
+    [historyState.records],
+  );
   const sessionMetadata = useAttendanceSessionMetadata(sessionIds);
+  const directClassNames = useAttendanceClassNames(classIds);
+
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'student') return;
+    const unsubscribe = subscribeClasses({ studentId: currentUser.id, includeArchived: true }, (classes) => {
+      setStudentClasses(classes);
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [currentUser]);
+
+  const classMap = useMemo(() => {
+    return new Map<string, ClassDoc>(studentClasses.map((c) => [c.id, c]));
+  }, [studentClasses]);
 
   if (currentUser?.role !== 'student') return <Redirect href="/" />;
 
@@ -64,13 +86,20 @@ export default function AttendanceHistoryScreen() {
         >
           <FlatList
             data={historyState.records}
-            keyExtractor={(attendance) => attendance.id}
+            keyExtractor={(attendance, index) => `${attendance.sessionId}_${attendance.studentId || attendance.id}_${index}`}
             contentContainerStyle={styles.listContent}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
             renderItem={({ item }) => {
               const metadata = sessionMetadata[item.sessionId];
               const attendanceTime = formatAttendanceTimestamp(item.checkedInAt ?? item.createdAt ?? '');
-              const className = metadata?.className ?? `Kelas ${item.classId}`;
+              const matchedClass = classMap.get(item.classId);
+              const className =
+                matchedClass?.name ||
+                matchedClass?.course ||
+                directClassNames[item.classId] ||
+                metadata?.className ||
+                (studentClasses.length === 1 ? studentClasses[0]?.name : null) ||
+                'Kelas Praktikum';
 
               return (
                 <View style={styles.attendanceCard}>

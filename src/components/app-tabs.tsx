@@ -30,11 +30,43 @@ export default function AppTabs() {
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger
+        name="new-session"
+        hidden={currentUser?.role !== "assistant"}
+      >
+        <NativeTabs.Trigger.Label>Tambah Sesi</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="plus" md="add" selectedColor={selectedIconColor} />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger
         name="attendance-history"
         hidden={currentUser?.role !== "student"}
       >
         <NativeTabs.Trigger.Label>Riwayat</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="clock.arrow.circlepath" md="history" selectedColor={selectedIconColor} />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger
+        name="coordinator-classes"
+        hidden={currentUser?.role !== "coordinator"}
+      >
+        <NativeTabs.Trigger.Label>Kelas</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="book" md="school" selectedColor={selectedIconColor} />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger
+        name="coordinator-assistants"
+        hidden={currentUser?.role !== "coordinator"}
+      >
+        <NativeTabs.Trigger.Label>Asisten</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="person.2" md="group" selectedColor={selectedIconColor} />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger
+        name="coordinator-laboratories"
+        hidden={currentUser?.role !== "coordinator"}
+      >
+        <NativeTabs.Trigger.Label>Ruang Lab</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="building.2" md="meeting_room" selectedColor={selectedIconColor} />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="account">

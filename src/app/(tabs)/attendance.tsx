@@ -60,7 +60,7 @@ export default function AttendanceScreen() {
         ) : null}
         <FlatList
           data={sessions}
-          keyExtractor={(session) => session.id}
+          keyExtractor={(session, index) => `${session.id}_${index}`}
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={
             <View style={styles.headerContent}>

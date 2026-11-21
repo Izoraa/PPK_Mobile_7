@@ -26,6 +26,15 @@ export default function AppTabs() {
           <TabTrigger name="home" href="/" asChild>
             <TabButton iconName={{ web: "home" }}>Beranda</TabButton>
           </TabTrigger>
+          {currentUser?.role === "assistant" && (
+            <TabTrigger
+              name="new-session"
+              href={"/new-session" as any}
+              asChild
+            >
+              <TabButton iconName={{ web: "add" }}>Tambah Sesi</TabButton>
+            </TabTrigger>
+          )}
           <TabTrigger name="attendance" href="/attendance" asChild>
             <TabButton iconName={{ web: "checklist" }}>Presensi</TabButton>
           </TabTrigger>
@@ -37,6 +46,31 @@ export default function AppTabs() {
             >
               <TabButton iconName={{ web: "history" }}>Riwayat</TabButton>
             </TabTrigger>
+          )}
+          {currentUser?.role === "coordinator" && (
+            <>
+              <TabTrigger
+                name="coordinator-classes"
+                href={"/coordinator-classes" as any}
+                asChild
+              >
+                <TabButton iconName={{ web: "school" }}>Kelas</TabButton>
+              </TabTrigger>
+              <TabTrigger
+                name="coordinator-assistants"
+                href={"/coordinator-assistants" as any}
+                asChild
+              >
+                <TabButton iconName={{ web: "group" }}>Asisten</TabButton>
+              </TabTrigger>
+              <TabTrigger
+                name="coordinator-laboratories"
+                href={"/coordinator-laboratories" as any}
+                asChild
+              >
+                <TabButton iconName={{ web: "domain" }}>Ruang Lab</TabButton>
+              </TabTrigger>
+            </>
           )}
           <TabTrigger name="account" href="/account" asChild>
             <TabButton iconName={{ web: "person" }}>Profil</TabButton>

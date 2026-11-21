@@ -35,6 +35,24 @@
         }
       ],
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Izinkan $(PRODUCT_NAME) memakai kamera untuk memindai kode QR presensi.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Izinkan $(PRODUCT_NAME) menggunakan lokasi untuk memverifikasi presensi praktikum.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "locationFullAccuracyPermission": false,
+          "motionUsagePermission": false
+        }
+      ],
+      [
         "expo-notifications",
         {
           "icon": "./assets/images/icon.png",

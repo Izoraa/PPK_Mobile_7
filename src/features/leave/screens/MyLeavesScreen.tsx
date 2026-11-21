@@ -110,7 +110,7 @@ export default function MyLeavesScreen() {
       >
         <FlatList
           data={state.data}
-          keyExtractor={(item) => item.sessionId}
+          keyExtractor={(item, index) => `${item.sessionId}_${item.studentId}_${index}`}
           contentContainerStyle={styles.list}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           renderItem={({ item, index }) => (

@@ -29,30 +29,45 @@ export function AttendanceList({
   onlySummary = false,
 }: AttendanceListProps) {
   const { currentUser, getAttendancesBySession, getSession, getUserById } = useApp();
-  const remote = useSessionAttendance(attendances ? null : sessionId ?? null);
+  const showSummary = currentUser?.role === 'assistant' && (onlySummary || !hideSummary);
+  const remote = useSessionAttendance(attendances || onlySummary ? null : sessionId ?? null);
   const summary = useSessionParticipationSummary(
     sessionId ?? null,
-    !attendances && currentUser?.role === 'assistant',
+    !attendances && showSummary,
   );
 
-  if (onlySummary) {
-    if (currentUser?.role !== 'assistant') return null;
-    return (
-      <View style={styles.summary}>
-        <Text style={styles.summaryTitle}>Ringkasan sesi</Text>
-        {summary.status === 'loading' ? (
-          <Text style={styles.summaryMessage}>Memuat ringkasan...</Text>
-        ) : (
-          <View style={styles.summaryGrid}>
-            <Text style={styles.summaryItem}>Hadir: {summary.records[0]?.attendanceCount ?? 0}</Text>
-            <Text style={styles.summaryItem}>Izin pending: {summary.records[0]?.pendingLeaveCount ?? 0}</Text>
-            <Text style={styles.summaryItem}>Izin disetujui: {summary.records[0]?.approvedLeaveCount ?? 0}</Text>
-            <Text style={styles.summaryItem}>Izin ditolak: {summary.records[0]?.rejectedLeaveCount ?? 0}</Text>
-          </View>
-        )}
-      </View>
-    );
-  }
+  const summaryCard = showSummary ? (
+    <View style={styles.summary}>
+      <Text style={styles.summaryTitle}>Ringkasan sesi</Text>
+      {summary.fromCache ? (
+        <Text style={styles.summaryMessage}>Menampilkan data tersimpan; belum terverifikasi dari server.</Text>
+      ) : null}
+      {summary.hasPendingWrites ? (
+        <Text style={styles.summaryMessage}>Perubahan sedang disinkronkan.</Text>
+      ) : null}
+      {summary.status === 'loading' ? (
+        <Text style={styles.summaryMessage}>Memuat ringkasan...</Text>
+      ) : summary.status === 'error' ? (
+        <View>
+          <Text style={styles.summaryMessage}>Ringkasan sesi belum dapat dimuat.</Text>
+          {summary.error?.retryable ? (
+            <Text accessibilityRole="button" onPress={summary.retry} style={styles.retryText}>
+              Coba lagi
+            </Text>
+          ) : null}
+        </View>
+      ) : (
+        <View style={styles.summaryGrid}>
+          <Text style={styles.summaryItem}>Hadir: {summary.records[0]?.attendanceCount ?? 0}</Text>
+          <Text style={styles.summaryItem}>Izin pending: {summary.records[0]?.pendingLeaveCount ?? 0}</Text>
+          <Text style={styles.summaryItem}>Izin disetujui: {summary.records[0]?.approvedLeaveCount ?? 0}</Text>
+          <Text style={styles.summaryItem}>Izin ditolak: {summary.records[0]?.rejectedLeaveCount ?? 0}</Text>
+        </View>
+      )}
+    </View>
+  ) : null;
+
+  if (onlySummary) return summaryCard;
 
   if (!attendances && sessionId && remote.status === 'loading') {
     return <EmptyState title="Memuat rekap presensi" message="Mengambil data kehadiran dari server." />;
@@ -74,43 +89,14 @@ export function AttendanceList({
   if (!attendances && sessionId) {
     return (
       <View style={styles.remoteContainer}>
-        {currentUser?.role === 'assistant' && !hideSummary ? (
-          <View style={styles.summary}>
-            <Text style={styles.summaryTitle}>Ringkasan sesi</Text>
-            {summary.fromCache ? (
-              <Text style={styles.summaryMessage}>Menampilkan data tersimpan; belum terverifikasi dari server.</Text>
-            ) : null}
-            {summary.hasPendingWrites ? (
-              <Text style={styles.summaryMessage}>Perubahan sedang disinkronkan.</Text>
-            ) : null}
-            {summary.status === 'loading' ? (
-              <Text style={styles.summaryMessage}>Memuat ringkasan...</Text>
-            ) : summary.status === 'error' ? (
-              <View>
-                <Text style={styles.summaryMessage}>Ringkasan izin belum dapat dimuat.</Text>
-                {summary.error?.retryable ? (
-                  <Text accessibilityRole="button" onPress={summary.retry} style={styles.retryText}>
-                    Coba lagi
-                  </Text>
-                ) : null}
-              </View>
-            ) : (
-              <View style={styles.summaryGrid}>
-                <Text style={styles.summaryItem}>Hadir: {summary.records[0]?.attendanceCount ?? 0}</Text>
-                <Text style={styles.summaryItem}>Izin pending: {summary.records[0]?.pendingLeaveCount ?? 0}</Text>
-                <Text style={styles.summaryItem}>Izin disetujui: {summary.records[0]?.approvedLeaveCount ?? 0}</Text>
-                <Text style={styles.summaryItem}>Izin ditolak: {summary.records[0]?.rejectedLeaveCount ?? 0}</Text>
-              </View>
-            )}
-          </View>
-        ) : null}
+        {summaryCard}
         {remote.fromCache ? (
           <Text style={styles.dataNotice}>Menampilkan daftar tersimpan; belum terverifikasi dari server.</Text>
         ) : null}
         {remote.hasPendingWrites ? <Text style={styles.dataNotice}>Perubahan sedang disinkronkan.</Text> : null}
         <FlatList
           data={remote.records}
-          keyExtractor={(record) => record.id}
+          keyExtractor={(record, index) => `${record.id || record.studentId || index}_${index}`}
           contentContainerStyle={remote.records.length === 0 ? styles.emptyList : styles.list}
           ListEmptyComponent={<EmptyState title={emptyTitle} message={emptyMessage} />}
           renderItem={({ item }) => (
@@ -134,7 +120,7 @@ export function AttendanceList({
   return (
     <FlatList
       data={records}
-      keyExtractor={(attendance) => attendance.id}
+      keyExtractor={(attendance, index) => `${attendance.id || attendance.studentId || index}_${index}`}
       contentContainerStyle={records.length === 0 ? styles.emptyList : styles.list}
       ListEmptyComponent={<EmptyState title={emptyTitle} message={emptyMessage} />}
       renderItem={({ item }) => {
