@@ -90,7 +90,7 @@ export default function CoordinatorClassesScreen() {
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.screen}>
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <View style={styles.headerTitleGroup}>
+          <View style={styles.headerTitleContainer}>
             <Text style={styles.title}>Manajemen Kelas</Text>
             <Text style={styles.subtitle}>Buka kelas baru dan tentukan asisten pengampu</Text>
           </View>
@@ -179,26 +179,28 @@ export default function CoordinatorClassesScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  header: {
-    padding: spacing.md,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    gap: spacing.sm,
-  },
+  header: { padding: spacing.md, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
   },
-  headerTitleGroup: { flex: 1, marginRight: spacing.sm },
-  title: { fontSize: 22, fontWeight: '700', color: colors.text, letterSpacing: -0.3 },
+  headerTitleContainer: {
+    flex: 1,
+    marginRight: spacing.xs,
+  },
+  title: { fontSize: 22, fontWeight: '700', color: colors.text },
   subtitle: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
   addButton: {
     backgroundColor: colors.primary,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: radius.full,
+    borderRadius: radius.md,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   addButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
   searchInput: {

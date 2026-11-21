@@ -74,7 +74,7 @@ export default function CoordinatorLaboratoriesScreen() {
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.screen}>
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <View>
+          <View style={styles.headerTitleContainer}>
             <Text style={styles.title}>Manajemen Ruang / Lab</Text>
             <Text style={styles.subtitle}>Kelola ketersediaan laboratorium untuk praktikum</Text>
           </View>
@@ -168,15 +168,27 @@ export default function CoordinatorLaboratoriesScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  header: { padding: spacing.md, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border },
-  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { fontSize: 22, fontWeight: '700', color: colors.text, letterSpacing: -0.3 },
+  header: { padding: spacing.md, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  headerTitleContainer: {
+    flex: 1,
+    marginRight: spacing.xs,
+  },
+  title: { fontSize: 22, fontWeight: '700', color: colors.text },
   subtitle: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
   addButton: {
     backgroundColor: colors.primary,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: radius.full,
+    borderRadius: radius.md,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   addButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
