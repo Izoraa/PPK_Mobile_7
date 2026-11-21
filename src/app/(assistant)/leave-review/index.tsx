@@ -3,11 +3,11 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AsyncState } from '@/components/common/AsyncState';
 import { LeaveReviewCard } from '@/features/leave-review/components/LeaveReviewCard';
@@ -45,7 +45,7 @@ export default function LeaveReviewQueueScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={styles.screen}>
       <View style={styles.header}>
         <Pressable
           onPress={handleBack}

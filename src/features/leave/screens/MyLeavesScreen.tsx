@@ -7,7 +7,8 @@ import { Inter_400Regular, Inter_500Medium } from '@expo-google-fonts/inter';
 import { Poppins_600SemiBold } from '@expo-google-fonts/poppins';
 
 import { AsyncState } from '@/components/common/AsyncState';
-import { spacing } from '@/theme';
+import { StatusBadge } from '@/components/common/StatusBadge';
+import { colors, radius, spacing, shadows } from '@/theme';
 
 import { subscribeMyLeaves } from '../leaveSubscriptions';
 import type { LeaveListenerError, LeaveRequestRecord } from '../types';
@@ -26,23 +27,6 @@ const initialState: ViewState = {
   fromCache: false,
   hasPendingWrites: false,
   error: null,
-};
-
-function decisionLabel(status: LeaveRequestRecord['status']): string {
-  switch (status) {
-    case 'pending': return 'Menunggu pemeriksaan';
-    case 'approved': return 'Diterima';
-    case 'rejected': return 'Ditolak';
-  }
-}
-
-const brand = {
-  blue: '#0D21A1',
-  yellow: '#EEC643',
-  white: '#FFFFFF',
-  ink: '#172033',
-  muted: '#667085',
-  border: '#E4E9F2',
 };
 
 function formatTimestamp(timestamp: LeaveRequestRecord['createdAt']): string {
@@ -88,14 +72,17 @@ export default function MyLeavesScreen() {
           <Text style={styles.backArrow}>←</Text>
         </Pressable>
 
-        <Text accessibilityRole="header" style={[styles.title, fontsLoaded && styles.poppins]}>
-          Izin saya
-        </Text>
+        <View style={styles.titleContainer}>
+          <Text accessibilityRole="header" style={[styles.title, fontsLoaded && styles.poppins]}>
+            Izin Saya
+          </Text>
+        </View>
         <View style={styles.topBarSpacer} />
       </View>
-      <View style={styles.body}>
+
+      <View style={styles.headerInfo}>
         <Text style={[styles.subtitle, fontsLoaded && styles.inter]}>
-          Lihat status pengajuan izin Anda.
+          Pantau riwayat dan status persetujuan izin praktikum Anda
         </Text>
       </View>
 
@@ -105,15 +92,15 @@ export default function MyLeavesScreen() {
         fromCache={state.fromCache}
         hasPendingWrites={state.hasPendingWrites}
         onRetry={() => setAttempt((value) => value + 1)}
-        emptyTitle="Belum ada pengajuan izin"
-        emptyMessage="Pengajuan izin yang Anda kirim akan muncul di sini."
+        emptyTitle="Belum Ada Pengajuan Izin"
+        emptyMessage="Pengajuan izin yang Anda kirimkan akan muncul secara lengkap di sini."
       >
         <FlatList
           data={state.data}
           keyExtractor={(item, index) => `${item.sessionId}_${item.studentId}_${index}`}
           contentContainerStyle={styles.list}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
-          renderItem={({ item, index }) => (
+          renderItem={({ item }) => (
             <Pressable
               accessibilityRole="button"
               onPress={() => router.push({
@@ -122,40 +109,32 @@ export default function MyLeavesScreen() {
               } as Href)}
               style={({ pressed }) => [
                 styles.card,
-                index % 2 === 0 ? styles.yellowCard : styles.blueCard,
                 pressed && styles.pressed,
               ]}
             >
               <View style={styles.cardTopRow}>
                 <View style={styles.cardHeading}>
-                  <Text style={[styles.cardTitle, fontsLoaded && styles.poppins]}>Pengajuan izin</Text>
+                  <Text style={[styles.cardTitle, fontsLoaded && styles.poppins]}>Pengajuan Izin</Text>
                   <Text style={[styles.date, fontsLoaded && styles.inter]}>{formatTimestamp(item.createdAt)}</Text>
                 </View>
-                <View style={[
-                  styles.statusBadge,
-                  item.status === 'rejected' && styles.rejectedBadge,
-                  item.status === 'approved' && styles.approvedBadge,
-                  item.status === 'pending' && styles.pendingBadge,
-                ]}>
-                  <Text style={[
-                    styles.statusText,
-                    item.status === 'rejected' && styles.rejected,
-                    item.status === 'approved' && styles.approved,
-                    item.status === 'pending' && styles.pending,
-                    fontsLoaded && styles.interMedium,
-                  ]}>{decisionLabel(item.status)}</Text>
-                </View>
+                <StatusBadge status={item.status} size="sm" />
               </View>
+
               <View style={styles.reasonBox}>
-                <Text style={[styles.reasonLabel, fontsLoaded && styles.interMedium]}>Alasan izin</Text>
+                <Text style={[styles.reasonLabel, fontsLoaded && styles.interMedium]}>Alasan Izin</Text>
                 <Text style={[styles.reason, fontsLoaded && styles.inter]}>{item.reason}</Text>
               </View>
+
               {item.reviewNote ? (
                 <View style={styles.noteBox}>
-                  <Text style={[styles.noteLabel, fontsLoaded && styles.interMedium]}>Catatan pemeriksa</Text>
+                  <Text style={[styles.noteLabel, fontsLoaded && styles.interMedium]}>Catatan Pemeriksa</Text>
                   <Text numberOfLines={3} style={[styles.noteText, fontsLoaded && styles.inter]}>{item.reviewNote}</Text>
                 </View>
               ) : null}
+
+              <View style={styles.cardFooter}>
+                <Text style={styles.detailLink}>Lihat detail pengajuan →</Text>
+              </View>
             </Pressable>
           )}
         />
@@ -165,66 +144,107 @@ export default function MyLeavesScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: brand.white },
-  topBar: { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, backgroundColor: brand.white, borderBottomWidth: 1, borderBottomColor: '#E6EAF2' },
-  title: { position: 'absolute', left: 64, right: 64, textAlign: 'center', color: brand.blue, fontSize: 18, fontWeight: '600' },
-  topBarSpacer: { width: 48, height: 48 },
-  body: { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.lg, backgroundColor: '#F5F7FC' },
-  subtitle: { color: brand.muted, fontSize: 14, lineHeight: 20 },
+  screen: { flex: 1, backgroundColor: colors.background },
+  topBar: {
+    height: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  titleContainer: {
+    alignItems: 'center',
+  },
+  title: {
+    color: colors.primary,
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  topBarSpacer: { width: 44, height: 44 },
+  backButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backArrow: {
+    color: colors.primary,
+    fontSize: 24,
+    fontWeight: '600',
+  },
+  headerInfo: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  subtitle: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+  },
   poppins: { fontFamily: 'Poppins_600SemiBold' },
   inter: { fontFamily: 'Inter_400Regular' },
   interMedium: { fontFamily: 'Inter_500Medium' },
-  list: { flexGrow: 1, paddingHorizontal: spacing.md, paddingBottom: spacing.xl },
-  separator: { height: spacing.md },
-  card: {
-    gap: spacing.md,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderLeftWidth: 4,
-    borderColor: brand.border,
-    borderRadius: 18,
-    backgroundColor: brand.white,
-    shadowColor: brand.blue,
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+  list: {
+    flexGrow: 1,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xl,
   },
-  yellowCard: { borderLeftColor: brand.yellow },
-  blueCard: { borderLeftColor: brand.blue },
+  separator: { height: spacing.sm },
+  card: {
+    gap: spacing.sm,
+    padding: spacing.md + 2,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    ...shadows.sm,
+  },
   cardTopRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: spacing.sm,
   },
-  backButton: { width: 48, height: 48, alignItems: 'flex-start', justifyContent: 'center' },
-  backArrow: { color: brand.blue, fontSize: 30, lineHeight: 36, transform: [{ translateY: -7 }] },
-  cardHeading: { flex: 1, gap: spacing.xs },
-  cardTitle: { color: brand.ink, fontSize: 16, fontWeight: '600' },
-  date: { color: brand.muted, fontSize: 12, lineHeight: 18 },
-  statusBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16 },
-  rejectedBadge: { backgroundColor: '#FEE4E2' },
-  approvedBadge: { backgroundColor: '#E8F5E9' },
-  pendingBadge: { backgroundColor: brand.yellow },
-  statusText: { fontSize: 12, fontWeight: '600' },
+  cardHeading: { flex: 1, gap: 2 },
+  cardTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
+  date: { color: colors.textMuted, fontSize: 12, lineHeight: 18 },
   reasonBox: {
-    gap: spacing.xs,
+    gap: 4,
     padding: spacing.md,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#D5DDFD',
-    backgroundColor: '#F3F5FF',
+    borderColor: colors.border,
+    backgroundColor: colors.neutralBg,
   },
-  reasonLabel: { color: brand.blue, fontSize: 12, fontWeight: '600' },
-  reason: { color: brand.ink, fontSize: 14, lineHeight: 21 },
-  noteBox: { gap: spacing.xs, paddingTop: spacing.xs },
-  noteLabel: { color: brand.muted, fontSize: 12 },
-  noteText: { color: brand.ink, fontSize: 13, lineHeight: 19 },
-  rejected: { color: '#B42318' },
-  approved: { color: '#188038' },
-  pending: { color: '#946C00' },
-  pressed: { opacity: 0.75 },
+  reasonLabel: { color: colors.primary, fontSize: 12, fontWeight: '700' },
+  reason: { color: colors.text, fontSize: 14, lineHeight: 21 },
+  noteBox: {
+    gap: 4,
+    padding: spacing.sm + 2,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+  },
+  noteLabel: { color: colors.textMuted, fontSize: 12, fontWeight: '600' },
+  noteText: { color: colors.text, fontSize: 13, lineHeight: 19 },
+  cardFooter: {
+    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  detailLink: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  pressed: { opacity: 0.8 },
 });
-
-

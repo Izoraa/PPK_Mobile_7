@@ -7,8 +7,9 @@ import { useFonts } from 'expo-font';
 import { doc, getDoc } from 'firebase/firestore';
 
 import { AsyncState } from '@/components/common/AsyncState';
+import { StatusBadge } from '@/components/common/StatusBadge';
 import { getFirebaseFirestore } from '@/lib/firebase/client';
-import { colors, radius, spacing } from '@/theme';
+import { colors, radius, spacing, shadows } from '@/theme';
 
 import { AiSupportNotice } from '../components/AiSupportNotice';
 import { subscribeMyLeave } from '../leaveSubscriptions';
@@ -38,19 +39,11 @@ const emptyContext: SessionContext = {
   startsAt: null,
 };
 
-function decisionLabel(status: LeaveRequestRecord['status']): string {
-  switch (status) {
-    case 'pending': return 'Menunggu pemeriksaan';
-    case 'approved': return 'Diterima';
-    case 'rejected': return 'Ditolak';
-  }
-}
-
 function aiLabel(status: LeaveRequestRecord['ai']['status']): string {
   switch (status) {
     case 'pending': return 'Menunggu klasifikasi AI';
-    case 'processing': return 'Klasifikasi AI sedang diproses';
-    case 'succeeded': return 'Klasifikasi AI tersedia';
+    case 'processing': return 'Klasifikasi AI sedang diproses…';
+    case 'succeeded': return 'Klasifikasi AI berhasil tersedia';
     case 'failed': return 'Klasifikasi AI belum tersedia. Asisten tetap dapat memeriksa.';
   }
 }
@@ -128,7 +121,7 @@ export default function LeaveDetailScreen() {
             <Text style={styles.backText}>←</Text>
           </Pressable>
         </Link>
-        <Text accessibilityRole="header" style={[styles.title, fontsLoaded && styles.poppins]}>Detail pengajuan izin</Text>
+        <Text accessibilityRole="header" style={[styles.title, fontsLoaded && styles.poppins]}>Detail Pengajuan Izin</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -138,44 +131,70 @@ export default function LeaveDetailScreen() {
         fromCache={state.fromCache}
         hasPendingWrites={state.hasPendingWrites}
         onRetry={() => setAttempt((value) => value + 1)}
-        emptyTitle="Pengajuan izin tidak ditemukan"
+        emptyTitle="Pengajuan Izin Tidak Ditemukan"
         emptyMessage="Data izin ini tidak tersedia di akun Anda."
       >
         {request ? (
           <ScrollView contentContainerStyle={styles.content}>
+            {/* Status & Praktikum Card */}
             <View style={styles.card}>
-              <Text style={styles.sectionHeading}>Informasi praktikum</Text>
-              <Text style={styles.sectionTitle}>Kelas</Text>
-              <Text style={styles.value}>{sessionContext.className}</Text>
-              <Text style={styles.sectionTitle}>Praktikum</Text>
-              <Text style={styles.value}>{sessionContext.course}</Text>
-              <Text style={styles.sectionTitle}>Sesi</Text>
-              <Text style={styles.value}>{sessionContext.sessionTitle}</Text>
-              <Text style={styles.sectionTitle}>Tanggal kelas</Text>
-              <Text style={styles.value}>{sessionContext.startsAt?.toLocaleString('id-ID') ?? 'Tanggal tidak tersedia'}</Text>
+              <View style={styles.cardHeaderRow}>
+                <Text style={styles.sectionHeading}>Sesi Praktikum</Text>
+                <StatusBadge status={request.status} />
+              </View>
 
-              <View style={styles.divider} />
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Kelas:</Text>
+                <Text style={styles.infoValue}>{sessionContext.className}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Mata Praktikum:</Text>
+                <Text style={styles.infoValue}>{sessionContext.course}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Judul Sesi:</Text>
+                <Text style={styles.infoValue}>{sessionContext.sessionTitle}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Waktu Mulai:</Text>
+                <Text style={styles.infoValue}>{sessionContext.startsAt?.toLocaleString('id-ID') ?? 'Tanggal tidak tersedia'}</Text>
+              </View>
+            </View>
 
-              <Text style={styles.sectionHeading}>Informasi izin</Text>
-              <Text style={styles.sectionTitle}>Alasan izin</Text>
-              <Text style={styles.value}>{request.reason}</Text>
-              <Text style={styles.sectionTitle}>Keputusan asisten</Text>
-              <Text style={styles.value}>{decisionLabel(request.status)}</Text>
-              <Text style={styles.sectionTitle}>Catatan pemeriksa</Text>
-              <Text style={styles.value}>{request.reviewNote || 'Belum ada catatan pemeriksa.'}</Text>
-              {formatTimestamp(request.reviewedAt) ? (
-                <Text style={styles.muted}>Diperiksa pada {formatTimestamp(request.reviewedAt)}</Text>
+            {/* Informasi Izin */}
+            <View style={styles.card}>
+              <Text style={styles.sectionHeading}>Alasan Izin</Text>
+              <View style={styles.reasonBox}>
+                <Text style={styles.reasonText}>{request.reason}</Text>
+              </View>
+
+              {request.reviewNote ? (
+                <View style={styles.reviewNoteBox}>
+                  <Text style={styles.reviewNoteLabel}>Catatan Pemeriksa:</Text>
+                  <Text style={styles.reviewNoteText}>{request.reviewNote}</Text>
+                  {formatTimestamp(request.reviewedAt) ? (
+                    <Text style={styles.muted}>Diperiksa pada {formatTimestamp(request.reviewedAt)}</Text>
+                  ) : null}
+                </View>
               ) : null}
+            </View>
 
-              <View style={styles.divider} />
-
-              <Text style={styles.sectionHeading}>Klasifikasi AI</Text>
-              <Text style={styles.value}>{aiLabel(request.ai.status)}</Text>
+            {/* Informasi AI */}
+            <View style={styles.card}>
+              <Text style={styles.sectionHeading}>Dukungan AI</Text>
+              <View style={styles.aiStatusBadge}>
+                <Text style={styles.aiStatusText}>{aiLabel(request.ai.status)}</Text>
+              </View>
               {request.ai.status === 'succeeded' && request.ai.category ? (
-                <Text style={styles.value}>Kategori: {request.ai.category}</Text>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Kategori Terdeteksi:</Text>
+                  <Text style={[styles.infoValue, styles.categoryText]}>{request.ai.category}</Text>
+                </View>
               ) : null}
               {request.ai.status !== 'succeeded' ? (
-                <Text style={styles.muted}>Pengajuan tetap tersimpan; asisten dapat memeriksa meski klasifikasi AI belum tersedia.</Text>
+                <Text style={styles.muted}>
+                  Pengajuan tetap tersimpan dan asisten tetap dapat memeriksa permohonan izin ini.
+                </Text>
               ) : null}
               <AiSupportNotice />
             </View>
@@ -188,24 +207,79 @@ export default function LeaveDetailScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  header: { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E6EAF2' },
-  content: { padding: spacing.md, paddingTop: 0 },
-  title: { position: 'absolute', left: 64, right: 64, textAlign: 'center', color: '#0D21A1', fontSize: 18, fontWeight: '600' },
+  header: {
+    height: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  content: { padding: spacing.md, gap: spacing.md },
+  title: {
+    color: colors.primary,
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
   poppins: { fontFamily: 'Poppins_600SemiBold' },
-  backButton: { width: 48, height: 48, alignItems: 'flex-start', justifyContent: 'center' },
-  backText: { color: '#0D21A1', fontSize: 30, lineHeight: 36, transform: [{ translateY: -7 }] },
-  headerSpacer: { width: 48, height: 48 },
+  backButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  backText: { color: colors.primary, fontSize: 24, fontWeight: '600' },
+  headerSpacer: { width: 44, height: 44 },
   card: {
     gap: spacing.sm,
-    padding: spacing.md,
+    padding: spacing.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface,
+    ...shadows.sm,
   },
-  sectionHeading: { color: colors.text, fontSize: 17, fontWeight: '700' },
-  divider: { height: 2, backgroundColor: '#2563EB', marginVertical: spacing.sm },
-  sectionTitle: { color: colors.textMuted, fontSize: 14, fontWeight: '600' },
-  value: { color: colors.text, fontSize: 15, lineHeight: 22 },
-  muted: { color: colors.textMuted, fontSize: 13 },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  sectionHeading: { color: colors.text, fontSize: 17, fontWeight: '700', letterSpacing: -0.2 },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  infoLabel: { color: colors.textMuted, fontSize: 13, fontWeight: '500' },
+  infoValue: { color: colors.text, fontSize: 14, fontWeight: '600', maxWidth: '65%', textAlign: 'right' },
+  reasonBox: {
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.neutralBg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  reasonText: { color: colors.text, fontSize: 14, lineHeight: 22 },
+  reviewNoteBox: {
+    marginTop: spacing.xs,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    gap: 4,
+  },
+  reviewNoteLabel: { color: colors.primary, fontSize: 12, fontWeight: '700' },
+  reviewNoteText: { color: colors.text, fontSize: 13, lineHeight: 20 },
+  aiStatusBadge: {
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: '#C7D7FE',
+  },
+  aiStatusText: { color: colors.primary, fontSize: 13, fontWeight: '600' },
+  categoryText: { color: colors.primary, fontWeight: '700' },
+  muted: { color: colors.textMuted, fontSize: 13, lineHeight: 18 },
 });

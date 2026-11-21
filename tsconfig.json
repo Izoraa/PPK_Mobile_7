@@ -23,6 +23,9 @@
   ],
   "exclude": [
     "node_modules",
-    "functions"
+    "functions",
+    "skills-archive",
+    "temp_sprint3",
+    "ppk_total_context"
   ]
 }

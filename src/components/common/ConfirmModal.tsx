@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
 } from 'react-native';
-import { colors, radius, spacing } from '../../theme';
+import { colors, radius, spacing, shadows } from '@/theme';
 
 export interface ConfirmModalProps {
   visible: boolean;
@@ -41,6 +41,10 @@ export function ConfirmModal({
         <View style={styles.backdrop}>
           <TouchableWithoutFeedback>
             <View style={styles.card}>
+              <View style={[styles.iconIndicator, isDestructive && styles.destructiveIconIndicator]}>
+                <Text style={styles.iconIndicatorText}>{isDestructive ? '⚠️' : 'ℹ️'}</Text>
+              </View>
+
               <Text style={styles.title}>{title}</Text>
               <Text style={styles.message}>{message}</Text>
 
@@ -75,22 +79,35 @@ export function ConfirmModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    backgroundColor: 'rgba(16, 24, 40, 0.55)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: spacing.md,
+    padding: spacing.lg,
   },
   card: {
     width: '100%',
-    maxWidth: 360,
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
+    maxWidth: 380,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
     padding: spacing.lg,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.lg,
+  },
+  iconIndicator: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.full,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
+  destructiveIconIndicator: {
+    backgroundColor: colors.dangerBg,
+  },
+  iconIndicatorText: {
+    fontSize: 20,
   },
   title: {
     fontSize: 18,
@@ -100,7 +117,7 @@ const styles = StyleSheet.create({
   },
   message: {
     fontSize: 14,
-    lineHeight: 20,
+    lineHeight: 22,
     color: colors.textMuted,
     marginBottom: spacing.lg,
   },
@@ -111,20 +128,21 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   button: {
+    minHeight: 46,
     paddingVertical: spacing.sm + 2,
-    paddingHorizontal: spacing.md + 4,
-    borderRadius: radius.sm,
-    minWidth: 80,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
+    minWidth: 90,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cancelButton: {
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderStrong,
   },
   cancelText: {
-    color: colors.textMuted,
+    color: colors.text,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -140,3 +158,5 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+
+export default ConfirmModal;

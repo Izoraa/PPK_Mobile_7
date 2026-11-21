@@ -20,7 +20,7 @@ import { StatusBadge } from "../components/common/StatusBadge";
 import { AttendanceList } from "../components/session/AttendanceList";
 import { SessionControl } from "../components/session/SessionControl";
 import { useApp } from "../state/AppContext";
-import { colors, radius, spacing } from "../theme";
+import { colors, radius, spacing, shadows } from "../theme";
 import { formatDate } from "../utils/format";
 import { StudentSessionActions } from "./StudentSessionActions";
 
@@ -138,7 +138,7 @@ export default function SessionDetailScreen() {
         <View style={styles.actions}>
           <Link href="/" dismissTo asChild>
             <Pressable style={styles.button}>
-              <Text style={styles.buttonLabel}>Kembali ke jadwal</Text>
+              <Text style={styles.buttonLabel}>← Kembali ke jadwal</Text>
             </Pressable>
           </Link>
 
@@ -170,25 +170,31 @@ export default function SessionDetailScreen() {
           {session ? (
             <>
               <View style={styles.details}>
-                <Text accessibilityRole="header" style={styles.title}>
-                  {session.course}
-                </Text>
-                <Text style={styles.label}>Laboratorium / ruang kelas</Text>
-                <Text style={styles.value}>{session.room}</Text>
-                <Text style={styles.label}>Tanggal</Text>
-                <Text style={styles.value}>{formatDate(session.date)}</Text>
-                <View style={styles.times}>
-                  <View style={styles.time}>
-                    <Text style={styles.label}>Waktu mulai</Text>
+                <View style={styles.detailsHeader}>
+                  <Text accessibilityRole="header" style={styles.title}>
+                    {session.course}
+                  </Text>
+                  <StatusBadge status={session.status} />
+                </View>
+
+                <View style={styles.infoGrid}>
+                  <View style={styles.infoTile}>
+                    <Text style={styles.label}>Laboratorium / Ruang</Text>
+                    <Text style={styles.value}>{session.room}</Text>
+                  </View>
+                  <View style={styles.infoTile}>
+                    <Text style={styles.label}>Tanggal</Text>
+                    <Text style={styles.value}>{formatDate(session.date)}</Text>
+                  </View>
+                  <View style={styles.infoTile}>
+                    <Text style={styles.label}>Waktu Mulai</Text>
                     <Text style={styles.value}>{session.startTime}</Text>
                   </View>
-                  <View style={styles.time}>
-                    <Text style={styles.label}>Waktu selesai</Text>
+                  <View style={styles.infoTile}>
+                    <Text style={styles.label}>Waktu Selesai</Text>
                     <Text style={styles.value}>{session.endTime}</Text>
                   </View>
                 </View>
-                <Text style={styles.label}>Status sesi</Text>
-                <StatusBadge status={session.status} />
               </View>
               {currentUser.role === "assistant" && (
                 <>
@@ -221,7 +227,7 @@ export default function SessionDetailScreen() {
                       onPress={() => setShowLeaveModal(true)}
                       activeOpacity={0.8}
                     >
-                      <Text style={styles.actionBtnText}>Daftar Izin</Text>
+                      <Text style={[styles.actionBtnText, styles.leaveBtnText]}>Daftar Izin</Text>
                     </TouchableOpacity>
                   </View>
 
@@ -319,40 +325,60 @@ const styles = StyleSheet.create({
   button: {
     minHeight: 40,
     justifyContent: "center",
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.xs + 2,
     paddingHorizontal: spacing.md,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.primary,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
   },
-  buttonLabel: { color: colors.primary, fontSize: 14, fontWeight: "600" },
+  buttonLabel: { color: colors.text, fontSize: 13, fontWeight: "600" },
   editButton: {
     minHeight: 40,
     justifyContent: "center",
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.xs + 2,
     paddingHorizontal: spacing.md,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-  },
-  editButtonText: { color: colors.text, fontSize: 14, fontWeight: "600" },
-  details: {
-    padding: spacing.md,
-    gap: spacing.sm,
     borderRadius: radius.md,
-    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: '#C7D7FE',
+    backgroundColor: colors.primaryLight,
+  },
+  editButtonText: { color: colors.primary, fontSize: 13, fontWeight: "700" },
+  details: {
+    padding: spacing.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
+    ...shadows.sm,
+  },
+  detailsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: spacing.md,
+    gap: spacing.sm,
   },
   title: {
     color: colors.text,
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: "700",
-    marginBottom: spacing.sm,
+    flex: 1,
+    letterSpacing: -0.3,
   },
-  label: { color: colors.textMuted, fontSize: 14 },
-  value: { color: colors.text, fontSize: 16 },
+  infoGrid: {
+    gap: spacing.sm,
+  },
+  infoTile: {
+    backgroundColor: colors.neutralBg,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  label: { color: colors.textMuted, fontSize: 12, fontWeight: "500", marginBottom: 2 },
+  value: { color: colors.text, fontSize: 15, fontWeight: "600" },
   times: { flexDirection: "row", flexWrap: "wrap", gap: spacing.lg },
   time: { gap: spacing.sm },
   buttonRow: {
@@ -362,37 +388,38 @@ const styles = StyleSheet.create({
   },
   actionBtn: {
     flex: 1,
-    paddingVertical: spacing.md,
+    minHeight: 48,
     borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    ...shadows.sm,
   },
   attendanceBtn: {
     backgroundColor: colors.primary,
   },
   leaveBtn: {
-    backgroundColor: "#2563EB",
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
   },
   actionBtnText: {
     color: "#FFFFFF",
     fontSize: 15,
-    fontWeight: "600",
+    fontWeight: "700",
+  },
+  leaveBtnText: {
+    color: colors.primary,
   },
   sheetBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.45)",
+    backgroundColor: "rgba(16, 24, 40, 0.55)",
     justifyContent: "flex-end",
   },
   sheetDismissArea: {
     flex: 1,
   },
   bottomSheet: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.surface,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     width: "100%",
@@ -403,17 +430,13 @@ const styles = StyleSheet.create({
     minHeight: 350,
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.lg,
-    elevation: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
+    ...shadows.lg,
   },
   handleBar: {
     width: 44,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: colors.border,
+    backgroundColor: colors.borderStrong,
     alignSelf: "center",
     marginTop: spacing.sm,
     marginBottom: spacing.xs,
@@ -438,7 +461,7 @@ const styles = StyleSheet.create({
   sheetCloseText: {
     color: colors.primary,
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   sheetBody: {
     flex: 1,

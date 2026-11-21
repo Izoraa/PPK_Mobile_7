@@ -2,7 +2,7 @@ import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'ex
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors, radius, spacing } from '@/theme';
+import { colors, radius, spacing, shadows } from '@/theme';
 
 import { readAttendanceLocation } from '../location';
 import { checkSessionQrPayload } from '../qrPayload';
@@ -28,7 +28,11 @@ function ScannerButton({ label, onPress, disabled = false }: {
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
-      style={[styles.button, disabled && styles.disabledButton]}
+      style={({ pressed }) => [
+        styles.button,
+        disabled && styles.disabledButton,
+        pressed && !disabled && styles.pressed,
+      ]}
     >
       <Text style={styles.buttonLabel}>{label}</Text>
     </Pressable>
@@ -126,41 +130,40 @@ export function StudentQrScanner({ sessionId, onConfirmed }: {
 
       if (result.ok) {
         onConfirmed(result.data.checkedInAt);
-        return;
+      } else {
+        const { code, message, retryable } = result.error;
+        const feedback = code === 'NETWORK_ERROR' || code === 'SERVICE_UNAVAILABLE'
+          ? `${message} Status presensi belum dapat dikonfirmasi.`
+          : message;
+        setScan(retryable
+          ? { status: 'location-ready', payload, message: feedback }
+          : { status: 'submitted-error', message: feedback });
       }
-
-      const { code, message, retryable } = result.error;
-      const feedback = code === 'NETWORK_ERROR' || code === 'SERVICE_UNAVAILABLE'
-        ? `${message} Status presensi belum dapat dikonfirmasi.`
-        : message;
-      setScan(retryable
-        ? { status: 'location-ready', payload, message: feedback }
-        : { status: 'submitted-error', message: feedback });
     } finally {
-      if (checkInRequest.current === controller) checkInRequest.current = null;
+      if (checkInRequest.current === controller) {
+        checkInRequest.current = null;
+      }
     }
   };
 
   const startScan = async () => {
-    if (!permission || requesting) return;
-    if (permission.granted) {
-      setScan({ status: 'scanning' });
-      return;
+    if (requesting) return;
+    if (!permission?.granted) {
+      setRequesting(true);
+      try {
+        const next = await requestPermission();
+        if (!next.granted) {
+          setScan({ status: 'idle' });
+          return;
+        }
+      } finally {
+        setRequesting(false);
+      }
     }
-    if (!permission.canAskAgain) return;
-
-    setRequesting(true);
-    try {
-      const result = await requestPermission();
-      if (result.granted) setScan({ status: 'scanning' });
-    } catch {
-      setPermissionError('Izin kamera belum dapat diminta.');
-    } finally {
-      setRequesting(false);
-    }
+    setScan({ status: 'scanning' });
   };
 
-  const capture = ({ type, data }: BarcodeScanningResult) => {
+  const onBarcodeScanned = ({ type, data }: BarcodeScanningResult) => {
     if (type !== 'qr') return;
     setScan((current) => {
       if (current.status !== 'scanning') return current;
@@ -177,44 +180,23 @@ export function StudentQrScanner({ sessionId, onConfirmed }: {
     });
   };
 
-  if (permissionError) {
+  if (!permission?.granted) {
     return (
       <View style={styles.content}>
-        <Text accessibilityRole="alert" style={styles.body}>{permissionError}</Text>
-        <ScannerButton label="Coba Lagi" onPress={refreshPermission} />
-      </View>
-    );
-  }
-
-  if (!permission) {
-    return <ActivityIndicator accessibilityLabel="Memeriksa izin kamera" color={colors.primary} />;
-  }
-
-  if (!permission.granted) {
-    const canAskAgain = permission.canAskAgain;
-    const web = Platform.OS === 'web';
-
-    return (
-      <View style={styles.content}>
-        <Text style={styles.body}>
-          {canAskAgain
-            ? 'Izinkan akses kamera untuk memindai kode QR dari asisten.'
-            : web
-              ? 'Aktifkan izin kamera di pengaturan situs pada peramban.'
-              : 'Aktifkan izin kamera untuk aplikasi ini di Pengaturan perangkat.'}
-        </Text>
-        {canAskAgain ? (
-          <ScannerButton label="Izinkan Kamera" onPress={startScan} disabled={requesting} />
-        ) : (
-          <ScannerButton
-            label={web ? 'Periksa Izin Lagi' : 'Buka Pengaturan'}
-            onPress={web ? refreshPermission : () => {
-              void Linking.openSettings().catch(() => {
-                setPermissionError('Pengaturan tidak dapat dibuka. Buka Pengaturan perangkat untuk mengizinkan kamera.');
-              });
-            }}
-          />
-        )}
+        <View style={styles.promptCard}>
+          <Text style={styles.promptTitle}>Izin Akses Kamera</Text>
+          <Text style={styles.body}>
+            Aplikasi membutuhkan akses kamera untuk memindai kode QR presensi sesi praktikum.
+          </Text>
+          {permissionError ? <Text style={styles.errorText}>⚠️ {permissionError}</Text> : null}
+          <View style={styles.buttonRow}>
+            {permission?.canAskAgain === false ? (
+              <ScannerButton label="Buka Pengaturan Perangkat" onPress={() => void Linking.openSettings()} />
+            ) : (
+              <ScannerButton label="Izinkan Kamera" onPress={startScan} disabled={requesting} />
+            )}
+          </View>
+        </View>
       </View>
     );
   }
@@ -222,29 +204,16 @@ export function StudentQrScanner({ sessionId, onConfirmed }: {
   if (scan.status === 'scanning') {
     return (
       <View style={styles.content}>
-        <Text style={styles.body}>Arahkan kamera ke kode QR presensi dari asisten.</Text>
-        {appActive && (
+        <View style={styles.cameraBox}>
           <CameraView
-            accessibilityLabel="Kamera pemindai kode QR"
-            style={styles.camera}
-            facing="back"
             barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-            onBarcodeScanned={capture}
-            onMountError={() => setScan((current) =>
-              current.status === 'scanning' ? { status: 'camera-error' } : current,
-            )}
+            facing="back"
+            onBarcodeScanned={onBarcodeScanned}
+            style={styles.camera}
           />
-        )}
-        <ScannerButton label="Tutup Kamera" onPress={() => setScan({ status: 'idle' })} />
-      </View>
-    );
-  }
-
-  if (scan.status === 'verifying') {
-    return (
-      <View style={styles.content}>
-        <ActivityIndicator accessibilityLabel="Memverifikasi kode QR" color={colors.primary} />
-        <Text style={styles.body}>Memverifikasi kode QR…</Text>
+        </View>
+        <Text style={styles.helperText}>Arahkan kamera ke kode QR presensi yang ditampilkan asisten</Text>
+        <ScannerButton label="Batal Pindai" onPress={() => setScan({ status: 'idle' })} />
       </View>
     );
   }
@@ -252,24 +221,26 @@ export function StudentQrScanner({ sessionId, onConfirmed }: {
   if (scan.status === 'location-ready') {
     return (
       <View style={styles.content}>
-        <Text style={styles.body}>Lokasi digunakan untuk memeriksa apakah Anda berada di laboratorium.</Text>
-        {scan.message && <Text accessibilityRole="alert" style={styles.body}>{scan.message}</Text>}
-        <ScannerButton
-          label={scan.message ? 'Coba Presensi Lagi' : 'Lanjutkan Presensi'}
-          onPress={submitAttendance}
-          disabled={!appActive}
-        />
-        <ScannerButton label="Pindai Ulang" onPress={startScan} />
+        <View style={styles.successCard}>
+          <Text style={styles.promptTitle}>✅ Tiket QR Terverifikasi</Text>
+          <Text style={styles.body}>Lanjutkan untuk memverifikasi lokasi dan mencatat kehadiran Anda.</Text>
+          {scan.message ? <Text style={styles.errorText}>⚠️ {scan.message}</Text> : null}
+          <ScannerButton label="Kirim Presensi Sekarang" onPress={submitAttendance} />
+        </View>
       </View>
     );
   }
 
-  if (scan.status === 'reading-location' || scan.status === 'submitting') {
-    const label = scan.status === 'reading-location' ? 'Mengambil lokasi…' : 'Mengirim presensi…';
+  if (scan.status === 'verifying' || scan.status === 'reading-location' || scan.status === 'submitting') {
+    const label = scan.status === 'verifying'
+      ? 'Memverifikasi tiket QR…'
+      : scan.status === 'reading-location'
+        ? 'Memeriksa lokasi kehadiran…'
+        : 'Mencatat presensi ke server…';
     return (
-      <View style={styles.content}>
-        <ActivityIndicator accessibilityLabel={label} color={colors.primary} />
-        <Text style={styles.body}>{label}</Text>
+      <View style={styles.loadingBox}>
+        <ActivityIndicator accessibilityLabel={label} color={colors.primary} size="large" />
+        <Text style={styles.loadingLabel}>{label}</Text>
       </View>
     );
   }
@@ -279,12 +250,16 @@ export function StudentQrScanner({ sessionId, onConfirmed }: {
   return (
     <View style={styles.content}>
       {failed && (
-        <Text accessibilityRole="alert" style={styles.body}>
-          {scan.message} Presensi tidak dicatat.
-        </Text>
+        <View style={styles.errorBox}>
+          <Text accessibilityRole="alert" style={styles.errorText}>
+            {scan.message} Presensi belum dapat dicatat.
+          </Text>
+        </View>
       )}
       {scan.status === 'submitted-error' && (
-        <Text accessibilityRole="alert" style={styles.body}>{scan.message}</Text>
+        <View style={styles.errorBox}>
+          <Text accessibilityRole="alert" style={styles.errorText}>{scan.message}</Text>
+        </View>
       )}
       {scan.status === 'retryable-error' && (
         <ScannerButton
@@ -295,33 +270,88 @@ export function StudentQrScanner({ sessionId, onConfirmed }: {
         />
       )}
       {cameraError && (
-        <Text accessibilityRole="alert" style={styles.body}>Kamera tidak dapat dibuka. Coba lagi.</Text>
+        <View style={styles.errorBox}>
+          <Text accessibilityRole="alert" style={styles.errorText}>Kamera tidak dapat dibuka. Silakan coba lagi.</Text>
+        </View>
       )}
-      <ScannerButton label={failed || scan.status === 'submitted-error' ? 'Pindai Ulang' : 'Buka Kamera'} onPress={startScan} />
+      <ScannerButton label={failed || scan.status === 'submitted-error' ? 'Pindai Ulang' : 'Buka Kamera Pindai QR'} onPress={startScan} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { gap: spacing.sm, marginTop: spacing.sm },
-  body: { color: colors.textMuted, fontSize: 14, lineHeight: 20 },
+  content: { gap: spacing.md, marginTop: spacing.sm },
+  promptCard: {
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: spacing.xs,
+  },
+  promptTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  body: { color: colors.textMuted, fontSize: 13, lineHeight: 19 },
+  buttonRow: { marginTop: spacing.sm },
+  cameraBox: {
+    borderRadius: radius.xl,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: colors.primary,
+    ...shadows.md,
+  },
   camera: {
     width: '100%',
     maxWidth: 400,
     alignSelf: 'center',
     aspectRatio: 1,
-    overflow: 'hidden',
-    borderRadius: radius.md,
     backgroundColor: colors.text,
+  },
+  helperText: {
+    textAlign: 'center',
+    color: colors.textMuted,
+    fontSize: 13,
   },
   button: {
     alignSelf: 'flex-start',
     justifyContent: 'center',
-    minHeight: 44,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.sm,
+    alignItems: 'center',
+    minHeight: 48,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
     backgroundColor: colors.primary,
   },
+  pressed: { opacity: 0.85 },
   disabledButton: { opacity: 0.65 },
-  buttonLabel: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  buttonLabel: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  successCard: {
+    backgroundColor: colors.successBg,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.successBorder,
+    gap: spacing.sm,
+  },
+  errorBox: {
+    backgroundColor: colors.dangerBg,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.dangerBorder,
+  },
+  errorText: { color: colors.dangerText, fontSize: 13, fontWeight: '600' },
+  loadingBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+    gap: spacing.sm,
+  },
+  loadingLabel: {
+    color: colors.textMuted,
+    fontSize: 14,
+    fontWeight: '600',
+  },
 });

@@ -1,7 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { leaveAiStatusLabels, type LeaveReviewMetadata, type LeaveReviewRecord } from '../types';
-import { colors, radius, spacing } from '@/theme';
+import { colors, radius, spacing, shadows } from '@/theme';
+import { StatusBadge } from '@/components/common/StatusBadge';
 
 export interface LeaveReviewCardProps {
   record: LeaveReviewRecord;
@@ -33,22 +34,22 @@ export function LeaveReviewCard({ record, metadata, onPress }: LeaveReviewCardPr
             {record.studentNumber ? `NIM ${record.studentNumber}` : 'NIM tidak tersedia'}
           </Text>
         </View>
-        <Text style={[
-          styles.pending,
-          record.status === 'approved' && styles.approved,
-          record.status === 'rejected' && styles.rejected,
-        ]}>
-          {record.status === 'pending' ? 'Pending' : record.status === 'approved' ? 'Diterima' : 'Ditolak'}
-        </Text>
+        <StatusBadge status={record.status} size="sm" />
       </View>
-      <Text numberOfLines={3} style={styles.reason}>{record.reason}</Text>
-      <Text style={styles.meta}>Sesi: {metadata?.sessionTitle ?? record.sessionId}</Text>
-      <Text style={styles.meta}>Kelas: {metadata?.className ?? record.classId}</Text>
-      <Text style={styles.meta}>Diajukan: {formatCreatedAt(record.createdAt)}</Text>
-      <Text style={styles.meta}>AI: {leaveAiStatusLabels[record.ai.status]}</Text>
-      {record.ai.status === 'succeeded' ? <Text style={styles.meta}>Kategori: {aiSummary}</Text> : null}
-      {record.ai.status === 'failed' && record.ai.errorCode ? (
-        <Text style={styles.meta}>Detail kegagalan: {record.ai.errorCode}</Text>
+
+      <View style={styles.reasonBox}>
+        <Text numberOfLines={3} style={styles.reason}>{record.reason}</Text>
+      </View>
+
+      <View style={styles.metaRow}>
+        <Text style={styles.metaBadge}>{metadata?.sessionTitle ?? record.sessionId}</Text>
+        <Text style={styles.meta}>• {formatCreatedAt(record.createdAt)}</Text>
+      </View>
+
+      {record.ai.status === 'succeeded' ? (
+        <View style={styles.aiBadge}>
+          <Text style={styles.aiBadgeText}>🤖 AI: {aiSummary}</Text>
+        </View>
       ) : null}
     </Pressable>
   );
@@ -58,19 +59,50 @@ const styles = StyleSheet.create({
   card: {
     padding: spacing.md,
     gap: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.sm,
+    ...shadows.sm,
+  },
+  pressed: { opacity: 0.8 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: spacing.sm },
+  identity: { flex: 1, gap: 2 },
+  name: { color: colors.text, fontSize: 16, fontWeight: '700' },
+  secondary: { color: colors.textMuted, fontSize: 13 },
+  reasonBox: {
+    padding: spacing.sm + 2,
     borderRadius: radius.md,
-    backgroundColor: colors.card,
+    backgroundColor: colors.neutralBg,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  pressed: { opacity: 0.75 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
-  identity: { flex: 1, gap: spacing.xs },
-  name: { color: colors.text, fontSize: 17, fontWeight: '700' },
-  secondary: { color: colors.textMuted, fontSize: 14 },
-  pending: { color: colors.primary, fontSize: 13, fontWeight: '700' },
-  approved: { color: colors.success },
-  rejected: { color: colors.danger },
-  reason: { color: colors.text, fontSize: 15, lineHeight: 21 },
-  meta: { color: colors.textMuted, fontSize: 13 },
+  reason: { color: colors.text, fontSize: 14, lineHeight: 20 },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  metaBadge: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  meta: { color: colors.textMuted, fontSize: 12 },
+  aiBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: '#C7D7FE',
+  },
+  aiBadgeText: {
+    color: colors.primary,
+    fontSize: 11,
+    fontWeight: '700',
+  },
 });
