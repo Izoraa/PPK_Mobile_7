@@ -1,23 +1,21 @@
 import { NativeTabs } from "expo-router/native-tabs";
-import { useColorScheme } from "react-native";
 
-import { Colors } from "@/constants/theme";
+import { colors as themeColors } from "@/theme";
 import { useApp } from "@/state/AppContext";
 
 export default function AppTabs() {
-  const scheme = useColorScheme();
-  const colors = Colors[scheme === "dark" ? "dark" : "light"];
   const { currentUser } = useApp();
-  const brandBlue = "#0D21A1";
-  const selectedIconColor = "#E5E7EB";
+  const brandBlue = themeColors.primary;
+  const inactiveColor = themeColors.textMuted;
+  const selectedIconColor = themeColors.primary;
 
   return (
     <NativeTabs
-      backgroundColor={colors.background}
-      shadowColor="#475569"
+      backgroundColor={themeColors.surface}
+      shadowColor="#0D21A1"
       indicatorColor={brandBlue}
-      rippleColor={brandBlue}
-      iconColor={{ default: colors.textSecondary, selected: selectedIconColor }}
+      rippleColor={themeColors.primaryLight}
+      iconColor={{ default: inactiveColor, selected: selectedIconColor }}
       labelStyle={{ selected: { color: brandBlue } }}
     >
       <NativeTabs.Trigger name="index">

@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { colors, radius, spacing } from '../../theme';
+import { colors, radius, spacing, shadows } from '../../theme';
 import { formatTime } from '../../utils/format';
 import {
   CHECK_IN_ERROR_MESSAGES,
   CHECK_IN_SUCCESS_MESSAGE,
 } from '../../utils/messages';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { getErrorMessage } from '../../utils/errors';
 import { checkIn } from '../../features/attendance/service';
 import type { AttendanceState } from '../../features/attendance/hooks';
 import { useAttendanceState } from '../../features/attendance/hooks';
@@ -16,17 +17,6 @@ export interface CheckInPanelProps {
   attendanceState?: AttendanceState;
 }
 
-/**
- * CheckInPanel – Hasta (SRS-10 to SRS-14)
- *
- * Displays a check-in interface for students on the SessionDetail screen.
- * - SRS-10: Check-in button active only when session status is 'open'.
- * - SRS-11: Records check-in time via checkIn() from useApp().
- * - SRS-12: Prevents duplicate check-in using hasCheckedIn().
- * - SRS-13: Shows success/failure feedback via a modal (ConfirmModal).
- * - SRS-14: Shows contextual info when session is not_open, closed,
- *           or the student has already checked in.
- */
 export function CheckInPanel({ sessionId, attendanceState: sharedAttendanceState }: CheckInPanelProps) {
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
@@ -39,7 +29,7 @@ export function CheckInPanel({ sessionId, attendanceState: sharedAttendanceState
   if (status === 'loading') {
     return (
       <View style={styles.container}>
-        <Text style={styles.heading}>Presensi</Text>
+        <Text style={styles.heading}>Presensi Kehadiran</Text>
         <ActivityIndicator accessibilityLabel="Memuat status presensi" color={colors.primary} />
       </View>
     );
@@ -53,7 +43,7 @@ export function CheckInPanel({ sessionId, attendanceState: sharedAttendanceState
         : 'Status presensi belum dapat dimuat. Periksa koneksi lalu coba lagi.';
     return (
       <View style={styles.container}>
-        <Text style={styles.heading}>Presensi</Text>
+        <Text style={styles.heading}>Presensi Kehadiran</Text>
         <Text style={styles.infoBannerText}>{message}</Text>
         {error?.retryable && (
           <Pressable onPress={retry} style={styles.retryButton} accessibilityRole="button">
@@ -67,8 +57,8 @@ export function CheckInPanel({ sessionId, attendanceState: sharedAttendanceState
   if (!session) {
     return (
       <View style={styles.container}>
-        <Text style={styles.heading}>Presensi</Text>
-        <Text style={styles.infoBannerText}>Sesi tidak ditemukan.</Text>
+        <Text style={styles.heading}>Presensi Kehadiran</Text>
+        <Text style={styles.infoBannerText}>Sesi praktikum tidak ditemukan.</Text>
       </View>
     );
   }
@@ -80,17 +70,55 @@ export function CheckInPanel({ sessionId, attendanceState: sharedAttendanceState
   const isNotOpen = session.status === 'not_open';
   const isClosed = session.status === 'closed';
 
-  const getInfoBanner = (): { message: string; color: string } | null => {
-    if (alreadyCheckedIn) return { message: CHECK_IN_ERROR_MESSAGES.ALREADY_CHECKED_IN, color: colors.success };
+  const getInfoBanner = (): { message: string; color: string; bg: string; border: string } | null => {
+    if (alreadyCheckedIn) {
+      return {
+        message: CHECK_IN_ERROR_MESSAGES.ALREADY_CHECKED_IN,
+        color: colors.successText,
+        bg: colors.successBg,
+        border: colors.successBorder,
+      };
+    }
     if (hasBlockingParticipation) {
       if (participation?.kind === 'leave' && participation.status === 'approved') {
-        return { message: 'Pengajuan izin disetujui. Presensi tidak dapat dibuat.', color: colors.neutral };
+        return {
+          message: 'Pengajuan izin telah disetujui. Kehadiran tercatat sebagai izin.',
+          color: colors.primary,
+          bg: colors.primaryLight,
+          border: '#C7D7FE',
+        };
       }
-      return { message: 'Pengajuan izin masih menunggu keputusan. Presensi tidak dapat dibuat.', color: colors.neutral };
+      return {
+        message: 'Pengajuan izin Anda masih menunggu pemeriksaan asisten.',
+        color: colors.warningText,
+        bg: colors.warningBg,
+        border: colors.warningBorder,
+      };
     }
-    if (session.isArchived) return { message: 'Sesi sudah diarsipkan. Presensi tidak dapat dilakukan.', color: colors.danger };
-    if (isNotOpen) return { message: CHECK_IN_ERROR_MESSAGES.SESSION_NOT_OPEN, color: colors.neutral };
-    if (isClosed) return { message: CHECK_IN_ERROR_MESSAGES.SESSION_CLOSED, color: colors.danger };
+    if (session.isArchived) {
+      return {
+        message: 'Sesi sudah diarsipkan. Presensi tidak dapat dilakukan.',
+        color: colors.dangerText,
+        bg: colors.dangerBg,
+        border: colors.dangerBorder,
+      };
+    }
+    if (isNotOpen) {
+      return {
+        message: CHECK_IN_ERROR_MESSAGES.SESSION_NOT_OPEN,
+        color: colors.neutralText,
+        bg: colors.neutralBg,
+        border: colors.border,
+      };
+    }
+    if (isClosed) {
+      return {
+        message: CHECK_IN_ERROR_MESSAGES.SESSION_CLOSED,
+        color: colors.dangerText,
+        bg: colors.dangerBg,
+        border: colors.dangerBorder,
+      };
+    }
     return null;
   };
 
@@ -98,7 +126,6 @@ export function CheckInPanel({ sessionId, attendanceState: sharedAttendanceState
     if (!isOpen || alreadyCheckedIn || hasBlockingParticipation || isSubmitting) return;
     setIsSubmitting(true);
     setRetryableError(false);
-    const result = await checkIn(sessionId);
 
     if (result.ok) {
       setModalTitle('Presensi Berhasil');
@@ -124,77 +151,58 @@ export function CheckInPanel({ sessionId, attendanceState: sharedAttendanceState
         setRetryableError(result.error.retryable);
       }
     }
-
-    setIsSubmitting(false);
-    setModalVisible(true);
   };
 
-  const dismissModal = () => {
-    setModalVisible(false);
-  };
-
-  const infoBanner = getInfoBanner();
-
-  // Can the student press check-in? Only when session is open AND not already checked in (SRS-10, SRS-12)
-  const canCheckIn = isOpen && !session.isArchived && !alreadyCheckedIn && !hasBlockingParticipation && !isSubmitting;
+  const banner = getInfoBanner();
 
   return (
     <View style={styles.container}>
-      <Text style={styles.heading}>Presensi</Text>
+      <Text style={styles.heading}>Presensi Kehadiran</Text>
 
-      {/* SRS-14: Info banner when check-in is not possible */}
-      {infoBanner && (
-        <View
-          style={[styles.infoBanner, { borderLeftColor: infoBanner.color }]}
-        >
-          <Text style={styles.infoBannerText}>{infoBanner.message}</Text>
+      {banner ? (
+        <View style={[styles.infoBanner, { backgroundColor: banner.bg, borderColor: banner.border }]}>
+          <Text style={[styles.infoBannerText, { color: banner.color }]}>{banner.message}</Text>
         </View>
-      )}
+      ) : null}
 
-      {/* SRS-10: Check-in button only when session is open */}
-      {isOpen && (
-        <TouchableOpacity
-          style={[
-            styles.checkInButton,
-            !canCheckIn && styles.checkInButtonDisabled,
-          ]}
-            onPress={() => { void handleCheckIn(); }}
-          disabled={!canCheckIn}
-          activeOpacity={0.8}
-        >
+      <TouchableOpacity
+        style={[
+          styles.checkInButton,
+          (!isOpen || alreadyCheckedIn || hasBlockingParticipation || isSubmitting) && styles.checkInButtonDisabled,
+        ]}
+        onPress={handleCheckIn}
+        disabled={!isOpen || alreadyCheckedIn || hasBlockingParticipation || isSubmitting}
+        activeOpacity={0.8}
+      >
+        {isSubmitting ? (
+          <ActivityIndicator color="#FFFFFF" size="small" />
+        ) : (
           <Text
             style={[
               styles.checkInButtonText,
-              !canCheckIn && styles.checkInButtonTextDisabled,
+              (!isOpen || alreadyCheckedIn || hasBlockingParticipation) && styles.checkInButtonTextDisabled,
             ]}
           >
-            {isSubmitting ? 'Menyimpan...' : alreadyCheckedIn ? 'Sudah Tercatat' : 'Presensi'}
+            {alreadyCheckedIn
+              ? 'Sudah Presensi'
+              : hasBlockingParticipation
+                ? 'Izin Diajukan'
+                : 'Presensi Mandiri'}
           </Text>
-        </TouchableOpacity>
-      )}
+        )}
+      </TouchableOpacity>
 
-      {retryableError && !isSubmitting && (
-        <Pressable
-          onPress={() => {
-            setRetryableError(false);
-            retry();
-          }}
-          style={styles.retryButton}
-          accessibilityRole="button"
-        >
-          <Text style={styles.retryButtonText}>Periksa status lagi</Text>
-        </Pressable>
-      )}
-
-      {/* SRS-13: Feedback modal using ConfirmModal */}
       <ConfirmModal
         visible={modalVisible}
         title={modalTitle}
         message={modalMessage}
-        confirmLabel="OK"
-        cancelLabel="Tutup"
-        onConfirm={dismissModal}
-        onCancel={dismissModal}
+        confirmLabel={retryableError ? 'Coba Lagi' : 'OK'}
+        cancelLabel={retryableError ? 'Tutup' : undefined}
+        onConfirm={() => {
+          setModalVisible(false);
+          if (retryableError) handleCheckIn();
+        }}
+        onCancel={() => setModalVisible(false)}
       />
     </View>
   );
@@ -202,45 +210,49 @@ export function CheckInPanel({ sessionId, attendanceState: sharedAttendanceState
 
 const styles = StyleSheet.create({
   container: {
-    padding: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.card,
+    padding: spacing.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    marginVertical: spacing.sm,
+    marginBottom: spacing.sm,
+    ...shadows.sm,
   },
   heading: {
     fontSize: 16,
     fontWeight: '700',
     color: colors.text,
     marginBottom: spacing.sm,
+    letterSpacing: -0.2,
   },
   infoBanner: {
-    backgroundColor: colors.background,
-    borderLeftWidth: 4,
-    borderRadius: radius.sm,
-    padding: spacing.sm + 4,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: spacing.md,
     marginBottom: spacing.md,
   },
   infoBannerText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '500',
   },
   checkInButton: {
+    minHeight: 48,
     backgroundColor: colors.primary,
-    paddingVertical: spacing.sm + 4,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
   },
   checkInButtonDisabled: {
-    backgroundColor: colors.border,
+    backgroundColor: colors.neutralBg,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   checkInButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
   },
   checkInButtonTextDisabled: {
     color: colors.textMuted,
@@ -250,13 +262,15 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.primary,
   },
   retryButtonText: {
     color: colors.primary,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
 });
+
+export default CheckInPanel;
