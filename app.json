@@ -58,7 +58,11 @@
           "icon": "./assets/images/icon.png",
           "color": "#208AEF"
         }
-      ]
+      ],
+      "./plugins/withLeafletMapAssets",
+      "expo-image",
+      "expo-status-bar",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
