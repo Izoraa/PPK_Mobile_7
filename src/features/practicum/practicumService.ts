@@ -1,3 +1,4 @@
+import type { User } from 'firebase/auth';
 import {
   addDoc,
   collection,
@@ -12,11 +13,12 @@ import {
   Timestamp,
   updateDoc,
   where,
+  type DocumentData,
   type Unsubscribe
 } from 'firebase/firestore';
 
 import { getFirebaseAuth, getFirebaseFirestore } from '@/lib/firebase/client';
-import { dispatchNotification } from '../notifications';
+import { requestLabCheckInApi } from '@/lib/labCheckInApi';
 import type {
   ClassDoc,
   CreateClassInput,
@@ -483,94 +485,120 @@ export async function createSession(input: CreateSessionInput): Promise<Result<{
   }
 }
 
-export async function updateSession(sessionId: string, input: UpdateSessionInput): Promise<Result<void>> {
-  const auth = getFirebaseAuth();
-  const db = getFirebaseFirestore();
-  const user = auth.currentUser;
+const SESSION_RECONCILE_TIMEOUT_MS = 5_000;
 
+function waitForSessionMutation(
+  sessionId: string,
+  user: User,
+  matches: (session: DocumentData) => boolean,
+): Promise<boolean> {
+  const auth = getFirebaseAuth();
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => finish(false), SESSION_RECONCILE_TIMEOUT_MS);
+    let unsubscribe: Unsubscribe | undefined;
+
+    function finish(applied: boolean) {
+      clearTimeout(timer);
+      unsubscribe?.();
+      resolve(applied);
+    }
+
+    try {
+      unsubscribe = onSnapshot(
+        doc(getFirebaseFirestore(), 'sessions', sessionId),
+        { includeMetadataChanges: true },
+        (snapshot) => {
+          if (auth.currentUser !== user) {
+            finish(false);
+            return;
+          }
+          if (snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) return;
+          const session = snapshot.data();
+          if (session?.assistantId === user.uid && matches(session)) finish(true);
+        },
+        () => finish(false),
+      );
+    } catch {
+      finish(false);
+    }
+  });
+}
+
+async function requestSessionMutation(
+  sessionId: string,
+  user: User,
+  action: 'open' | 'schedule',
+  body: Record<string, string>,
+  matches: (session: DocumentData) => boolean,
+): Promise<Result<void>> {
+  const result = await requestLabCheckInApi(`/api/v1/sessions/${encodeURIComponent(sessionId)}/${action}`, {
+    method: action === 'open' ? 'POST' : 'PATCH',
+    body,
+    successStatus: 200,
+    user,
+  });
+  if (!result.ok && !result.error.outcomeUnknown) return result;
+
+  const response = result.ok ? result.data : null;
+  if (
+    response && typeof response === 'object' && 'ok' in response && response.ok === true &&
+    'data' in response && response.data && typeof response.data === 'object' &&
+    'sessionId' in response.data && response.data.sessionId === sessionId &&
+    'status' in response.data && response.data.status === (action === 'open' ? 'open' : 'not_open')
+  ) {
+    return { ok: true, data: undefined };
+  }
+
+  // A timed-out request can still commit. Replaying a schedule could overwrite a later edit.
+  const applied = await waitForSessionMutation(sessionId, user, matches);
+  if (getFirebaseAuth().currentUser !== user) {
+    return { ok: false, error: { code: 'UNAUTHENTICATED', message: 'User belum terautentikasi.', retryable: false } };
+  }
+  if (applied) return { ok: true, data: undefined };
+
+  return {
+    ok: false,
+    error: {
+      code: 'SESSION_STATE_UNCONFIRMED',
+      message: action === 'open'
+        ? 'Status pembukaan sesi belum dapat dipastikan. Periksa status sesi sebelum mencoba lagi.'
+        : 'Perubahan jadwal belum dapat dipastikan. Kembali lalu buka lagi halaman ini untuk memeriksa jadwal terbaru.',
+      retryable: false,
+    },
+  };
+}
+
+export async function updateSession(sessionId: string, input: UpdateSessionInput): Promise<Result<void>> {
+  const user = getFirebaseAuth().currentUser;
   if (!user) {
     return { ok: false, error: { code: 'UNAUTHENTICATED', message: 'User belum terautentikasi.', retryable: false } };
   }
 
-  try {
-    const sessionRef = doc(db, 'sessions', sessionId);
-    const snap = await getDoc(sessionRef);
-
-    if (!snap.exists()) {
-      return { ok: false, error: { code: 'NOT_FOUND', message: 'Sesi tidak ditemukan.', retryable: false } };
-    }
-
-    if (input.startsAt && input.startsAt.getTime() < Date.now()) {
-      return {
-        ok: false,
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Waktu mulai tidak boleh kurang dari waktu saat ini.',
-          retryable: false,
-        },
-      };
-    }
-
-    const current = snap.data();
-    if (current.assistantId !== user.uid) {
-      return { ok: false, error: { code: 'FORBIDDEN', message: 'Anda bukan pemilik sesi ini.', retryable: false } };
-    }
-
-    if (current.isArchived) {
-      return { ok: false, error: { code: 'SESSION_ARCHIVED', message: 'Sesi sudah diarsipkan.', retryable: false } };
-    }
-
-    // S2-SRS-18: Metadata can only be edited when status is 'not_open'
-    if (current.status !== 'not_open') {
-      return { ok: false, error: { code: 'FORBIDDEN', message: 'Sesi yang sudah dibuka atau ditutup tidak dapat diubah.', retryable: false } };
-    }
-
-    const finalRoom = (input.room !== undefined ? input.room.trim() : current.room) as string;
-    const finalStartsAt = input.startsAt ?? current.startsAt?.toDate?.();
-    const finalEndsAt = input.endsAt ?? current.endsAt?.toDate?.();
-    // Cek konflik jadwal, kecualikan sesi ini sendiri (excludeId)
-    if (finalRoom && finalStartsAt && finalEndsAt) {
-      const conflict = await findConflictingSession(
-        finalRoom,
-        finalStartsAt,
-        finalEndsAt,
-        sessionId,  // <-- ini yang membuat sesi sendiri tidak dianggap konflik
-      );
-      if (conflict) {
-        const fmtStart = conflict.startsAt.toTimeString().substring(0, 5);
-        const fmtEnd = conflict.endsAt.toTimeString().substring(0, 5);
-        return {
-          ok: false,
-          error: {
-            code: 'CONFLICT',
-            message: `Ruangan "${finalRoom}" sudah digunakan oleh sesi "${conflict.title}" pada ${fmtStart}–${fmtEnd}. Pilih ruangan atau waktu lain.`,
-            retryable: false,
-          },
-        };
-      }
-    }
-
-    const updates: Record<string, any> = { updatedAt: serverTimestamp() };
-    if (input.title !== undefined) updates.title = input.title.trim();
-    if (input.room !== undefined) updates.room = input.room.trim();
-    if (input.timeZone !== undefined) updates.timeZone = input.timeZone.trim();
-    if (input.startsAt !== undefined) updates.startsAt = Timestamp.fromDate(input.startsAt);
-    if (input.endsAt !== undefined) updates.endsAt = Timestamp.fromDate(input.endsAt);
-
-    await updateDoc(sessionRef, updates);
-
-    // S3-SRS-24: Notify enrolled students when session schedule is modified
-    void dispatchNotification('SCHEDULE_CHANGED', {
-      sessionId,
-      classId: current.classId,
-      title: 'Perubahan Jadwal Praktikum',
-      body: `Jadwal sesi "${input.title ?? current.title}" telah diperbarui.`,
-    });
-
-    return { ok: true, data: undefined };
-  } catch (err: any) {
-    return { ok: false, error: { code: 'NETWORK_ERROR', message: err.message, retryable: true } };
+  if ([input.startsAt, input.endsAt].some((date) => date !== undefined && !Number.isFinite(date.getTime()))) {
+    return { ok: false, error: { code: 'VALIDATION_ERROR', message: 'Format tanggal atau jam tidak valid.', retryable: false } };
   }
+
+  const patch: Partial<Record<keyof UpdateSessionInput, string>> = {};
+  if (input.title !== undefined) patch.title = input.title.trim();
+  if (input.room !== undefined) patch.room = input.room.trim();
+  if (input.timeZone !== undefined) patch.timeZone = input.timeZone.trim();
+  if (input.startsAt !== undefined) patch.startsAt = input.startsAt.toISOString();
+  if (input.endsAt !== undefined) patch.endsAt = input.endsAt.toISOString();
+
+  const fields = Object.entries(patch);
+  if (fields.length === 0) {
+    return { ok: false, error: { code: 'VALIDATION_ERROR', message: 'Isi setidaknya satu field jadwal.', retryable: false } };
+  }
+
+  return requestSessionMutation(sessionId, user, 'schedule', patch, (session) =>
+    session.isArchived === false && fields.every(([field, expected]) => {
+      const actual: unknown = session[field];
+      if (field === 'startsAt' || field === 'endsAt') {
+        return actual instanceof Timestamp && actual.toMillis() === Date.parse(expected);
+      }
+      return actual === expected;
+    }),
+  );
 }
 
 export async function archiveSession(sessionId: string): Promise<Result<void>> {
@@ -612,79 +640,14 @@ export async function archiveSession(sessionId: string): Promise<Result<void>> {
 }
 
 export async function openSession(sessionId: string): Promise<Result<void>> {
-  const auth = getFirebaseAuth();
-  const db = getFirebaseFirestore();
-  const user = auth.currentUser;
-
+  const user = getFirebaseAuth().currentUser;
   if (!user) {
     return { ok: false, error: { code: 'UNAUTHENTICATED', message: 'User belum terautentikasi.', retryable: false } };
   }
 
-  try {
-    const sessionRef = doc(db, 'sessions', sessionId);
-    let sessionData: any = null;
-
-    await runTransaction(db, async (txn) => {
-      const snap = await txn.get(sessionRef);
-      if (!snap.exists()) {
-        throw new Error('NOT_FOUND: Sesi tidak ditemukan.');
-      }
-
-      const data = snap.data();
-      sessionData = data;
-      if (data.assistantId !== user.uid) {
-        throw new Error('FORBIDDEN: Anda bukan pemilik sesi ini.');
-      }
-
-      if (data.isArchived) {
-        throw new Error('SESSION_ARCHIVED: Sesi sudah diarsipkan.');
-      }
-
-      if (data.status !== 'not_open') {
-        throw new Error(`CONFLICT: Sesi sudah dalam status ${data.status}.`);
-      }
-
-      if (data.startsAt) {
-        const startsAtDate = data.startsAt.toDate ? data.startsAt.toDate() : new Date(data.startsAt);
-        if (Date.now() < startsAtDate.getTime()) {
-          throw new Error('NOT_STARTED: Sesi hanya bisa dibuka setelah melewati atau sama dengan jam mulai.');
-        }
-      }
-
-      txn.update(sessionRef, {
-        status: 'open',
-        openedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-    });
-
-    // S3-SRS-23: Notify enrolled students when session is opened
-    if (sessionData) {
-      void dispatchNotification('SESSION_OPENED', {
-        sessionId,
-        classId: sessionData.classId,
-        title: 'Sesi Praktikum Dibuka',
-        body: `Sesi "${sessionData.title}" di ruang ${sessionData.room} telah dibuka. Silakan lakukan presensi.`,
-      });
-    }
-
-    return { ok: true, data: undefined };
-  } catch (err: any) {
-    const msg = err.message || '';
-    if (msg.includes('FORBIDDEN')) {
-      return { ok: false, error: { code: 'FORBIDDEN', message: 'Hanya pemilik sesi yang dapat membuka sesi.', retryable: false } };
-    }
-    if (msg.includes('SESSION_ARCHIVED')) {
-      return { ok: false, error: { code: 'SESSION_ARCHIVED', message: 'Sesi sudah diarsipkan.', retryable: false } };
-    }
-    if (msg.includes('CONFLICT')) {
-      return { ok: false, error: { code: 'CONFLICT', message: 'Sesi tidak dapat dibuka kembali atau sudah ditutup.', retryable: false } };
-    }
-    if (msg.includes('NOT_STARTED')) {
-      return { ok: false, error: { code: 'NOT_STARTED' as any, message: 'Sesi hanya bisa dibuka setelah melewati atau sama dengan jam mulai.', retryable: false } };
-    }
-    return { ok: false, error: { code: 'NETWORK_ERROR', message: msg, retryable: true } };
-  }
+  return requestSessionMutation(sessionId, user, 'open', {}, (session) =>
+    (session.status === 'open' || session.status === 'closed') && session.openedAt instanceof Timestamp,
+  );
 }
 
 export async function closeSession(sessionId: string): Promise<Result<void>> {
@@ -847,7 +810,6 @@ async function findConflictingSession(
   room: string,
   startsAt: Date,
   endsAt: Date,
-  excludeId?: string,
 ): Promise<{ title: string; startsAt: Date; endsAt: Date } | null> {
   const db = getFirebaseFirestore();
 
@@ -861,9 +823,6 @@ async function findConflictingSession(
   const snapshot = await getDocs(q);
 
   for (const docSnap of snapshot.docs) {
-    // Abaikan sesi yang sedang diedit ini sendiri
-    if (excludeId && docSnap.id === excludeId) continue;
-
     const data = docSnap.data();
     const existingStart: Date = data.startsAt?.toDate?.() ?? new Date(0);
     const existingEnd: Date = data.endsAt?.toDate?.() ?? new Date(0);

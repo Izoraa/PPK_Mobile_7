@@ -9,6 +9,8 @@ export type PracticumErrorCode =
   | 'NOT_FOUND'
   | 'CLASS_ARCHIVED'
   | 'SESSION_ARCHIVED'
+  | 'NOT_STARTED'
+  | 'SESSION_STATE_UNCONFIRMED'
   | 'SESSION_NOT_OPEN'
   | 'SESSION_CLOSED'
   | 'NOT_ENROLLED'

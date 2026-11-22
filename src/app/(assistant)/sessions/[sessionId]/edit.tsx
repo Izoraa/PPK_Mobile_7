@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   collection,
   doc,
-  getDoc,
+  getDocFromServer,
   getDocs,
   query,
   where,
@@ -149,7 +149,9 @@ export default function EditSessionScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [unconfirmedSessionId, setUnconfirmedSessionId] = useState<string | null>(null);
   const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const requiresRefresh = unconfirmedSessionId === sessionId;
 
   useEffect(() => {
     if (!sessionId) return;
@@ -170,7 +172,7 @@ export default function EditSessionScreen() {
             .filter((lab) => typeof lab.name === "string" && lab.name.trim())
             .sort((a, b) => a.name.localeCompare(b.name, "id")),
         );
-        const snap = await getDoc(doc(db, "sessions", sessionId));
+        const snap = await getDocFromServer(doc(db, "sessions", sessionId));
         if (snap.exists()) {
           const d = snap.data();
           const sess: SessionDoc = {
@@ -215,7 +217,7 @@ export default function EditSessionScreen() {
   }, [sessionId]);
 
   const handleSave = async () => {
-    if (!sessionId || !session) return;
+    if (!sessionId || !session || requiresRefresh) return;
     setErrorMsg(null);
 
     const trimmedTitle = title.trim();
@@ -287,6 +289,9 @@ export default function EditSessionScreen() {
     if (res.ok) {
       router.back();
     } else {
+      if (res.error.code === "SESSION_STATE_UNCONFIRMED") {
+        setUnconfirmedSessionId(sessionId);
+      }
       setErrorMsg(res.error.message || "Gagal memperbarui sesi.");
     }
   };
@@ -322,7 +327,7 @@ export default function EditSessionScreen() {
         edges={["top", "left", "right", "bottom"]}
         style={styles.centerContainer}
       >
-        <Text style={styles.errorText}>Sesi tidak ditemukan.</Text>
+        <Text style={styles.errorText}>{errorMsg || "Sesi tidak ditemukan."}</Text>
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.backButton}
@@ -455,9 +460,9 @@ export default function EditSessionScreen() {
 
           {!isLocked ? (
             <TouchableOpacity
-              style={[styles.saveButton, saving && styles.disabledButton]}
+              style={[styles.saveButton, (saving || requiresRefresh) && styles.disabledButton]}
               onPress={handleSave}
-              disabled={saving}
+              disabled={saving || requiresRefresh}
               activeOpacity={0.8}
             >
               {saving ? (

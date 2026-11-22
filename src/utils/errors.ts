@@ -12,6 +12,7 @@ const ERROR_MESSAGES: Record<AppErrorCode, string> = {
   NOT_FOUND: 'Data sesi tidak ditemukan.',
   CLASS_ARCHIVED: 'Kelas sudah diarsipkan. Pengajuan izin baru tidak dapat dibuat.',
   SESSION_ARCHIVED: 'Sesi sudah diarsipkan. Pengajuan izin baru tidak dapat dibuat.',
+  NOT_STARTED: 'Sesi hanya bisa dibuka setelah waktu mulai.',
   SESSION_CLOSED: 'Sesi sudah ditutup. Pengajuan izin tidak dapat dibuat.',
   NOT_ENROLLED: 'Anda bukan anggota aktif kelas ini.',
   ALREADY_CHECKED_IN: 'Presensi untuk sesi ini sudah tercatat.',
