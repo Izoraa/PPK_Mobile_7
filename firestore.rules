@@ -190,14 +190,8 @@ service cloud.firestore {
           (previous.isArchived == false && previous.status == 'open' && next.status == 'closed'
             && next.closedAt == request.time && changed.hasOnly(['status', 'closedAt', 'updatedAt']))
           || (previous.isArchived == false && previous.status == 'not_open'
-            && classIsActiveAfterWrite(previous.classId) && (
-              (next.status == 'open' && next.openedAt == request.time
-                && changed.hasOnly(['status', 'openedAt', 'updatedAt'])
-                && request.time >= previous.startsAt)
-              || (next.isArchived == true && changed.hasOnly(['isArchived', 'updatedAt']))
-              || (changed.hasOnly(['title', 'room', 'timeZone', 'startsAt', 'endsAt', 'updatedAt'])
-                && validSessionDetails(next))
-            ))
+            && classIsActiveAfterWrite(previous.classId)
+            && next.isArchived == true && changed.hasOnly(['isArchived', 'updatedAt']))
         );
       }
 

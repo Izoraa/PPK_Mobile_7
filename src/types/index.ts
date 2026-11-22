@@ -12,6 +12,7 @@ export type AppErrorCode =
   | 'NOT_FOUND'
   | 'CLASS_ARCHIVED'
   | 'SESSION_ARCHIVED'
+  | 'NOT_STARTED'
   | 'SESSION_CLOSED'
   | 'NOT_ENROLLED'
   | 'ALREADY_CHECKED_IN'

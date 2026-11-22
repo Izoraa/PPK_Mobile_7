@@ -2,29 +2,55 @@ import { FirebaseError } from 'firebase/app';
 import type { User } from 'firebase/auth';
 
 import { getFirebaseAuth } from '@/lib/firebase/client';
-import type { AppErrorCode, Result } from '@/types';
+import type { AppErrorCode } from '@/types';
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
 type ApiRequest = {
-  method: 'POST' | 'DELETE';
+  method: 'POST' | 'PATCH' | 'DELETE';
   body: Record<string, string | null>;
   successStatus: 200 | 204;
   user: User;
 };
 
-const statusCodes: Partial<Record<number, AppErrorCode>> = {
+const statusCodes = {
   400: 'VALIDATION_ERROR',
   401: 'UNAUTHENTICATED',
   403: 'FORBIDDEN',
   404: 'NOT_FOUND',
   409: 'CONFLICT',
+} as const satisfies Partial<Record<number, AppErrorCode>>;
+
+const serverCodes = [
+  ...Object.values(statusCodes),
+  'CLASS_ARCHIVED',
+  'SESSION_ARCHIVED',
+  'NOT_STARTED',
+  'SERVICE_UNAVAILABLE',
+] as const satisfies readonly AppErrorCode[];
+
+type ApiFailure = {
+  ok: false;
+  error: {
+    code: (typeof serverCodes)[number] | 'NETWORK_ERROR';
+    message?: string;
+    retryable: boolean;
+    outcomeUnknown?: boolean;
+  };
+};
+
+type ApiResult = { ok: true; data: unknown } | ApiFailure;
+
+const httpErrorCodes: Partial<Record<number, ApiFailure['error']['code']>> = statusCodes;
+const unauthenticated: ApiFailure = {
+  ok: false,
+  error: { code: 'UNAUTHENTICATED', retryable: false },
 };
 
 export async function requestLabCheckInApi(
   path: `/api/${string}`,
   { method, body, successStatus, user }: ApiRequest,
-): Promise<Result<unknown>> {
+): Promise<ApiResult> {
   const baseUrl = process.env.EXPO_PUBLIC_LABCHECKIN_API_URL?.trim().replace(/\/+$/, '');
   if (!baseUrl || !(/^https:\/\//i.test(baseUrl) || (__DEV__ && /^http:\/\//i.test(baseUrl)))) {
     return { ok: false, error: { code: 'SERVICE_UNAVAILABLE', retryable: false } };
@@ -32,20 +58,31 @@ export async function requestLabCheckInApi(
 
   const auth = getFirebaseAuth();
   const controller = new AbortController();
+  let outcomeUnknown = false;
+
+  function networkFailure(): ApiFailure {
+    if (auth.currentUser !== user) return unauthenticated;
+    return {
+      ok: false,
+      error: { code: 'NETWORK_ERROR', retryable: true, ...(outcomeUnknown && { outcomeUnknown }) },
+    };
+  }
+
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<Result<never>>((resolve) => {
+  const timeout = new Promise<ApiFailure>((resolve) => {
     timer = setTimeout(() => {
-      resolve({ ok: false, error: { code: 'NETWORK_ERROR', retryable: true } });
+      resolve(networkFailure());
       controller.abort();
     }, REQUEST_TIMEOUT_MS);
   });
 
-  async function send(): Promise<Result<unknown>> {
+  async function send(): Promise<ApiResult> {
     for (const forceRefresh of [false, true]) {
       if (auth.currentUser !== user) break;
-      const idToken = await user.getIdToken(forceRefresh);
+      const idToken = await (forceRefresh ? user.getIdToken(true) : user.getIdToken());
       if (auth.currentUser !== user || controller.signal.aborted) break;
 
+      outcomeUnknown = true;
       const response = await fetch(`${baseUrl}${path}`, {
         method,
         headers: {
@@ -57,14 +94,26 @@ export async function requestLabCheckInApi(
       });
       if (auth.currentUser !== user || controller.signal.aborted) break;
 
+      outcomeUnknown = response.ok || response.status === 408 || response.status >= 500;
       // Authentication runs before the route can mutate Firestore.
       if (response.status === 401 && !forceRefresh) continue;
       if (response.status !== successStatus) {
+        const payload: unknown = await response.json().catch(() => null);
+        if (auth.currentUser !== user || controller.signal.aborted) break;
+        const error = payload && typeof payload === 'object' && 'error' in payload ? payload.error : null;
+        const code = error && typeof error === 'object' && 'code' in error
+          ? serverCodes.find((candidate) => candidate === error.code)
+          : undefined;
+        const message = error && typeof error === 'object' && 'message' in error && typeof error.message === 'string'
+          ? error.message
+          : undefined;
         return {
           ok: false,
           error: {
-            code: statusCodes[response.status] ?? 'SERVICE_UNAVAILABLE',
-            retryable: response.status === 429 || response.status >= 500,
+            code: code ?? httpErrorCodes[response.status] ?? 'SERVICE_UNAVAILABLE',
+            ...(message !== undefined && { message }),
+            retryable: outcomeUnknown || response.status === 429,
+            ...(outcomeUnknown && { outcomeUnknown }),
           },
         };
       }
@@ -74,7 +123,7 @@ export async function requestLabCheckInApi(
       return { ok: true, data };
     }
 
-    return { ok: false, error: { code: 'UNAUTHENTICATED', retryable: false } };
+    return unauthenticated;
   }
 
   try {
@@ -83,9 +132,9 @@ export async function requestLabCheckInApi(
     if (error instanceof FirebaseError && [
       'auth/user-token-expired', 'auth/invalid-user-token', 'auth/user-disabled', 'auth/user-not-found',
     ].includes(error.code)) {
-      return { ok: false, error: { code: 'UNAUTHENTICATED', retryable: false } };
+      return unauthenticated;
     }
-    return { ok: false, error: { code: 'NETWORK_ERROR', retryable: true } };
+    return networkFailure();
   } finally {
     clearTimeout(timer);
   }
