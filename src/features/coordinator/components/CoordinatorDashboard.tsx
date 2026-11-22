@@ -238,6 +238,20 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   headerLeft: { flex: 1, marginRight: spacing.sm },
+  brandBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+    marginBottom: spacing.xs,
+  },
+  brandBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.primary,
+    letterSpacing: 0.8,
+  },
   title: { color: colors.text, fontSize: 22, fontWeight: '700' },
   userName: { color: colors.textMuted, fontSize: 14, marginTop: 2 },
   addButton: {
