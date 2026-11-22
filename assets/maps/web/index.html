@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>Peta Laboratorium LabCheckIn</title>
+    <link rel="stylesheet" href="./leaflet/leaflet.css" />
+    <style>
+      html, body, #map { width: 100%; height: 100%; margin: 0; padding: 0; background: #eef2f7; }
+      body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .lab-icon { display: grid; place-items: center; width: 36px; height: 36px; border: 3px solid #fff; border-radius: 50%; color: #fff; background: #2563eb; box-shadow: 0 2px 8px #0f172a55; font-size: 12px; font-weight: 800; }
+      .lab-icon.selected { background: #0f172a; }
+      .lab-popup { min-width: 190px; }
+      .lab-popup-title { margin: 0 0 8px; color: #0f172a; font-size: 14px; font-weight: 700; }
+      .lab-popup-button { display: block; width: 100%; margin: 5px 0; padding: 9px 10px; border: 0; border-radius: 8px; color: #0f172a; background: #eff6ff; text-align: left; font-size: 13px; }
+      .lab-popup-button:active { background: #dbeafe; }
+      .user-icon { width: 18px; height: 18px; border: 3px solid #fff; border-radius: 50%; background: #0284c7; box-shadow: 0 1px 7px #0f172a66; }
+      .leaflet-control-attribution { font-size: 10px !important; }
+    </style>
+  </head>
+  <body>
+    <div id="map" aria-label="Peta interaktif titik laboratorium"></div>
+    <script src="./leaflet/leaflet.js"></script>
+    <script>
+      (function () {
+        const map = L.map('map', { zoomControl: true, preferCanvas: true });
+        const pointsLayer = L.layerGroup().addTo(map);
+        let userMarker = null;
+        let userAccuracy = null;
+        let selectedId = null;
+        let activePoints = [];
+        const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+          updateWhenIdle: true,
+          keepBuffer: 2,
+        }).addTo(map);
+
+        function sendToNative(message) {
+          if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(message));
+        }
+
+        function pointGroups(points) {
+          const groups = new Map();
+          points.forEach((point) => {
+            const key = `${point.latitude.toFixed(7)},${point.longitude.toFixed(7)}`;
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(point);
+          });
+          return [...groups.values()];
+        }
+
+        function selectPoint(point) {
+          selectedId = point.geotagId;
+          sendToNative({ type: 'geotag-select', geotagId: point.geotagId });
+          drawPoints(activePoints);
+        }
+
+        function drawPoints(points) {
+          activePoints = points;
+          pointsLayer.clearLayers();
+          pointGroups(points).forEach((group) => {
+            const first = group[0];
+            const ids = group.map((point) => point.geotagId).join('/');
+            group.forEach((point) => {
+              L.circle([point.latitude, point.longitude], {
+                radius: point.radiusMeters,
+                color: point.geotagId === selectedId ? '#0f172a' : '#2563eb',
+                weight: 1,
+                opacity: 0.5,
+                fillColor: '#3b82f6',
+                fillOpacity: 0.04,
+                interactive: false,
+              }).addTo(pointsLayer);
+            });
+
+            const marker = L.marker([first.latitude, first.longitude], {
+              icon: L.divIcon({
+                className: '',
+                html: `<div class="lab-icon${group.some((point) => point.geotagId === selectedId) ? ' selected' : ''}">${ids}</div>`,
+                iconSize: [36, 36],
+                iconAnchor: [18, 18],
+              }),
+              title: group.map((point) => `${point.geotagId}: ${point.name}`).join(', '),
+            }).addTo(pointsLayer);
+
+            const popup = document.createElement('div');
+            popup.className = 'lab-popup';
+            const heading = document.createElement('p');
+            heading.className = 'lab-popup-title';
+            heading.textContent = group.length > 1 ? `Pilih titik (${ids})` : `${first.geotagId} · ${first.name}`;
+            popup.appendChild(heading);
+            group.forEach((point) => {
+              const button = document.createElement('button');
+              button.className = 'lab-popup-button';
+              button.type = 'button';
+              button.textContent = `${point.geotagId} · ${point.name}`;
+              button.addEventListener('click', () => selectPoint(point));
+              popup.appendChild(button);
+            });
+            marker.bindPopup(popup);
+          });
+
+          if (points.length) {
+            const bounds = L.latLngBounds(points.map((point) => [point.latitude, point.longitude]));
+            map.fitBounds(bounds, { padding: [36, 36], maxZoom: 17 });
+          }
+        }
+
+        window.setGeotagPoints = function (points) {
+          if (!Array.isArray(points)) return;
+          drawPoints(points);
+        };
+
+        window.selectGeotag = function (geotagId) {
+          selectedId = geotagId;
+          const point = activePoints.find((item) => item.geotagId === geotagId);
+          if (point) map.setView([point.latitude, point.longitude], Math.max(map.getZoom(), 17));
+          drawPoints(activePoints);
+        };
+
+        window.setUserLocation = function (location) {
+          if (!location || !Number.isFinite(location.latitude) || !Number.isFinite(location.longitude)) return;
+          const isFirstFix = !userMarker;
+          const latLng = [location.latitude, location.longitude];
+          if (!userMarker) {
+            userMarker = L.marker(latLng, {
+              icon: L.divIcon({ className: '', html: '<div class="user-icon"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }),
+              title: 'Posisi perangkat saya',
+              zIndexOffset: 1000,
+            }).addTo(map);
+          } else {
+            userMarker.setLatLng(latLng);
+          }
+          if (userAccuracy) map.removeLayer(userAccuracy);
+          if (Number.isFinite(location.accuracy) && location.accuracy > 0) {
+            userAccuracy = L.circle(latLng, { radius: location.accuracy, color: '#0284c7', weight: 1, fillColor: '#38bdf8', fillOpacity: 0.12, interactive: false }).addTo(map);
+          }
+          if (isFirstFix) {
+            const allCoordinates = activePoints.map((point) => [point.latitude, point.longitude]);
+            allCoordinates.push(latLng);
+            map.fitBounds(L.latLngBounds(allCoordinates), { padding: [36, 36], maxZoom: 17 });
+          }
+        };
+
+        window.retryMapTiles = function () { tiles.redraw(); };
+        tiles.on('tileerror', () => sendToNative({ type: 'tile-error' }));
+        tiles.on('tileload', () => sendToNative({ type: 'tile-ready' }));
+        map.whenReady(() => sendToNative({ type: 'map-ready' }));
+      })();
+    </script>
+  </body>
+</html>

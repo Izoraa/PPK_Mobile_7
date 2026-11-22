@@ -73,6 +73,14 @@ export default function CoordinatorLaboratoriesScreen() {
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.screen}>
       <View style={styles.header}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          onPress={() => router.back()}
+          style={styles.backLink}
+          activeOpacity={0.75}
+        >
+          <Text style={styles.backLinkText}>‹ Kembali ke peta</Text>
+        </TouchableOpacity>
         <View style={styles.headerTop}>
           <View style={styles.headerTitleContainer}>
             <Text style={styles.title}>Manajemen Ruang / Lab</Text>
@@ -169,6 +177,8 @@ export default function CoordinatorLaboratoriesScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   header: { padding: spacing.md, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border },
+  backLink: { alignSelf: 'flex-start', paddingVertical: spacing.xs, marginBottom: spacing.xs },
+  backLinkText: { color: colors.primary, fontSize: 14, fontWeight: '600' },
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
