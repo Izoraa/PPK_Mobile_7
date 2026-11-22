@@ -4,13 +4,25 @@
 Aplikasi Expo/React Native untuk mengelola presensi praktikum di laboratorium. Menggunakan Expo Router (file‑based routing) dan Expo Dev Client (karena menggunakan modul native SDK 58 seperti @expo/ui, expo-glass-effect, react-native-worklets).
 
 ## Fitur Utama
-- **Presensi**: menampilkan daftar sesi, jumlah mahasiswa hadir, dan detail sesi.
+- **Presensi**: 
+  - menampilkan daftar sesi, jumlah mahasiswa hadir, dan detail sesi.
+  - Presensi menggunakan QR Code.
+  - Menampilkan daftar kehadiran mahasiswa.
 - **Riwayat Presensi**: melihat histori kehadiran per sesi.
+- **Manajemen Izin**:
+  - Pengajuan izin praktikum oleh praktikan.
+  - Melihat status pengajuan izin.
+  - Pemeriksaan dan persetujuan atau penolakan izin oleh asisten.
 - **Manajemen Sesi (asisten)**:
   - Buka sesi (SRS‑06)
   - Tutup sesi (SRS‑07)
   - Tampilkan status terkini (SRS‑08)
   - Konfirmasi aksi dengan modal (SRS‑09).
+- **Manajemen Koordinator**:
+  - Dashboard koordinator.
+  - Pengelolaan data asisten.
+  - Pengelolaan data kelas.
+  - Pengelolaan data laboratorium.
 - **Navigasi Tab** menggunakan `expo-router/native-tabs`.
 - **Tema**: dukungan light/dark mode, komponen UI premium (@expo/ui).
 
