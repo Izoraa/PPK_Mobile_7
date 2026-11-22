@@ -16,7 +16,6 @@ import {
 } from 'firebase/firestore';
 
 import { getFirebaseAuth, getFirebaseFirestore } from '@/lib/firebase/client';
-import { dispatchNotification } from '../notifications';
 import type {
   ClassDoc,
   CreateClassInput,
@@ -559,14 +558,6 @@ export async function updateSession(sessionId: string, input: UpdateSessionInput
 
     await updateDoc(sessionRef, updates);
 
-    // S3-SRS-24: Notify enrolled students when session schedule is modified
-    void dispatchNotification('SCHEDULE_CHANGED', {
-      sessionId,
-      classId: current.classId,
-      title: 'Perubahan Jadwal Praktikum',
-      body: `Jadwal sesi "${input.title ?? current.title}" telah diperbarui.`,
-    });
-
     return { ok: true, data: undefined };
   } catch (err: any) {
     return { ok: false, error: { code: 'NETWORK_ERROR', message: err.message, retryable: true } };
@@ -622,7 +613,6 @@ export async function openSession(sessionId: string): Promise<Result<void>> {
 
   try {
     const sessionRef = doc(db, 'sessions', sessionId);
-    let sessionData: any = null;
 
     await runTransaction(db, async (txn) => {
       const snap = await txn.get(sessionRef);
@@ -631,7 +621,6 @@ export async function openSession(sessionId: string): Promise<Result<void>> {
       }
 
       const data = snap.data();
-      sessionData = data;
       if (data.assistantId !== user.uid) {
         throw new Error('FORBIDDEN: Anda bukan pemilik sesi ini.');
       }
@@ -657,16 +646,6 @@ export async function openSession(sessionId: string): Promise<Result<void>> {
         updatedAt: serverTimestamp(),
       });
     });
-
-    // S3-SRS-23: Notify enrolled students when session is opened
-    if (sessionData) {
-      void dispatchNotification('SESSION_OPENED', {
-        sessionId,
-        classId: sessionData.classId,
-        title: 'Sesi Praktikum Dibuka',
-        body: `Sesi "${sessionData.title}" di ruang ${sessionData.room} telah dibuka. Silakan lakukan presensi.`,
-      });
-    }
 
     return { ok: true, data: undefined };
   } catch (err: any) {

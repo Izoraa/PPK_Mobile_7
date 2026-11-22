@@ -28,7 +28,9 @@ export default function LeaveReviewQueueScreen() {
 
   const selectedRecord = useMemo(() => {
     if (!selected) return null;
-    return queue.records.find((record) => record.id === selected.id) ?? selected;
+    return queue.records.find((record) =>
+      record.sessionId === selected.sessionId && record.studentId === selected.studentId
+    ) ?? selected;
   }, [queue.records, selected]);
 
   useEffect(() => {

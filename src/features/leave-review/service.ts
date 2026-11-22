@@ -1,4 +1,3 @@
-import { FirebaseError } from "firebase/app";
 import {
   collection,
   collectionGroup,
@@ -6,14 +5,11 @@ import {
   getDocFromServer,
   onSnapshot,
   query,
-  runTransaction,
-  serverTimestamp,
   where,
   type DocumentData,
   type FirestoreError,
   type Query,
   type QueryDocumentSnapshot,
-  type Transaction,
   type Unsubscribe,
 } from "firebase/firestore";
 
@@ -21,7 +17,7 @@ import {
   getAttendanceAuth,
   getAttendanceFirestore,
 } from "@/features/attendance/service";
-import { dispatchNotification } from "@/features/notifications/notificationService";
+import { requestLabCheckInApi } from "@/lib/labCheckInApi";
 import type { Result } from "@/types";
 import type {
   LeaveAi,
@@ -36,9 +32,10 @@ export type LeaveReviewDecision = {
   studentId: string;
   status: "approved" | "rejected";
   reviewedBy: string;
-  reviewedAt: string | null;
   reviewNote: string | null;
 };
+
+const pendingDecisions = new Set<string>();
 
 function timestampToIso(value: unknown): string | null {
   if (value && typeof value === "object" && "toDate" in value) {
@@ -176,49 +173,6 @@ function mapListenerError(error: FirestoreError): LeaveReviewError {
   }
 }
 
-function mapReviewError(error: unknown): {
-  code: LeaveReviewError["code"];
-  retryable: boolean;
-} {
-  const code = error instanceof FirebaseError ? error.code : undefined;
-  switch (code) {
-    case "permission-denied":
-      return { code: "FORBIDDEN", retryable: false };
-    case "unauthenticated":
-      return { code: "UNAUTHENTICATED", retryable: false };
-    case "aborted":
-    case "failed-precondition":
-      return { code: "CONFLICT", retryable: true };
-    case "unavailable":
-    case "deadline-exceeded":
-    case "network-request-failed":
-      return { code: "NETWORK_ERROR", retryable: true };
-    default:
-      return { code: "SERVICE_UNAVAILABLE", retryable: true };
-  }
-}
-
-function readDecision(
-  data: DocumentData | undefined,
-  sessionId: string,
-  studentId: string,
-): LeaveReviewDecision | null {
-  if (!data || (data.status !== "approved" && data.status !== "rejected"))
-    return null;
-  if (typeof data.reviewedBy !== "string") return null;
-  if (typeof data.reviewNote !== "string" && data.reviewNote !== null)
-    return null;
-
-  return {
-    sessionId,
-    studentId,
-    status: data.status,
-    reviewedBy: data.reviewedBy,
-    reviewedAt: timestampToIso(data.reviewedAt),
-    reviewNote: data.reviewNote,
-  };
-}
-
 async function reviewLeave(
   sessionId: string,
   studentId: string,
@@ -229,27 +183,20 @@ async function reviewLeave(
     return { ok: false, error: { code: "VALIDATION_ERROR", retryable: false } };
   }
 
-  if (status === "rejected") {
-    if (
-      !reviewNote ||
-      reviewNote.trim().length < 5 ||
-      reviewNote.trim().length > 500
-    ) {
-      return {
-        ok: false,
-        error: { code: "VALIDATION_ERROR", retryable: false },
-      };
-    }
-    reviewNote = reviewNote.trim();
-  } else if (reviewNote !== null && reviewNote.trim().length > 500) {
+  const note = reviewNote?.trim() ?? null;
+  if ((note !== null && note.length > 500) || (status === "rejected" && (note?.length ?? 0) < 5)) {
     return { ok: false, error: { code: "VALIDATION_ERROR", retryable: false } };
-  } else if (typeof reviewNote === "string") {
-    reviewNote = reviewNote.trim();
   }
 
+  // The student ID is only unique within a session.
+  const leaveId = JSON.stringify([sessionId, studentId]);
+  if (pendingDecisions.has(leaveId)) {
+    return { ok: false, error: { code: "CONFLICT", retryable: false } };
+  }
+  pendingDecisions.add(leaveId);
+
   try {
-    const auth = getAttendanceAuth();
-    const user = auth.currentUser;
+    const user = getAttendanceAuth().currentUser;
     if (!user) {
       return {
         ok: false,
@@ -257,87 +204,38 @@ async function reviewLeave(
       };
     }
 
-    const db = getAttendanceFirestore();
-    const participationReference = doc(
-      db,
-      "sessions",
-      sessionId,
-      "participations",
-      studentId,
-    );
+    const action = status === "approved" ? "approve" : "reject";
+    const result = await requestLabCheckInApi(`/api/leave/${encodeURIComponent(leaveId)}/${action}`, {
+      method: "POST",
+      body: { reviewNote: note },
+      successStatus: 200,
+      user,
+    });
+    if (!result.ok) return result;
 
-    const transactionResult = await runTransaction<Result<void>>(
-      db,
-      async (transaction: Transaction) => {
-        const snapshot = await transaction.get(participationReference);
-        if (!snapshot.exists()) {
-          return {
-            ok: false,
-            error: { code: "VALIDATION_ERROR", retryable: false },
-          };
-        }
-
-        const data = snapshot.data();
-        if (data.kind !== "leave") {
-          return {
-            ok: false,
-            error: { code: "VALIDATION_ERROR", retryable: false },
-          };
-        }
-        if (data.studentId !== studentId || data.assistantId !== user.uid) {
-          return { ok: false, error: { code: "FORBIDDEN", retryable: false } };
-        }
-        if (data.status !== "pending") {
-          return { ok: false, error: { code: "CONFLICT", retryable: false } };
-        }
-
-        transaction.update(participationReference, {
-          status,
-          reviewedBy: user.uid,
-          reviewedAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-          reviewNote,
-        });
-        return { ok: true, data: undefined };
-      },
-    );
-
-    if (!transactionResult.ok) return transactionResult;
-
-    const confirmed = await getDocFromServer(participationReference);
-    const decision = readDecision(confirmed.data(), sessionId, studentId);
-    if (!confirmed.exists() || !decision || decision.reviewedBy !== user.uid) {
+    const response = result.data;
+    if (
+      !response || typeof response !== "object" ||
+      !("ok" in response) || response.ok !== true ||
+      !("data" in response) || !response.data || typeof response.data !== "object" ||
+      !("sessionId" in response.data) || response.data.sessionId !== sessionId ||
+      !("studentId" in response.data) || response.data.studentId !== studentId ||
+      !("status" in response.data) || response.data.status !== status ||
+      !("reviewedBy" in response.data) || response.data.reviewedBy !== user.uid ||
+      !("reviewNote" in response.data) || response.data.reviewNote !== note
+    ) {
       return {
         ok: false,
         error: { code: "SERVICE_UNAVAILABLE", retryable: true },
       };
     }
 
-    if (status === "approved") {
-      // S3-SRS-25: Notify applicant student when leave is approved
-      void dispatchNotification("LEAVE_APPROVED", {
-        sessionId,
-        studentId,
-        title: "Pengajuan Izin Disetujui",
-        body: reviewNote
-          ? `Pengajuan izin Anda telah disetujui: "${reviewNote}"`
-          : "Pengajuan izin Anda untuk sesi praktikum telah disetujui oleh asisten.",
-      });
-    } else {
-      // S3-SRS-26: Notify applicant student when leave is rejected
-      void dispatchNotification("LEAVE_REJECTED", {
-        sessionId,
-        studentId,
-        title: "Pengajuan Izin Ditolak",
-        body: reviewNote
-          ? `Pengajuan izin Anda ditolak: "${reviewNote}"`
-          : "Pengajuan izin Anda untuk sesi praktikum telah ditolak oleh asisten.",
-      });
-    }
-
-    return { ok: true, data: decision };
-  } catch (error) {
-    return { ok: false, error: mapReviewError(error) };
+    // The existing Firestore listeners reconcile the queue and read the server timestamps.
+    return { ok: true, data: { sessionId, studentId, status, reviewedBy: user.uid, reviewNote: note } };
+  } catch {
+    return { ok: false, error: { code: "SERVICE_UNAVAILABLE", retryable: true } };
+  } finally {
+    pendingDecisions.delete(leaveId);
   }
 }
 

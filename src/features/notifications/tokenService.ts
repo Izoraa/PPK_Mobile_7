@@ -1,30 +1,59 @@
-import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
-import {
-  collection,
-  doc,
-  getDocs,
-  query,
-  setDoc,
-  deleteDoc,
-  where,
-  serverTimestamp,
-} from 'firebase/firestore';
+import { getRandomValues } from 'expo-crypto';
+import * as Device from 'expo-device';
+import * as Notifications from 'expo-notifications';
+import type { User } from 'firebase/auth';
+import { Platform } from 'react-native';
 
-import { getFirebaseFirestore } from '@/lib/firebase/client';
-import type { DeviceTokenDoc, Result } from './types';
+import { getFirebaseAuth } from '@/lib/firebase/client';
+import { requestLabCheckInApi } from '@/lib/labCheckInApi';
+import type { Result as ApiResult } from '@/types';
 
-function sanitizeTokenKey(token: string): string {
-  // Replace characters not allowed in Firestore document IDs
-  return token.replace(/[^a-zA-Z0-9_-]/g, '_');
+import type { Result } from './types';
+
+const INSTALLATION_ID_KEY = '@labcheckin/notification-installation-id';
+
+type Registration = {
+  paused: boolean;
+  token?: string;
+  pending?: Promise<Result<void>>;
+  request?: Promise<ApiResult<unknown>>;
+};
+
+const registrations = new WeakMap<User, Registration>();
+let installationIdPromise: Promise<string> | undefined;
+
+function getRegistration(user: User): Registration {
+  let registration = registrations.get(user);
+  if (!registration) {
+    registration = { paused: false };
+    registrations.set(user, registration);
+  }
+  return registration;
 }
 
-/**
- * Configure Android notification channel
- */
-export async function setupNotificationChannel(): Promise<void> {
+function getOrCreateInstallationId(): Promise<string> {
+  installationIdPromise ??= (async () => {
+    const existingId = await AsyncStorage.getItem(INSTALLATION_ID_KEY);
+    if (existingId) return existingId;
+
+    const bytes = getRandomValues(new Uint8Array(16));
+    const installationId = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+    await AsyncStorage.setItem(INSTALLATION_ID_KEY, installationId);
+    return installationId;
+  })().catch((error: unknown) => {
+    installationIdPromise = undefined;
+    throw error;
+  });
+  return installationIdPromise;
+}
+
+export function supportsPushNotifications(): boolean {
+  return (Platform.OS === 'android' || Platform.OS === 'ios') && Device.isDevice;
+}
+
+async function requestNotificationPermissions(): Promise<boolean> {
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
       name: 'Pemberitahuan Praktikum',
@@ -33,182 +62,121 @@ export async function setupNotificationChannel(): Promise<void> {
       lightColor: '#208AEF',
     });
   }
+
+  const allowsNotifications = (settings: Notifications.NotificationPermissionsStatus) =>
+    settings.granted || settings.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
+
+  const settings = await Notifications.getPermissionsAsync();
+  return allowsNotifications(settings)
+    || (settings.canAskAgain && allowsNotifications(await Notifications.requestPermissionsAsync()));
 }
 
-/**
- * S3-SRS-21 & S3-SRS-22:
- * Registers the device on FCM/Expo push notification service and saves the token to Firestore.
- */
-export async function registerDeviceToken(uid: string): Promise<Result<{ token: string }>> {
-  if (!uid) {
-    return {
-      ok: false,
-      error: { code: 'UNAUTHENTICATED', message: 'User belum terautentikasi.', retryable: false },
-    };
-  }
-
-  // Web check
-  if (Platform.OS === 'web') {
-    return {
-      ok: false,
-      error: {
-        code: 'DEVICE_NOT_SUPPORTED',
-        message: 'Push notification tidak didukung langsung di platform Web.',
-        retryable: false,
-      },
-    };
-  }
-
-  // Physical device check
-  if (!Device.isDevice) {
-    return {
-      ok: false,
-      error: {
-        code: 'DEVICE_NOT_SUPPORTED',
-        message: 'Push notification memerlukan perangkat fisik (bukan simulator/emulator).',
-        retryable: false,
-      },
-    };
-  }
-
-  try {
-    await setupNotificationChannel();
-
-    // Check existing permissions
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-
-    if (finalStatus !== 'granted') {
-      return {
-        ok: false,
-        error: {
-          code: 'PERMISSION_DENIED',
-          message: 'Izin notifikasi ditolak oleh pengguna.',
-          retryable: true,
-        },
-      };
-    }
-
-    // Retrieve Expo/FCM Project ID
-    const projectId =
-      Constants.expoConfig?.extra?.eas?.projectId ??
-      Constants.easConfig?.projectId ??
-      'b2dd7991-661d-4e59-9e20-9598c9239adb';
-
-    const tokenResponse = await Notifications.getExpoPushTokenAsync({ projectId });
-    const pushToken = tokenResponse.data;
-
-    if (!pushToken) {
-      return {
-        ok: false,
-        error: {
-          code: 'TOKEN_FETCH_FAILED',
-          message: 'Gagal memperoleh token perangkat dari layanan push.',
-          retryable: true,
-        },
-      };
-    }
-
-    // Save/update token in Firestore under `deviceTokens/{tokenId}`
-    const db = getFirebaseFirestore();
-    const tokenId = sanitizeTokenKey(pushToken);
-    const tokenRef = doc(db, 'deviceTokens', tokenId);
-
-    await setDoc(
-      tokenRef,
-      {
-        id: tokenId,
-        uid,
-        token: pushToken,
-        platform: Platform.OS,
-        deviceName: Device.modelName ?? (`${Device.manufacturer ?? ''} ${Device.brand ?? ''}`.trim() || null),
-        lastSeenAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
-
-    return { ok: true, data: { token: pushToken } };
-  } catch (error: any) {
-    return {
-      ok: false,
-      error: {
-        code: 'TOKEN_FETCH_FAILED',
-        message: error.message || 'Terjadi kesalahan saat registrasi push token.',
-        retryable: true,
-      },
-    };
-  }
+function inactiveRegistration(): Result<never> {
+  return { ok: false, error: { code: 'UNAUTHENTICATED', retryable: false } };
 }
 
-/**
- * S3-SRS-22 & S3-SRS-28:
- * Unregisters / cleans up device token upon user logout so notifications aren't leaked.
- */
-export async function unregisterDeviceToken(uid: string, token?: string): Promise<Result<void>> {
-  try {
-    const db = getFirebaseFirestore();
-
-    if (token) {
-      const tokenId = sanitizeTokenKey(token);
-      await deleteDoc(doc(db, 'deviceTokens', tokenId));
-    } else {
-      // Find all tokens registered by this user on this device and remove
-      const q = query(collection(db, 'deviceTokens'), where('uid', '==', uid));
-      const snap = await getDocs(q);
-      const deletePromises = snap.docs.map((d) => deleteDoc(d.ref));
-      await Promise.all(deletePromises);
-    }
-
-    return { ok: true, data: undefined };
-  } catch (error: any) {
-    return {
-      ok: false,
-      error: {
-        code: 'FIRESTORE_ERROR',
-        message: error.message || 'Gagal menghapus device token.',
-        retryable: true,
-      },
-    };
-  }
-}
-
-/**
- * Queries all registered device tokens for a given list of user IDs.
- */
-export async function getDeviceTokensForUids(uids: string[]): Promise<string[]> {
-  if (!uids || uids.length === 0) return [];
-
-  const db = getFirebaseFirestore();
-  const tokens: string[] = [];
-
-  // Firestore `in` query supports up to 30 items per batch
-  const batches: string[][] = [];
-  for (let i = 0; i < uids.length; i += 30) {
-    batches.push(uids.slice(i, i + 30));
+export async function registerDeviceToken(
+  uid: string,
+  devicePushToken?: Notifications.DevicePushToken,
+): Promise<Result<void>> {
+  if (!supportsPushNotifications()) {
+    return { ok: false, error: { code: 'DEVICE_NOT_SUPPORTED', retryable: false } };
   }
 
-  for (const batch of batches) {
+  const auth = getFirebaseAuth();
+  const user = auth.currentUser;
+  if (!user || user.uid !== uid) return inactiveRegistration();
+
+  const registration = getRegistration(user);
+  if (registration.paused) return inactiveRegistration();
+
+  async function register(): Promise<Result<void>> {
+    if (registration.paused || auth.currentUser !== user) return inactiveRegistration();
     try {
-      const q = query(collection(db, 'deviceTokens'), where('uid', 'in', batch));
-      const snap = await getDocs(q);
-      snap.forEach((docSnap) => {
-        const data = docSnap.data();
-        if (data.token && typeof data.token === 'string') {
-          tokens.push(data.token);
-        }
+      if (!await requestNotificationPermissions()) {
+        return { ok: false, error: { code: 'PERMISSION_DENIED', retryable: false } };
+      }
+      if (registration.paused || auth.currentUser !== user) return inactiveRegistration();
+
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+      if (!projectId) {
+        return { ok: false, error: { code: 'TOKEN_FETCH_FAILED', retryable: false } };
+      }
+
+      // Supplying the rotated native token avoids triggering the native listener again.
+      const { data: expoPushToken } = await Notifications.getExpoPushTokenAsync({
+        projectId,
+        devicePushToken,
       });
-    } catch (err) {
-      console.error('Error fetching device tokens for batch:', err);
+      if (!expoPushToken) {
+        return { ok: false, error: { code: 'TOKEN_FETCH_FAILED', retryable: true } };
+      }
+      if (registration.paused || auth.currentUser !== user) return inactiveRegistration();
+      if (registration.token === expoPushToken) return { ok: true, data: undefined };
+
+      const installationId = await getOrCreateInstallationId();
+      if (registration.paused || auth.currentUser !== user) return inactiveRegistration();
+
+      registration.token = undefined;
+      registration.request = requestLabCheckInApi('/api/device-tokens', {
+        method: 'POST',
+        body: { installationId, expoPushToken },
+        successStatus: 204,
+        user,
+      });
+      const result = await registration.request;
+      if (!result.ok) return result;
+      if (!registration.paused) registration.token = expoPushToken;
+      return { ok: true, data: undefined };
+    } catch {
+      return { ok: false, error: { code: 'TOKEN_FETCH_FAILED', retryable: true } };
+    } finally {
+      registration.request = undefined;
     }
   }
 
-  // Deduplicate
-  return Array.from(new Set(tokens));
+  // Register tokens in discovery order so an older result cannot overwrite a rotation.
+  const pending = (registration.pending ?? Promise.resolve()).then(register);
+  registration.pending = pending;
+  try {
+    return await pending;
+  } finally {
+    if (registration.pending === pending) registration.pending = undefined;
+  }
+}
+
+export function pauseDeviceTokenRegistration(user: User): () => void {
+  const registration = getRegistration(user);
+  registration.paused = true;
+  return () => {
+    registration.paused = false;
+    void registerDeviceToken(user.uid);
+  };
+}
+
+export async function unregisterDeviceToken(
+  user: User,
+): Promise<Result<'unregistered' | 'no-installation'>> {
+  if (!supportsPushNotifications()) return { ok: true, data: 'no-installation' };
+
+  const registration = getRegistration(user);
+  registration.token = undefined;
+
+  try {
+    // Logout pauses new registrations. Only an API request already in flight needs to finish.
+    await registration.request;
+    const installationId = await (installationIdPromise ?? AsyncStorage.getItem(INSTALLATION_ID_KEY));
+    if (!installationId) return { ok: true, data: 'no-installation' };
+
+    const result = await requestLabCheckInApi('/api/device-tokens', {
+      method: 'DELETE',
+      body: { installationId },
+      successStatus: 204,
+      user,
+    });
+    if (!result.ok) return result;
+    return { ok: true, data: 'unregistered' };
+  } catch {
+    return { ok: false, error: { code: 'SERVICE_UNAVAILABLE', retryable: true } };
+  }
 }

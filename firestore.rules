@@ -52,6 +52,18 @@ service cloud.firestore {
       return value is string && value.trim().size() >= minimum && value.size() <= maximum;
     }
 
+    match /deviceTokens/{tokenId} {
+      allow read, write: if false;
+    }
+
+    match /deviceTokenLocks/{lockId} {
+      allow read, write: if false;
+    }
+
+    match /notificationJobs/{jobId} {
+      allow read, write: if false;
+    }
+
     match /laboratories/{labId} {
       allow get, list: if isSignedIn();
       allow create, update, delete: if isCoordinator();
@@ -247,19 +259,9 @@ service cloud.firestore {
             );
         }
 
-        function validReview() {
-          let next = request.resource.data;
-          return resource.data.kind == 'leave' && resource.data.status == 'pending'
-            && next.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedBy', 'reviewedAt', 'reviewNote', 'updatedAt'])
-            && next.reviewedBy == request.auth.uid && next.reviewedAt == request.time && next.updatedAt == request.time
-            && ((next.status == 'approved' && (next.reviewNote == null || validText(next.reviewNote, 0, 500)))
-              || (next.status == 'rejected' && validText(next.reviewNote, 5, 500)));
-        }
-
         allow get: if (isStudent() && request.auth.uid == studentId) || ownsParentClass();
         allow list: if ownsParentClass();
         allow create: if isStudent() && request.auth.uid == studentId && validParticipation(request.resource.data);
-        allow update: if ownsParentClass() && validReview();
       }
     }
 

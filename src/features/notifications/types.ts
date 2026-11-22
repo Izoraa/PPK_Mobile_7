@@ -1,21 +1,10 @@
-import type { Timestamp } from 'firebase/firestore';
+import type { AppErrorCode } from '@/types';
 
 export type NotificationEventType =
   | 'SESSION_OPENED'
   | 'SCHEDULE_CHANGED'
   | 'LEAVE_APPROVED'
   | 'LEAVE_REJECTED';
-
-export interface DeviceTokenDoc {
-  id: string; // `${uid}_${platform}` or token hash
-  uid: string;
-  token: string;
-  platform: 'android' | 'ios' | 'web';
-  deviceName?: string | null;
-  lastSeenAt: Timestamp | null;
-  createdAt: Timestamp | null;
-  updatedAt: Timestamp | null;
-}
 
 export interface NotificationPayload {
   title: string;
@@ -33,13 +22,11 @@ export interface NotificationPayload {
 }
 
 export type NotificationErrorCode =
+  | AppErrorCode
   | 'PERMISSION_DENIED'
   | 'DEVICE_NOT_SUPPORTED'
-  | 'UNAUTHENTICATED'
-  | 'TOKEN_FETCH_FAILED'
-  | 'FIRESTORE_ERROR'
-  | 'NETWORK_ERROR';
+  | 'TOKEN_FETCH_FAILED';
 
 export type Result<T> =
   | { ok: true; data: T }
-  | { ok: false; error: { code: NotificationErrorCode; message: string; retryable: boolean } };
+  | { ok: false; error: { code: NotificationErrorCode; retryable: boolean } };

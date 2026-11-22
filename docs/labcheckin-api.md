@@ -1,6 +1,6 @@
 # Dokumentasi API LabCheckIn
 
-LabCheckIn menggunakan **REST API** mandiri berbasis HTTP dengan format **JSON**. Gunakan HTTPS di produksi. Rute aplikasi memakai awalan `/api/v1`.
+LabCheckIn menggunakan **REST API** mandiri berbasis HTTP dengan format **JSON**. Gunakan HTTPS di produksi. Rute presensi memakai awalan `/api/v1`. Registrasi perangkat dan peninjauan izin memakai awalan `/api`. [Kontrak izin dan notifikasi push](push-notifications.md)
 
 | Lingkungan | Base URL                                                               |
 | ---------- | ---------------------------------------------------------------------- |
@@ -174,8 +174,6 @@ async function terbitkanQr(
 
 ## Status integrasi
 
-- Aplikasi Expo membaca `EXPO_PUBLIC_LABCHECKIN_API_URL` sebagai base URL tanpa `/api/v1`. Gunakan alamat yang dapat dijangkau dari perangkat atau emulator dan HTTPS di produksi.
-- Setelah QR terverifikasi dan mahasiswa memilih **Lanjutkan Presensi**, aplikasi meminta izin lokasi saat digunakan dan mengirim pembacaan lokasi ke endpoint check-in. Aplikasi menampilkan waktu presensi dari respons API atau dari data Firestore yang sudah dikonfirmasi server.
 - Verifikasi lokasi menunggu skema Firestore dan tautan lokasi pada sesi, koordinat dan radius resmi, aturan batas radius, ambang akurasi, batas usia pembacaan GPS, perlakuan geotag yang hilang atau dinonaktifkan, dan kebijakan lokasi tiruan untuk platform yang mendukungnya.
 - CORS belum dikonfigurasi. Expo Web yang dihosting pada origin berbeda memerlukan konfigurasi CORS. [Dokumentasi CORS Express](https://expressjs.com/en/resources/middleware/cors/)
 
@@ -194,4 +192,4 @@ Check-in memakai satu dokumen di `sessions/{sessionId}/participations/{studentId
 
 Pada `PPK_Mobile_7/firestore.rules`, aturan `allow create` melalui `validParticipation` masih mengizinkan mahasiswa membuat dokumen `kind: "attendance"` secara langsung. Aturan `allow update` pada versi repositori saat ini hanya mengizinkan peninjauan izin oleh asisten. Izin klien untuk menambah stempel presensi pada izin yang ditolak sudah dihapus dari versi tersebut. Status aturan yang diterapkan di Firebase perlu dikonfirmasi sebelum rilis.
 
-Saat migrasi, arahkan penulisan presensi Expo ke API dan batasi pembuatan presensi langsung di Firestore. Jika aturan lama masih diterapkan, batasi juga pembaruan stempel presensi izin ditolak oleh klien. Pertahankan pembuatan dan peninjauan izin serta akses baca untuk status mahasiswa, riwayat, dan rekap asisten. Koordinasikan perubahan dengan pengembang mobile dan PM.
+Saat migrasi, arahkan penulisan presensi Expo ke API dan batasi pembuatan presensi langsung di Firestore. Jika aturan lama masih diterapkan, batasi juga pembaruan stempel presensi izin ditolak oleh klien. Pertahankan pembuatan izin serta akses baca untuk status mahasiswa, riwayat, dan rekap asisten. Arahkan peninjauan izin ke endpoint API sesuai kontrak migrasi. [Kontrak izin dan notifikasi push](push-notifications.md)

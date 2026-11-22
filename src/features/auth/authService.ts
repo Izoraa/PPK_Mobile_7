@@ -2,7 +2,7 @@ import { FirebaseError } from 'firebase/app';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, validatePassword } from 'firebase/auth';
 
 import { getFirebaseAuth } from '@/lib/firebase/client';
-import { unregisterDeviceToken } from '@/features/notifications';
+import { pauseDeviceTokenRegistration, unregisterDeviceToken } from '@/features/notifications/tokenService';
 import type { Result, User } from '@/types';
 
 import { getActiveProfileAccount } from './profileService';
@@ -111,16 +111,18 @@ export async function login(input: CredentialsInput): Promise<Result<AccountIden
 export async function logout(): Promise<Result<void>> {
   try {
     const auth = getFirebaseAuth();
-    const currentUid = auth.currentUser?.uid;
-    if (currentUid) {
-      try {
-        await unregisterDeviceToken(currentUid);
-      } catch (tokenErr) {
-        console.warn('Failed to unregister device token on logout:', tokenErr);
+    const user = auth.currentUser;
+    const resumeRegistration = user ? pauseDeviceTokenRegistration(user) : undefined;
+    try {
+      if (user) {
+        const result = await unregisterDeviceToken(user);
+        if (!result.ok) console.warn('Failed to unregister device token on logout:', result.error.code);
       }
+      await signOut(auth);
+      return { ok: true, data: undefined };
+    } finally {
+      if (auth.currentUser === user) resumeRegistration?.();
     }
-    await signOut(auth);
-    return { ok: true, data: undefined };
   } catch {
     return { ok: false, error: { code: 'SERVICE_UNAVAILABLE', retryable: true } };
   }

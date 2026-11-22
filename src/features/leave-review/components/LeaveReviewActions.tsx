@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -26,6 +26,7 @@ function errorMessage(code: string) {
     case 'CONFLICT': return 'Pengajuan sudah ditinjau oleh pengguna lain.';
     case 'NETWORK_ERROR': return 'Koneksi bermasalah. Silakan coba lagi.';
     case 'UNAUTHENTICATED': return 'Sesi akun berakhir. Silakan login kembali.';
+    case 'NOT_FOUND': return 'Pengajuan izin tidak ditemukan.';
     case 'VALIDATION_ERROR': return 'Data review tidak valid.';
     default: return 'Review izin gagal diproses. Silakan coba lagi.';
   }
@@ -37,33 +38,43 @@ export function LeaveReviewActions({ record, onSuccess, onError }: LeaveReviewAc
   const [rejectVisible, setRejectVisible] = useState(false);
   const [reviewNote, setReviewNote] = useState('');
   const [noteError, setNoteError] = useState<string | null>(null);
+  const decisionLocked = useRef(false);
 
   async function confirmApprove() {
-    if (processing) return;
+    if (decisionLocked.current) return;
+    decisionLocked.current = true;
     setApproveVisible(false);
     setProcessing('approve');
     const result = await approveLeave(record.sessionId, record.studentId);
-    setProcessing(null);
-    if (result.ok) onSuccess('Pengajuan izin disetujui.');
-    else onError(errorMessage(result.error.code));
+    if (result.ok) {
+      onSuccess('Pengajuan izin disetujui.');
+    } else {
+      decisionLocked.current = false;
+      setProcessing(null);
+      onError(errorMessage(result.error.code));
+    }
   }
 
   async function confirmReject() {
+    if (decisionLocked.current) return;
     const note = reviewNote.trim();
     if (note.length < 5 || note.length > 500) {
       setNoteError('Catatan penolakan harus berisi 5–500 karakter.');
       return;
     }
-    if (processing) return;
+    decisionLocked.current = true;
     setNoteError(null);
     setRejectVisible(false);
     setProcessing('reject');
     const result = await rejectLeave(record.sessionId, record.studentId, note);
-    setProcessing(null);
     if (result.ok) {
       setReviewNote('');
       onSuccess('Pengajuan izin ditolak.');
-    } else onError(errorMessage(result.error.code));
+    } else {
+      decisionLocked.current = false;
+      setProcessing(null);
+      onError(errorMessage(result.error.code));
+    }
   }
 
   return (

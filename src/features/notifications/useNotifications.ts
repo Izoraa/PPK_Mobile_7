@@ -1,10 +1,10 @@
-import { useEffect, useRef } from 'react';
-import { Platform } from 'react-native';
+import { useEffect } from 'react';
+import { AppState, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 
 import { useApp } from '@/state/AppContext';
-import { registerDeviceToken } from './tokenService';
+import { registerDeviceToken, supportsPushNotifications } from './tokenService';
 import type { NotificationPayload } from './types';
 
 // Configure foreground notification presentation (native mobile only)
@@ -28,22 +28,44 @@ if (Platform.OS !== 'web') {
 export function useNotifications() {
   const { currentUser } = useApp();
   const router = useRouter();
-  const notificationListener = useRef<Notifications.Subscription | null>(null);
-  const responseListener = useRef<Notifications.Subscription | null>(null);
+  const uid = currentUser?.id;
+
+  useEffect(() => {
+    if (!uid || !supportsPushNotifications()) return;
+
+    let active = true;
+    let shouldRetry = true;
+    let pending = 0;
+    const register = (devicePushToken?: Notifications.DevicePushToken) => {
+      pending++;
+      void registerDeviceToken(uid, devicePushToken).then((result) => {
+        pending--;
+        if (!active) return;
+
+        shouldRetry = !result.ok && (result.error.retryable || result.error.code === 'PERMISSION_DENIED');
+        if (!result.ok && result.error.code !== 'PERMISSION_DENIED' && result.error.code !== 'UNAUTHENTICATED') {
+          console.warn('Failed to register device token:', result.error.code);
+        }
+      });
+    };
+
+    const tokenListener = Notifications.addPushTokenListener(register);
+    const appStateListener = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && shouldRetry && pending === 0) register();
+    });
+    register();
+
+    return () => {
+      active = false;
+      tokenListener.remove();
+      appStateListener.remove();
+    };
+  }, [uid]);
 
   useEffect(() => {
     if (!currentUser || Platform.OS === 'web') return;
 
-    // S3-SRS-21 & S3-SRS-22: Register device token whenever a user logs in (mobile only)
-    void registerDeviceToken(currentUser.id);
-
-    // Listener for foreground notifications
-    notificationListener.current = Notifications.addNotificationReceivedListener((notification) => {
-      // Notification received while app is in foreground
-    });
-
-    // Listener for when a user interacts with / taps a notification
-    responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
+    const responseListener = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data as NotificationPayload['data'];
 
       if (!data || !data.eventType) return;
@@ -72,13 +94,6 @@ export function useNotifications() {
       }
     });
 
-    return () => {
-      if (notificationListener.current) {
-        notificationListener.current.remove();
-      }
-      if (responseListener.current) {
-        responseListener.current.remove();
-      }
-    };
+    return () => responseListener.remove();
   }, [currentUser, router]);
 }
