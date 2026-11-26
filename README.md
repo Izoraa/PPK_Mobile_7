@@ -66,12 +66,12 @@
 
 ### Ringkasan Roadmap per Sprint
 
-| Sprint | Tema Utama | PM | Rentang Kode SRS | Status |
-| :---: | :--- | :--- | :--- | :---: |
-| **Sprint 1** | Antarmuka & Alur Praktikum (Data Lokal/Dummy) | — | `SRS-01` – `SRS-17` (17 SRS) | ✅ Selesai |
-| **Sprint 2** | Data Dinamis dengan Firebase Auth, Firestore & AI Izin | Hasta | `S2-SRS-01` – `S2-SRS-40` (40 SRS) | ✅ Selesai |
-| **Sprint 3** | Presensi QR + Lokasi GPS, Maps Laboratorium & Push Notification | Hanif | `S3-SRS-01` – `S3-SRS-36` (36 SRS) | ✅ Selesai |
-| **Sprint 4** | Manajemen Lab Aslab, Dashboard Keuangan, Denda, Midtrans Sandbox, AI Sentimen & Finalisasi UI | Jordan | `S4-SRS-01` – `S4-SRS-40` (40 SRS) | 🚧 Sedang Berjalan |
+| Sprint | Tema Utama | PM | Rentang Kode SRS | Arsip Detail | Status |
+| :---: | :--- | :--- | :--- | :--- | :---: |
+| **Sprint 1** | Antarmuka & Alur Praktikum (Data Lokal/Dummy) | — | `SRS-01` – `SRS-17` (17 SRS) | [SRS](docs/sprints/sprint-1/user-story-and-srs.md) · [Agreement](docs/sprints/sprint-1/team-agreement.md) | ✅ Selesai |
+| **Sprint 2** | Data Dinamis dengan Firebase Auth, Firestore & AI Izin | Hasta | `S2-SRS-01` – `S2-SRS-40` (40 SRS) | [SRS](docs/sprints/sprint-2/user-story-and-srs.md) · [Agreement](docs/sprints/sprint-2/team-agreement.md) | ✅ Selesai |
+| **Sprint 3** | Presensi QR + Lokasi GPS, Maps Laboratorium & Push Notification | Hanif | `S3-SRS-01` – `S3-SRS-36` (36 SRS) | [SRS](docs/sprints/sprint-3/user-story-and-srs.md) · [Agreement](docs/sprints/sprint-3/team-agreement.md) | ✅ Selesai |
+| **Sprint 4** | Manajemen Lab Aslab, Dashboard Keuangan, Denda, Midtrans Sandbox, AI Sentimen & Finalisasi UI | Jordan | `S4-SRS-01` – `S4-SRS-40` (40 SRS) | [SRS](docs/sprints/sprint-4/user-story-and-srs.md) · [Agreement](docs/sprints/sprint-4/team-agreement.md) | 🚧 Sedang Berjalan |
 
 > **Keterangan Status pada Master Tabel:**  
 > ✅ **Aktif / Selesai** · 🔄 **Diperbarui / Digantikan oleh Sprint berikutnya** · 🚧 **Target Sprint 4 (In Progress)**
@@ -246,7 +246,8 @@ PPK_Mobile_7/
 ├── assets/
 │   ├── images/ & logos/        # Ikon, splash screen, & logo LabCheckIn
 │   └── maps/                   # Aset Leaflet offline (CSS, JS, marker icons)
-├── docs/                       # Dokumentasi kontrak teknis & API
+├── docs/                       # Dokumentasi kontrak teknis, API, & arsip historis sprint
+│   └── sprints/                # Arsip kronologis Sprint 1–4 (user story, SRS, agreement)
 ├── plugins/                    # Custom Expo config plugin (withLeafletMapAssets)
 ├── scripts/                    # Skrip utilitas (approve-assistant.ps1, reset-project.js)
 ├── src/
@@ -271,7 +272,10 @@ PPK_Mobile_7/
 └── tests/                      # Unit & integration tests (Jest + Firebase Emulator)
 ```
 
-### Dokumentasi Kontrak Teknis
+### Dokumentasi Kontrak Teknis & Arsip Sprint
+* **[Indeks Arsip Historis Sprint 1 – Sprint 4](docs/sprints/README.md)**
+* [Master Agreement & Business Rules Terpadu (Sprint 1–4)](docs/sprints/sprint-4/team-agreement.md)
+* [User Story, Pembagian Kerja & SRS Sprint 4](docs/sprints/sprint-4/user-story-and-srs.md)
 * [Kontrak REST API LabCheckIn](docs/labcheckin-api.md)
 * [Kontrak Push Notification & Review Izin](docs/push-notifications.md)
 * [Kontrak Integrasi AI](docs/ai-api-contract.md)
