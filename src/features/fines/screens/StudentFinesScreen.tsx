@@ -18,6 +18,21 @@ const statusLabels: Record<StudentFine['status'], string> = {
   failed: 'Pembayaran gagal',
 };
 
+const rupiahFormatter = new Intl.NumberFormat('id-ID', {
+  style: 'currency',
+  currency: 'IDR',
+  maximumFractionDigits: 0,
+});
+
+function formatFineDate(fine: StudentFine): string {
+  const sessionDate = fine.session?.startsAt;
+  if (sessionDate) return sessionDate.toLocaleDateString('id-ID', { dateStyle: 'long' });
+  if (fine.createdAt) {
+    return `Tagihan dibuat ${fine.createdAt.toLocaleDateString('id-ID', { dateStyle: 'long' })}`;
+  }
+  return 'Tanggal tidak tersedia';
+}
+
 export default function StudentFinesScreen() {
   const { currentUser } = useApp();
   if (currentUser?.role !== 'student') return null;
@@ -88,11 +103,12 @@ function StudentFinesList({ studentId }: { studentId: string }) {
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           renderItem={({ item }) => (
             <View style={styles.card}>
-              <Text style={styles.sessionTitle}>{item.session?.title ?? 'Judul sesi tidak tersedia'}</Text>
-              <Text style={styles.body}>
-                {item.session?.startsAt?.toLocaleDateString('id-ID', { dateStyle: 'long' })
-                  ?? 'Tanggal sesi tidak tersedia'}
+              <Text style={styles.sessionTitle}>
+                {item.sessionTitle ?? item.session?.title ?? 'Judul sesi tidak tersedia'}
               </Text>
+              <Text style={styles.body}>{formatFineDate(item)}</Text>
+              <Text style={styles.body}>Terlambat {item.lateMinutes} menit</Text>
+              <Text style={styles.amount}>{rupiahFormatter.format(item.amount)}</Text>
               <StatusBadge status={statusLabels[item.status]} size="sm" />
             </View>
           )}
@@ -136,4 +152,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   sessionTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
+  amount: { color: colors.text, fontSize: 18, fontWeight: '700' },
 });

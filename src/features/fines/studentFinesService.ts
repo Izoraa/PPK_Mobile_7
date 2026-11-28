@@ -12,9 +12,16 @@ type FineSession = {
   startsAt: Date | null;
 };
 
-export type StudentFine = {
+type FineRecord = {
   id: string;
   status: FineStatus;
+  sessionTitle: string | null;
+  createdAt: Date | null;
+  lateMinutes: number;
+  amount: number;
+};
+
+export type StudentFine = FineRecord & {
   session: FineSession | null;
 };
 
@@ -59,28 +66,41 @@ export async function getStudentFines(studentId: string): Promise<Result<Student
       return { ok: false, error: { code: 'SERVICE_UNAVAILABLE', retryable: true } };
     }
 
-    const records: { id: string; sessionId: string; status: FineStatus }[] = [];
+    const records: (FineRecord & { sessionId: string })[] = [];
     for (const fine of snapshot.docs) {
-      const { studentId: ownerId, sessionId, status } = fine.data();
+      const { studentId: ownerId, sessionId, status, sessionTitle, createdAt, lateMinutes, amount, currency } = fine.data();
       if (ownerId !== uid || typeof sessionId !== 'string' || !sessionId
         || sessionId.includes('/') || sessionId === '.' || sessionId === '..'
-        || fine.id !== `${sessionId}_${uid}` || !isFineStatus(status)) {
+        || fine.id !== `${sessionId}_${uid}` || !isFineStatus(status)
+        || typeof lateMinutes !== 'number' || !Number.isSafeInteger(lateMinutes) || lateMinutes <= 0
+        || typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount <= 0
+        || currency !== 'IDR') {
         return { ok: false, error: { code: 'SERVICE_UNAVAILABLE', retryable: false } };
       }
-      records.push({ id: fine.id, sessionId, status });
+      records.push({
+        id: fine.id,
+        sessionId,
+        status,
+        sessionTitle: typeof sessionTitle === 'string' ? sessionTitle.trim() || null : null,
+        createdAt: createdAt instanceof Timestamp ? createdAt.toDate() : null,
+        lateMinutes,
+        amount,
+      });
     }
 
-    const fines = await Promise.all(records.map(async ({ id, sessionId, status }) => ({
-      id,
-      status,
+    const fines = await Promise.all(records.map(async ({ sessionId, ...record }) => ({
+      ...record,
       session: await readFineSession(sessionId),
     })));
     if (auth.currentUser !== user) {
       return { ok: false, error: { code: 'UNAUTHENTICATED', retryable: false } };
     }
 
-    fines.sort((a, b) => (b.session?.startsAt?.getTime() ?? -Infinity)
-      - (a.session?.startsAt?.getTime() ?? -Infinity) || a.id.localeCompare(b.id));
+    fines.sort((a, b) => {
+      const aTime = (a.session?.startsAt ?? a.createdAt)?.getTime() ?? -Infinity;
+      const bTime = (b.session?.startsAt ?? b.createdAt)?.getTime() ?? -Infinity;
+      return bTime - aTime || a.id.localeCompare(b.id);
+    });
     return { ok: true, data: fines };
   } catch (error) {
     if (error instanceof FirebaseError) {
