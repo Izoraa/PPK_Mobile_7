@@ -100,7 +100,8 @@ export function subscribeStudentFines(
         const records: (FineRecord & { sessionId: string })[] = [];
         for (const fine of snapshot.docs) {
           const {
-            studentId: ownerId, sessionId, status, orderId, sessionTitle, createdAt, lateMinutes, amount, currency,
+            studentId: ownerId, sessionId, status, latestOrderId, orderId: legacyOrderId,
+            sessionTitle, createdAt, lateMinutes, amount, currency,
           } = fine.data();
           if (ownerId !== uid || typeof sessionId !== 'string' || !sessionId
             || sessionId.includes('/') || sessionId === '.' || sessionId === '..'
@@ -111,6 +112,9 @@ export function subscribeStudentFines(
             onChange({ ok: false, error: { code: 'SERVICE_UNAVAILABLE', retryable: false } });
             return;
           }
+
+          // Older fine documents use orderId. An explicit null in the current field clears the link.
+          const orderId: unknown = latestOrderId === undefined ? legacyOrderId : latestOrderId;
           records.push({
             id: fine.id,
             sessionId,
