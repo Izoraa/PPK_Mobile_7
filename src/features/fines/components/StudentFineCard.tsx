@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { StatusBadge } from '@/components/common/StatusBadge';
 import type { PaymentCheckout } from '@/features/payments/paymentCheckoutService';
+import { formatRupiah, paymentAttemptStatusLabels } from '@/features/payments/paymentPresentation';
 import { mergePaymentAttemptStatus, subscribePaymentStatus, type PaymentAttemptStatus } from '@/features/payments/paymentStatusService';
 import type { PaymentStatusCheck } from '@/features/payments/usePaymentStatusChecks';
 import { colors, radius, spacing } from '@/theme';
@@ -31,18 +32,6 @@ const fineStatusLabels: Record<StudentFine['status'], string> = {
   paid: 'Lunas',
   failed: 'Pembayaran gagal',
 };
-
-const attemptStatusLabels: Record<PaymentAttemptStatus, string> = {
-  pending: 'Menunggu pembayaran',
-  success: 'Berhasil',
-  failed: 'Gagal atau kedaluwarsa',
-};
-
-const rupiahFormatter = new Intl.NumberFormat('id-ID', {
-  style: 'currency',
-  currency: 'IDR',
-  maximumFractionDigits: 0,
-});
 
 function formatFineDate(fine: StudentFine): string {
   const sessionDate = fine.session?.startsAt;
@@ -80,7 +69,7 @@ export function StudentFineCard({
       <Text style={styles.sessionTitle}>{fine.sessionTitle ?? fine.session?.title ?? 'Judul sesi tidak tersedia'}</Text>
       <Text style={styles.body}>{formatFineDate(fine)}</Text>
       <Text style={styles.body}>Terlambat {fine.lateMinutes} menit</Text>
-      <Text style={styles.amount}>{rupiahFormatter.format(fine.amount)}</Text>
+      <Text style={styles.amount}>{formatRupiah(fine.amount)}</Text>
       <Text style={styles.label}>Status tagihan</Text>
       <StatusBadge status={fineStatusLabels[fine.status]} size="sm" />
 
@@ -88,7 +77,7 @@ export function StudentFineCard({
         <View style={styles.attempt}>
           <Text style={styles.label}>Status transaksi</Text>
           <Text accessibilityLiveRegion="polite" style={styles.body}>
-            {status ? attemptStatusLabels[status] : 'Belum terverifikasi'}
+            {status ? paymentAttemptStatusLabels[status] : 'Belum terverifikasi'}
           </Text>
           <Text style={styles.body}>Nomor pesanan {orderId}</Text>
           {status !== 'success' && (

@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { Link, router, type Href } from 'expo-router';
 import { openBrowserAsync, WebBrowserResultType } from 'expo-web-browser';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -158,6 +158,14 @@ function StudentFinesList({ studentId }: { studentId: string }) {
         <Text style={styles.body}>
           Membayar denda keterlambatan tidak mengubah catatan presensi Anda.
         </Text>
+        <Link href={'/(student)/payments/history' as Href} asChild>
+          <Pressable
+            accessibilityRole="link"
+            style={({ pressed }) => [styles.historyLink, pressed && styles.pressed]}
+          >
+            <Text style={styles.historyLinkText}>Riwayat Pembayaran</Text>
+          </Pressable>
+        </Link>
       </View>
 
       <AsyncState
@@ -229,6 +237,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryLight,
   },
   body: { color: colors.textMuted, fontSize: 14, lineHeight: 20 },
+  historyLink: { alignSelf: 'flex-start', justifyContent: 'center', minHeight: 44 },
+  historyLinkText: { color: colors.primary, fontSize: 14, fontWeight: '700' },
   list: { padding: spacing.md, paddingBottom: spacing.xl },
   separator: { height: spacing.sm },
 });

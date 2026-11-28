@@ -12,7 +12,7 @@ function isOrderId(value: string): boolean {
   return /^[a-zA-Z0-9_~.-]{1,50}$/.test(value) && value !== '.' && value !== '..';
 }
 
-function isAttemptStatus(value: unknown): value is PaymentAttemptStatus {
+export function isPaymentAttemptStatus(value: unknown): value is PaymentAttemptStatus {
   return value === 'pending' || value === 'success' || value === 'failed';
 }
 
@@ -45,7 +45,7 @@ export function subscribePaymentStatus(
         if (auth.currentUser !== user || snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) return;
         const attempt = snapshot.data();
         onStatus(attempt && attempt.studentId === user.uid && attempt.orderId === orderId
-          && attempt.fineId === fineId && isAttemptStatus(attempt.status) ? attempt.status : undefined);
+          && attempt.fineId === fineId && isPaymentAttemptStatus(attempt.status) ? attempt.status : undefined);
       },
       () => onStatus(undefined),
     );
@@ -72,7 +72,7 @@ export async function getPaymentStatus(
   if (payload && typeof payload === 'object' && 'ok' in payload && payload.ok === true
     && 'data' in payload && payload.data && typeof payload.data === 'object') {
     const attempt = payload.data as Record<string, unknown>;
-    if (attempt.orderId === orderId && attempt.fineId === fineId && isAttemptStatus(attempt.status)) {
+    if (attempt.orderId === orderId && attempt.fineId === fineId && isPaymentAttemptStatus(attempt.status)) {
       return { ok: true, data: attempt.status };
     }
   }
