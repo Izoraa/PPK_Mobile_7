@@ -34,6 +34,7 @@ type AttendanceApiErrorCode = AppErrorCode
   | "QR_EXPIRED"
   | "SESSION_NOT_OPEN"
   | "LOCATION_UNAVAILABLE"
+  | "OUTSIDE_GEOFENCE"
   | "RATE_LIMITED";
 
 type AttendanceApiError = { code: AttendanceApiErrorCode; retryable: boolean };
@@ -64,6 +65,8 @@ export function getAttendanceApiErrorMessage(code: AttendanceApiErrorCode): stri
       return "Sesi atau kelas praktikum tidak ditemukan.";
     case "LOCATION_UNAVAILABLE":
       return "Lokasi perangkat belum tersedia. Aktifkan layanan lokasi dan coba lagi.";
+    case "OUTSIDE_GEOFENCE":
+      return "Kamu berada di luar radius presensi laboratorium. Dekati lokasi laboratorium lalu coba lagi.";
     case "RATE_LIMITED":
       return "Terlalu banyak percobaan. Tunggu sebentar sebelum mencoba lagi.";
     default:
@@ -115,6 +118,7 @@ function studentAttendanceError(status: number, body: unknown): AttendanceApiFai
     case "PARTICIPATION_CONFLICT":
       return { ok: false, error: { code, retryable: false } };
     case "LOCATION_UNAVAILABLE":
+    case "OUTSIDE_GEOFENCE":
       return { ok: false, error: { code, retryable: true } };
   }
   if (status === 429) {
