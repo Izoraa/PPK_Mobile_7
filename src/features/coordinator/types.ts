@@ -1,5 +1,6 @@
 import type { Timestamp } from 'firebase/firestore';
 import type { Role } from '@/types';
+import type { AttendancePolicy } from '@/features/practicum/attendancePolicy';
 
 export interface LaboratoryDoc {
   id: string;
@@ -36,7 +37,7 @@ export interface AssistantUser {
   isPending: boolean;
 }
 
-export interface CreateClassByCoordinatorInput {
+export interface CreateClassByCoordinatorInput extends AttendancePolicy {
   name: string;
   code: string;
   course: string;

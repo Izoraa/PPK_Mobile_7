@@ -7,11 +7,11 @@ import type { AppErrorCode } from '@/types';
 const REQUEST_TIMEOUT_MS = 10_000;
 
 type ApiRequest = {
-  method: 'POST' | 'PATCH' | 'DELETE';
-  body: Record<string, string | null>;
-  successStatus: 200 | 204;
   user: User;
-};
+} & (
+  | { method: 'GET'; body?: never; successStatus: 200 }
+  | { method: 'POST' | 'PATCH' | 'DELETE'; body: Record<string, string | null>; successStatus: 200 | 204 }
+);
 
 const statusCodes = {
   400: 'VALIDATION_ERROR',
@@ -82,19 +82,20 @@ export async function requestLabCheckInApi(
       const idToken = await (forceRefresh ? user.getIdToken(true) : user.getIdToken());
       if (auth.currentUser !== user || controller.signal.aborted) break;
 
-      outcomeUnknown = true;
+      outcomeUnknown = method !== 'GET';
       const response = await fetch(`${baseUrl}${path}`, {
         method,
         headers: {
           Authorization: `Bearer ${idToken}`,
-          'Content-Type': 'application/json',
+          ...(body !== undefined && { 'Content-Type': 'application/json' }),
         },
-        body: JSON.stringify(body),
+        ...(body !== undefined && { body: JSON.stringify(body) }),
         signal: controller.signal,
       });
       if (auth.currentUser !== user || controller.signal.aborted) break;
 
-      outcomeUnknown = response.ok || response.status === 408 || response.status >= 500;
+      const transientError = response.status === 408 || response.status >= 500;
+      outcomeUnknown = method !== 'GET' && (response.ok || transientError);
       // Authentication runs before the route can mutate Firestore.
       if (response.status === 401 && !forceRefresh) continue;
       if (response.status !== successStatus) {
@@ -112,7 +113,7 @@ export async function requestLabCheckInApi(
           error: {
             code: code ?? httpErrorCodes[response.status] ?? 'SERVICE_UNAVAILABLE',
             ...(message !== undefined && { message }),
-            retryable: outcomeUnknown || response.status === 429,
+            retryable: outcomeUnknown || transientError || response.status === 429,
             ...(outcomeUnknown && { outcomeUnknown }),
           },
         };

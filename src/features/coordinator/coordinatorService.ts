@@ -15,7 +15,8 @@ import {
 } from 'firebase/firestore';
 
 import { getFirebaseAuth, getFirebaseFirestore } from '@/lib/firebase/client';
-import type { ClassDoc } from '@/features/practicum';
+import type { ClassDoc, Result as PracticumResult } from '@/features/practicum';
+import { isFineAmount, isGracePeriodMinutes, readAttendancePolicy } from '@/features/practicum/attendancePolicy';
 import type { Result } from '@/types';
 import type {
   AssistantUser,
@@ -240,6 +241,12 @@ export function subscribeActiveAssistants(
 // 3. MANAJEMEN KELAS PRAKTIKUM (KOORDINATOR)
 // ============================================================================
 
+const invalidAttendancePolicy = {
+  code: 'VALIDATION_ERROR',
+  message: 'Toleransi keterlambatan harus bilangan bulat minimal 0 menit dan denda harus bilangan bulat lebih dari Rp0.',
+  retryable: false,
+} as const;
+
 export function subscribeAllClasses(
   onChange: (classes: ClassDoc[]) => void,
   onError?: (err: Error) => void,
@@ -276,7 +283,7 @@ export function subscribeAllClasses(
 
 export async function createClassByCoordinator(
   input: CreateClassByCoordinatorInput,
-): Promise<Result<{ classId: string }>> {
+): Promise<PracticumResult<{ classId: string }>> {
   const name = input.name.trim();
   const code = input.code.trim();
   const course = input.course.trim();
@@ -286,6 +293,8 @@ export async function createClassByCoordinator(
   if (!name || !code || !course || !assistantId) {
     return { ok: false, error: { code: 'VALIDATION_ERROR', retryable: false } };
   }
+  const policy = readAttendancePolicy(input.gracePeriodMinutes, input.fineAmount);
+  if (!policy) return { ok: false, error: invalidAttendancePolicy };
 
   try {
     const db = getFirebaseFirestore();
@@ -295,6 +304,7 @@ export async function createClassByCoordinator(
       course,
       timeZone,
       assistantId,
+      ...policy,
       isArchived: false,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -310,7 +320,15 @@ export async function createClassByCoordinator(
 export async function updateClassByCoordinator(
   classId: string,
   input: Partial<CreateClassByCoordinatorInput> & { isArchived?: boolean },
-): Promise<Result<void>> {
+): Promise<PracticumResult<void>> {
+  const { gracePeriodMinutes, fineAmount } = input;
+  if (
+    (gracePeriodMinutes !== undefined && !isGracePeriodMinutes(gracePeriodMinutes)) ||
+    (fineAmount !== undefined && !isFineAmount(fineAmount))
+  ) {
+    return { ok: false, error: invalidAttendancePolicy };
+  }
+
   try {
     const db = getFirebaseFirestore();
     const classRef = doc(db, 'classes', classId);
@@ -323,6 +341,8 @@ export async function updateClassByCoordinator(
     if (input.course !== undefined) updateData.course = input.course.trim();
     if (input.timeZone !== undefined) updateData.timeZone = input.timeZone.trim();
     if (input.assistantId !== undefined) updateData.assistantId = input.assistantId.trim();
+    if (gracePeriodMinutes !== undefined) updateData.gracePeriodMinutes = gracePeriodMinutes;
+    if (fineAmount !== undefined) updateData.fineAmount = fineAmount;
     if (input.isArchived !== undefined) updateData.isArchived = input.isArchived;
 
     await updateDoc(classRef, updateData);
@@ -333,6 +353,6 @@ export async function updateClassByCoordinator(
   }
 }
 
-export async function archiveClassByCoordinator(classId: string): Promise<Result<void>> {
+export async function archiveClassByCoordinator(classId: string): Promise<PracticumResult<void>> {
   return updateClassByCoordinator(classId, { isArchived: true });
 }

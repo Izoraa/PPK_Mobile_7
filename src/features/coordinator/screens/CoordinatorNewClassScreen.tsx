@@ -27,6 +27,8 @@ export default function CoordinatorNewClassScreen() {
   const [course, setCourse] = useState('');
   const [assistantId, setAssistantId] = useState('');
   const [timeZone, setTimeZone] = useState('Asia/Jakarta');
+  const [gracePeriodMinutes, setGracePeriodMinutes] = useState('');
+  const [fineAmount, setFineAmount] = useState('');
 
   const [assistants, setAssistants] = useState<Array<{ id: string; name: string; email: string }>>([]);
   const [loadingAssistants, setLoadingAssistants] = useState(true);
@@ -70,13 +72,15 @@ export default function CoordinatorNewClassScreen() {
       course: trimmedCourse,
       timeZone,
       assistantId,
+      gracePeriodMinutes: Number(gracePeriodMinutes.trim() || NaN),
+      fineAmount: Number(fineAmount.trim() || NaN),
     });
     setSubmitting(false);
 
     if (res.ok) {
       router.back();
     } else {
-      setErrorMsg('Gagal membuka kelas baru. Periksa kembali koneksi Anda.');
+      setErrorMsg(res.error.message ?? 'Gagal membuka kelas baru. Periksa kembali koneksi Anda.');
     }
   };
 
@@ -136,6 +140,28 @@ export default function CoordinatorNewClassScreen() {
               placeholderTextColor={colors.textMuted}
               value={code}
               onChangeText={setCode}
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Toleransi Keterlambatan (menit)</Text>
+            <TextInput
+              style={styles.input}
+              accessibilityLabel="Toleransi keterlambatan dalam menit"
+              inputMode="numeric"
+              value={gracePeriodMinutes}
+              onChangeText={setGracePeriodMinutes}
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Denda Keterlambatan (Rp)</Text>
+            <TextInput
+              style={styles.input}
+              accessibilityLabel="Denda keterlambatan dalam rupiah"
+              inputMode="numeric"
+              value={fineAmount}
+              onChangeText={setFineAmount}
             />
           </View>
 

@@ -32,6 +32,8 @@ export default function CoordinatorEditClassScreen() {
   const [course, setCourse] = useState('');
   const [assistantId, setAssistantId] = useState('');
   const [timeZone, setTimeZone] = useState('Asia/Jakarta');
+  const [gracePeriodMinutes, setGracePeriodMinutes] = useState('');
+  const [fineAmount, setFineAmount] = useState('');
   const [isArchived, setIsArchived] = useState(false);
 
   const [assistants, setAssistants] = useState<Array<{ id: string; name: string; email: string }>>([]);
@@ -68,6 +70,8 @@ export default function CoordinatorEditClassScreen() {
           setCourse(d.course ?? '');
           setAssistantId(d.assistantId ?? '');
           setTimeZone(d.timeZone ?? 'Asia/Jakarta');
+          setGracePeriodMinutes(String(d.gracePeriodMinutes ?? ''));
+          setFineAmount(String(d.fineAmount ?? ''));
           setIsArchived(Boolean(d.isArchived));
         } else {
           setErrorMsg('Kelas tidak ditemukan.');
@@ -107,13 +111,15 @@ export default function CoordinatorEditClassScreen() {
       assistantId,
       timeZone,
       isArchived,
+      gracePeriodMinutes: Number(gracePeriodMinutes.trim() || NaN),
+      fineAmount: Number(fineAmount.trim() || NaN),
     });
     setSubmitting(false);
 
     if (res.ok) {
       router.back();
     } else {
-      setErrorMsg('Gagal menyimpan perubahan kelas. Periksa koneksi Anda.');
+      setErrorMsg(res.error.message ?? 'Gagal menyimpan perubahan kelas. Periksa koneksi Anda.');
     }
   };
 
@@ -182,6 +188,28 @@ export default function CoordinatorEditClassScreen() {
               placeholderTextColor={colors.textMuted}
               value={code}
               onChangeText={setCode}
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Toleransi Keterlambatan (menit)</Text>
+            <TextInput
+              style={styles.input}
+              accessibilityLabel="Toleransi keterlambatan dalam menit"
+              inputMode="numeric"
+              value={gracePeriodMinutes}
+              onChangeText={setGracePeriodMinutes}
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Denda Keterlambatan (Rp)</Text>
+            <TextInput
+              style={styles.input}
+              accessibilityLabel="Denda keterlambatan dalam rupiah"
+              inputMode="numeric"
+              value={fineAmount}
+              onChangeText={setFineAmount}
             />
           </View>
 

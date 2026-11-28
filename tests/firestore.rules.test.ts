@@ -9,6 +9,7 @@ import {
   getDoc,
   getDocs,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -161,6 +162,51 @@ afterEach(async () => {
 
 afterAll(async () => {
   if (testEnvironment) await testEnvironment.cleanup();
+});
+
+describe('Firestore Security Rules: attendance policy', () => {
+  test('copies the coordinator policy into an immutable session snapshot', async () => {
+    await testEnvironment.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', 'coordinator-1'), { role: 'coordinator' });
+    });
+    const coordinatorDb = testEnvironment.authenticatedContext('coordinator-1').firestore();
+    const db = assistantDb('assistant-1');
+    const classRef = doc(coordinatorDb, 'classes', 'class-1');
+    const policy = { gracePeriodMinutes: 0, fineAmount: 10000 };
+    const newClass = { ...classOne, ...policy, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+    await assertFails(setDoc(doc(db, 'classes', 'new-class'), newClass));
+    await assertSucceeds(setDoc(doc(coordinatorDb, 'classes', 'new-class'), newClass));
+    await assertSucceeds(updateDoc(classRef, { ...policy, updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(db, 'classes', 'class-1'), {
+      fineAmount: 1,
+      updatedAt: serverTimestamp(),
+    }));
+
+    const session = {
+      ...sessionOne,
+      status: 'not_open',
+      openedAt: null,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+    const sessionRef = doc(db, 'sessions', 'new-session');
+    await assertFails(setDoc(sessionRef, session));
+    await assertFails(setDoc(sessionRef, { ...session, ...policy, gracePeriodMinutes: 5 }));
+    await assertFails(setDoc(sessionRef, { ...session, ...policy, fineAmount: 1 }));
+    await assertSucceeds(runTransaction(db, async (transaction) => {
+      const course = await transaction.get(doc(db, 'classes', 'class-1'));
+      transaction.set(sessionRef, {
+        ...session,
+        gracePeriodMinutes: course.get('gracePeriodMinutes'),
+        fineAmount: course.get('fineAmount'),
+      });
+    }));
+
+    await assertSucceeds(updateDoc(classRef, { fineAmount: 15000, updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(sessionRef, { fineAmount: 15000, updatedAt: serverTimestamp() }));
+    const snapshot = await assertSucceeds(getDoc(sessionRef));
+    expect(snapshot.data()).toMatchObject(policy);
+  });
 });
 
 describe('Firestore Security Rules: participation access', () => {

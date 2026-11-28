@@ -19,6 +19,7 @@ import {
 
 import { getFirebaseAuth, getFirebaseFirestore } from '@/lib/firebase/client';
 import { requestLabCheckInApi } from '@/lib/labCheckInApi';
+import { readAttendancePolicy } from './attendancePolicy';
 import type {
   ClassDoc,
   CreateClassInput,
@@ -425,61 +426,76 @@ export async function createSession(input: CreateSessionInput): Promise<Result<{
   }
 
   try {
-    // Verify class ownership
-    const classSnap = await getDoc(doc(db, 'classes', classId));
-    if (!classSnap.exists()) {
-      return { ok: false, error: { code: 'NOT_FOUND', message: 'Kelas tidak ditemukan.', retryable: false } };
-    }
-    const classData = classSnap.data();
-    if (classData.assistantId !== user.uid) {
-      return { ok: false, error: { code: 'FORBIDDEN', message: 'Hanya pemilik kelas yang dapat membuat sesi.', retryable: false } };
-    }
-    if (classData.isArchived) {
-      return { ok: false, error: { code: 'CLASS_ARCHIVED', message: 'Kelas sudah diarsipkan.', retryable: false } };
-    }
+    const classRef = doc(db, 'classes', classId);
+    const sessionRef = doc(collection(db, 'sessions'));
+    return await runTransaction<Result<{ sessionId: string }>>(db, async (transaction) => {
+      const classSnap = await transaction.get(classRef);
+      if (!classSnap.exists()) {
+        return { ok: false, error: { code: 'NOT_FOUND', message: 'Kelas tidak ditemukan.', retryable: false } };
+      }
+      const classData = classSnap.data();
+      if (classData.assistantId !== user.uid) {
+        return { ok: false, error: { code: 'FORBIDDEN', message: 'Hanya pemilik kelas yang dapat membuat sesi.', retryable: false } };
+      }
+      if (classData.isArchived) {
+        return { ok: false, error: { code: 'CLASS_ARCHIVED', message: 'Kelas sudah diarsipkan.', retryable: false } };
+      }
+      const policy = readAttendancePolicy(classData.gracePeriodMinutes, classData.fineAmount);
+      if (!policy) {
+        return {
+          ok: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Minta Aslab mengatur toleransi keterlambatan dan denda pada kelas ini.',
+            retryable: false,
+          },
+        };
+      }
 
-    const conflict = await findConflictingSession(room, input.startsAt, input.endsAt);
-    if (conflict) {
-      const fmtStart = conflict.startsAt.toTimeString().substring(0, 5);
-      const fmtEnd = conflict.endsAt.toTimeString().substring(0, 5);
-      return {
-        ok: false,
-        error: {
-          code: 'CONFLICT',
-          message: `Ruangan "${room}" sudah digunakan oleh sesi "${conflict.title}" pada ${fmtStart}–${fmtEnd}. Pilih ruangan atau waktu lain.`,
-          retryable: false,
-        },
-      };
-    }
+      const conflict = await findConflictingSession(room, input.startsAt, input.endsAt);
+      if (conflict) {
+        const fmtStart = conflict.startsAt.toTimeString().substring(0, 5);
+        const fmtEnd = conflict.endsAt.toTimeString().substring(0, 5);
+        return {
+          ok: false,
+          error: {
+            code: 'CONFLICT',
+            message: `Ruangan "${room}" sudah digunakan oleh sesi "${conflict.title}" pada ${fmtStart}–${fmtEnd}. Pilih ruangan atau waktu lain.`,
+            retryable: false,
+          },
+        };
+      }
 
-    if (input.startsAt.getTime() < Date.now()) {
-      return {
-        ok: false,
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Waktu mulai tidak boleh kurang dari waktu saat ini.',
-          retryable: false,
-        },
-      };
-    }
+      if (input.startsAt.getTime() < Date.now()) {
+        return {
+          ok: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Waktu mulai tidak boleh kurang dari waktu saat ini.',
+            retryable: false,
+          },
+        };
+      }
 
-    const docRef = await addDoc(collection(db, 'sessions'), {
-      classId,
-      assistantId: user.uid,
-      title,
-      room,
-      startsAt: Timestamp.fromDate(input.startsAt),
-      endsAt: Timestamp.fromDate(input.endsAt),
-      timeZone,
-      status: 'not_open',
-      isArchived: false,
-      openedAt: null,
-      closedAt: null,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+      transaction.set(sessionRef, {
+        classId,
+        assistantId: user.uid,
+        title,
+        room,
+        startsAt: Timestamp.fromDate(input.startsAt),
+        endsAt: Timestamp.fromDate(input.endsAt),
+        timeZone,
+        ...policy,
+        status: 'not_open',
+        isArchived: false,
+        openedAt: null,
+        closedAt: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      return { ok: true, data: { sessionId: sessionRef.id } };
     });
-
-    return { ok: true, data: { sessionId: docRef.id } };
   } catch (err: any) {
     return { ok: false, error: { code: 'NETWORK_ERROR', message: err.message, retryable: true } };
   }

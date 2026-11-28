@@ -52,6 +52,12 @@ service cloud.firestore {
       return value is string && value.trim().size() >= minimum && value.size() <= maximum;
     }
 
+    function validAttendancePolicy(data) {
+      return data.gracePeriodMinutes is int && data.gracePeriodMinutes >= 0
+        && data.gracePeriodMinutes <= 9007199254740991
+        && data.fineAmount is int && data.fineAmount > 0 && data.fineAmount <= 9007199254740991;
+    }
+
     match /deviceTokens/{tokenId} {
       allow read, write: if false;
     }
@@ -62,6 +68,18 @@ service cloud.firestore {
 
     match /notificationJobs/{jobId} {
       allow read, write: if false;
+    }
+
+    match /fines/{fineId} {
+      allow get, list: if isCoordinator()
+        || (isStudent() && resource.data.studentId == request.auth.uid)
+        || (hasRole('assistant') && classData(resource.data.classId).assistantId == request.auth.uid);
+      allow write: if false;
+    }
+
+    match /paymentTransactions/{orderId} {
+      allow get, list: if isCoordinator() || (isStudent() && resource.data.studentId == request.auth.uid);
+      allow write: if false;
     }
 
     match /laboratories/{labId} {
@@ -109,21 +127,34 @@ service cloud.firestore {
           && validText(data.course, 1, 200) && validText(data.timeZone, 1, 100);
       }
 
+      function canCreateClass(data) {
+        let fields = ['name', 'code', 'course', 'timeZone', 'assistantId', 'isArchived', 'createdAt', 'updatedAt'];
+        return (isCoordinator() && hasExactFields(data, fields.concat(['gracePeriodMinutes', 'fineAmount']))
+            && validAttendancePolicy(data))
+          || (hasRole('assistant') && data.assistantId == request.auth.uid && hasExactFields(data, fields));
+      }
+
+      function canUpdateClass(data) {
+        let changed = data.diff(resource.data).affectedKeys();
+        let fields = ['name', 'code', 'course', 'timeZone', 'assistantId', 'isArchived', 'updatedAt'];
+        let policyFields = ['gracePeriodMinutes', 'fineAmount'];
+        return (isCoordinator() && changed.hasOnly(fields.concat(policyFields))
+            && (!changed.hasAny(policyFields) || validAttendancePolicy(data)))
+          || (hasRole('assistant') && resource.data.assistantId == request.auth.uid
+            && data.assistantId == request.auth.uid && changed.hasOnly(fields));
+      }
+
       allow get: if isCoordinator()
         || (hasRole('assistant') && resource.data.assistantId == request.auth.uid)
         || (isStudent() && isActiveMember(classId));
       allow list: if isCoordinator()
         || (hasRole('assistant') && resource.data.assistantId == request.auth.uid);
-      allow create: if (isCoordinator() || (hasRole('assistant') && request.resource.data.assistantId == request.auth.uid))
-        && hasExactFields(request.resource.data,
-          ['name', 'code', 'course', 'timeZone', 'assistantId', 'isArchived', 'createdAt', 'updatedAt'])
+      allow create: if canCreateClass(request.resource.data)
         && request.resource.data.isArchived == false
         && request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time
         && validClassDetails(request.resource.data);
-      allow update: if (isCoordinator() || (hasRole('assistant') && resource.data.assistantId == request.auth.uid))
+      allow update: if canUpdateClass(request.resource.data)
         && resource.data.isArchived == false && request.resource.data.isArchived is bool
-        && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['name', 'code', 'course', 'timeZone', 'assistantId', 'isArchived', 'updatedAt'])
         && request.resource.data.updatedAt == request.time && validClassDetails(request.resource.data);
     }
 
@@ -134,7 +165,8 @@ service cloud.firestore {
 
       function canReadMembership() {
         // The assistant roster query constrains classId, so check the canonical class owner.
-        return (isStudent() && resource.data.studentId == request.auth.uid) || ownsMembershipClass();
+        return isCoordinator() || (isStudent() && resource.data.studentId == request.auth.uid)
+          || ownsMembershipClass();
       }
 
       function matchesStudentProfile(data) {
@@ -152,26 +184,29 @@ service cloud.firestore {
         return hasExactFields(data, fields)
           && isDocumentId(data.classId) && isDocumentId(data.studentId)
           && membershipId == data.classId + '_' + data.studentId
-          && data.assistantId == request.auth.uid
-          && classData(data.classId).assistantId == request.auth.uid
+          && isDocumentId(data.assistantId)
+          && getAfter(/databases/$(database)/documents/classes/$(data.classId)).data.assistantId == data.assistantId
           && classIsActiveAfterWrite(data.classId)
           && data.isActive is bool && data.createdAt is timestamp && data.updatedAt == request.time
           && matchesStudentProfile(data);
       }
 
-      // The upsert probes its document before creating it. Missing documents contain no roster data.
-      allow get: if (hasRole('assistant')
-          && !exists(/databases/$(database)/documents/memberships/$(membershipId)))
-        || canReadMembership();
-      allow list: if canReadMembership();
-      allow create: if hasRole('assistant') && validMembershipWrite(request.resource.data)
+      allow get, list: if canReadMembership();
+      allow create: if isCoordinator() && validMembershipWrite(request.resource.data)
         && request.resource.data.isActive == true && request.resource.data.createdAt == request.time;
-      allow update: if hasRole('assistant') && validMembershipWrite(request.resource.data)
+      allow update: if isCoordinator() && validMembershipWrite(request.resource.data)
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['isActive', 'studentName', 'studentNumber', 'updatedAt']);
+          .hasOnly(['assistantId', 'isActive', 'studentName', 'studentNumber', 'updatedAt']);
     }
 
     match /sessions/{sessionId} {
+      function matchesClassAttendancePolicy(data) {
+        let course = getAfter(/databases/$(database)/documents/classes/$(data.classId)).data;
+        return course.assistantId == request.auth.uid && course.isArchived == false
+          && validAttendancePolicy(data)
+          && data.gracePeriodMinutes == course.gracePeriodMinutes && data.fineAmount == course.fineAmount;
+      }
+
       function validSessionDetails(data) {
         return validText(data.title, 1, 200) && validText(data.room, 1, 200)
           && validText(data.timeZone, 1, 100)
@@ -179,7 +214,8 @@ service cloud.firestore {
       }
 
       function isSessionOwner() {
-        return hasRole('assistant') && classData(resource.data.classId).assistantId == request.auth.uid;
+        return hasRole('assistant') && resource.data.assistantId == request.auth.uid
+          && classData(resource.data.classId).assistantId == request.auth.uid;
       }
 
       function validSessionUpdate() {
@@ -195,18 +231,22 @@ service cloud.firestore {
         );
       }
 
-      allow get: if isSessionOwner() || hasRole('assistant') || (isStudent() && (
+      allow get: if isCoordinator() || isSessionOwner() || (isStudent() && (
         isActiveMember(resource.data.classId)
         || exists(/databases/$(database)/documents/sessions/$(sessionId)/participations/$(request.auth.uid))
       ));
-      allow list: if isSessionOwner() || hasRole('assistant') || (isStudent() && isActiveMember(resource.data.classId));
+      // Existing client-side room conflict checks query active sessions across classes.
+      allow list: if isCoordinator()
+        || (hasRole('assistant') && (resource.data.isArchived == false
+          || classData(resource.data.classId).assistantId == request.auth.uid))
+        || (isStudent() && isActiveMember(resource.data.classId));
       allow create: if hasRole('assistant')
         && hasExactFields(request.resource.data, ['classId', 'assistantId', 'title', 'room', 'startsAt',
-          'endsAt', 'timeZone', 'status', 'isArchived', 'openedAt', 'closedAt', 'createdAt', 'updatedAt'])
+          'endsAt', 'timeZone', 'gracePeriodMinutes', 'fineAmount', 'status', 'isArchived',
+          'openedAt', 'closedAt', 'createdAt', 'updatedAt'])
         && isDocumentId(request.resource.data.classId)
         && request.resource.data.assistantId == request.auth.uid
-        && classData(request.resource.data.classId).assistantId == request.auth.uid
-        && classIsActiveAfterWrite(request.resource.data.classId)
+        && matchesClassAttendancePolicy(request.resource.data)
         && request.resource.data.status == 'not_open' && request.resource.data.isArchived == false
         && request.resource.data.openedAt == null && request.resource.data.closedAt == null
         && request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time
@@ -234,7 +274,8 @@ service cloud.firestore {
           let course = classData(session.classId);
           let membership = membershipData(session.classId);
           let fields = ['sessionId', 'classId', 'assistantId', 'studentId', 'studentName',
-            'studentNumber', 'kind', 'createdAt', 'updatedAt'];
+            'studentNumber', 'kind', 'createdAt', 'updatedAt', 'reason', 'status',
+            'reviewedBy', 'reviewedAt', 'reviewNote', 'ai'];
           return data.studentId == studentId && data.sessionId == sessionId && data.classId == session.classId
             && data.assistantId == session.assistantId && session.assistantId == course.assistantId
             && membership.classId == session.classId && membership.studentId == studentId
@@ -242,15 +283,11 @@ service cloud.firestore {
             && data.studentName == membership.studentName && data.studentNumber == membership.studentNumber
             && data.createdAt == request.time && data.updatedAt == request.time
             && session.isArchived == false && course.isArchived == false
-            && (
-              (data.kind == 'attendance' && session.status == 'open'
-                && hasExactFields(data, fields.concat(['checkedInAt'])) && data.checkedInAt == request.time)
-              || (data.kind == 'leave' && session.status in ['not_open', 'open']
-                && hasExactFields(data, fields.concat(['reason', 'status', 'reviewedBy', 'reviewedAt', 'reviewNote', 'ai']))
-                && validText(data.reason, 10, 1000) && data.reason == data.reason.trim()
-                && data.status == 'pending' && data.reviewedBy == null && data.reviewedAt == null
-                && data.reviewNote == null && isInitialAi(data.ai))
-            );
+            && data.kind == 'leave' && session.status in ['not_open', 'open']
+            && hasExactFields(data, fields)
+            && validText(data.reason, 10, 1000) && data.reason == data.reason.trim()
+            && data.status == 'pending' && data.reviewedBy == null && data.reviewedAt == null
+            && data.reviewNote == null && isInitialAi(data.ai);
         }
 
         allow get: if (isStudent() && request.auth.uid == studentId) || ownsParentClass();
