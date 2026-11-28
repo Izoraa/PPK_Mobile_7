@@ -1,8 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { AppState, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import { useRouter } from 'expo-router';
+import { useNavigationContainerRef, useRouter, type Href } from 'expo-router';
 
+import { getFirebaseAuth } from '@/lib/firebase/client';
+import { useAuthRestoration } from '@/providers/AuthProvider';
 import { useApp } from '@/state/AppContext';
 import { registerDeviceToken, supportsPushNotifications } from './tokenService';
 import type { NotificationPayload } from './types';
@@ -25,10 +27,39 @@ if (Platform.OS !== 'web') {
   }
 }
 
+type PaymentNotification = {
+  identifier: string;
+  sessionId: string;
+  fineId: string;
+  path: '/(student)/payments' | '/(student)/payments/history';
+};
+
+function readPaymentNotification(response: Notifications.NotificationResponse | null): PaymentNotification | null {
+  if (response?.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return null;
+
+  const { identifier, content } = response.notification.request;
+  const { eventType, sessionId, fineId, orderId } = content.data ?? {};
+  if (typeof sessionId !== 'string' || !sessionId || typeof fineId !== 'string' || !fineId) return null;
+
+  if (eventType === 'FINE_CREATED') {
+    return { identifier, sessionId, fineId, path: '/(student)/payments' };
+  }
+  if ((eventType === 'PAYMENT_SUCCEEDED' || eventType === 'PAYMENT_FAILED')
+    && typeof orderId === 'string' && orderId.trim()) {
+    return { identifier, sessionId, fineId, path: '/(student)/payments/history' };
+  }
+  return null;
+}
+
 export function useNotifications() {
   const { currentUser } = useApp();
+  const { state } = useAuthRestoration();
   const router = useRouter();
+  const navigation = useNavigationContainerRef();
+  const restoring = state.status === 'initializing' || state.status === 'error';
   const uid = currentUser?.id;
+  const pendingPayment = useRef<PaymentNotification | null>(null);
+  const handledPaymentId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!uid || !supportsPushNotifications()) return;
@@ -63,9 +94,48 @@ export function useNotifications() {
   }, [uid]);
 
   useEffect(() => {
-    if (!currentUser || Platform.OS === 'web') return;
+    if (Platform.OS === 'web') return;
+
+    function openPendingPayment() {
+      const payment = pendingPayment.current;
+      if (!payment || !currentUser || restoring) return;
+
+      try {
+        const isRecipient = currentUser.role === 'student'
+          && payment.fineId === `${payment.sessionId}_${currentUser.id}`
+          && getFirebaseAuth().currentUser?.uid === currentUser.id;
+
+        if (isRecipient) {
+          const currentRoute = navigation.isReady() ? navigation.getCurrentRoute() : undefined;
+          // The auth screen can still be redirecting after the identity is restored.
+          if (!currentRoute || currentRoute.name.startsWith('(auth)/')) return;
+          router.push(payment.path as Href);
+        }
+
+        pendingPayment.current = null;
+        handledPaymentId.current = payment.identifier;
+
+        const lastResponse = readPaymentNotification(Notifications.getLastNotificationResponse());
+        if (lastResponse?.identifier === payment.identifier) Notifications.clearLastNotificationResponse();
+      } catch (err) {
+        console.error('Error handling payment notification tap:', err);
+      }
+    }
+
+    function rememberPayment(payment: PaymentNotification) {
+      if (handledPaymentId.current === payment.identifier) return;
+      pendingPayment.current = payment;
+      openPendingPayment();
+    }
 
     const responseListener = Notifications.addNotificationResponseReceivedListener((response) => {
+      const payment = readPaymentNotification(response);
+      if (payment) {
+        rememberPayment(payment);
+        return;
+      }
+
+      if (!currentUser) return;
       const data = response.notification.request.content.data as NotificationPayload['data'];
 
       if (!data || !data.eventType) return;
@@ -94,6 +164,19 @@ export function useNotifications() {
       }
     });
 
-    return () => responseListener.remove();
-  }, [currentUser, router]);
+    const removeNavigationListener = navigation.addListener('state', openPendingPayment);
+
+    try {
+      const initialPayment = readPaymentNotification(Notifications.getLastNotificationResponse());
+      if (initialPayment) rememberPayment(initialPayment);
+      else openPendingPayment();
+    } catch (err) {
+      console.error('Error reading the initial payment notification response:', err);
+    }
+
+    return () => {
+      responseListener.remove();
+      removeNavigationListener();
+    };
+  }, [currentUser, navigation, restoring, router]);
 }
