@@ -1,5 +1,5 @@
 import { FirebaseError } from 'firebase/app';
-import { collection, doc, getDocsFromServer, query, Timestamp, where } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query, Timestamp, where, type Unsubscribe } from 'firebase/firestore';
 
 import { getFirebaseAuth, getFirebaseFirestore } from '@/lib/firebase/client';
 import { getConfirmedDocument } from '@/lib/firebase/serverRead';
@@ -15,6 +15,7 @@ type FineSession = {
 type FineRecord = {
   id: string;
   status: FineStatus;
+  orderId: string | null;
   sessionTitle: string | null;
   createdAt: Date | null;
   lateMinutes: number;
@@ -24,6 +25,8 @@ type FineRecord = {
 export type StudentFine = FineRecord & {
   session: FineSession | null;
 };
+
+export type StudentFinesSnapshot = { fines: StudentFine[]; fromCache: boolean };
 
 function isFineStatus(value: unknown): value is FineStatus {
   return value === 'unpaid' || value === 'pending' || value === 'paid' || value === 'failed';
@@ -45,75 +48,109 @@ async function readFineSession(sessionId: string): Promise<FineSession | null> {
   }
 }
 
-export async function getStudentFines(studentId: string): Promise<Result<StudentFine[]>> {
+function readError(error: unknown): Extract<Result<never>, { ok: false }> {
+  if (error instanceof FirebaseError) {
+    switch (error.code) {
+      case 'unauthenticated':
+        return { ok: false, error: { code: 'UNAUTHENTICATED', retryable: false } };
+      case 'permission-denied':
+        return { ok: false, error: { code: 'FORBIDDEN', retryable: false } };
+      case 'deadline-exceeded':
+      case 'unavailable':
+        return { ok: false, error: { code: 'NETWORK_ERROR', retryable: true } };
+    }
+  }
+  return { ok: false, error: { code: 'SERVICE_UNAVAILABLE', retryable: true } };
+}
+
+export function subscribeStudentFines(
+  studentId: string,
+  onChange: (result: Result<StudentFinesSnapshot>) => void,
+): Unsubscribe {
   try {
     const auth = getFirebaseAuth();
     const user = auth.currentUser;
     const uid = user?.uid;
     if (!uid || uid !== studentId) {
-      return { ok: false, error: { code: 'UNAUTHENTICATED', retryable: false } };
+      onChange({ ok: false, error: { code: 'UNAUTHENTICATED', retryable: false } });
+      return () => undefined;
     }
 
     const finesQuery = query(
       collection(getFirebaseFirestore(), 'fines'),
       where('studentId', '==', uid),
     );
-    const snapshot = await getDocsFromServer(finesQuery);
-    if (auth.currentUser !== user) {
-      return { ok: false, error: { code: 'UNAUTHENTICATED', retryable: false } };
-    }
-    if (snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) {
-      return { ok: false, error: { code: 'SERVICE_UNAVAILABLE', retryable: true } };
-    }
+    const sessionReads = new Map<string, Promise<FineSession | null>>();
+    let revision = 0;
+    const unsubscribe = onSnapshot(
+      finesQuery,
+      { includeMetadataChanges: true },
+      (snapshot) => {
+        const snapshotRevision = ++revision;
+        if (auth.currentUser !== user) {
+          onChange({ ok: false, error: { code: 'UNAUTHENTICATED', retryable: false } });
+          return;
+        }
+        if (snapshot.metadata.hasPendingWrites) {
+          onChange({ ok: false, error: { code: 'SERVICE_UNAVAILABLE', retryable: true } });
+          return;
+        }
 
-    const records: (FineRecord & { sessionId: string })[] = [];
-    for (const fine of snapshot.docs) {
-      const { studentId: ownerId, sessionId, status, sessionTitle, createdAt, lateMinutes, amount, currency } = fine.data();
-      if (ownerId !== uid || typeof sessionId !== 'string' || !sessionId
-        || sessionId.includes('/') || sessionId === '.' || sessionId === '..'
-        || fine.id !== `${sessionId}_${uid}` || !isFineStatus(status)
-        || typeof lateMinutes !== 'number' || !Number.isSafeInteger(lateMinutes) || lateMinutes <= 0
-        || typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount <= 0
-        || currency !== 'IDR') {
-        return { ok: false, error: { code: 'SERVICE_UNAVAILABLE', retryable: false } };
-      }
-      records.push({
-        id: fine.id,
-        sessionId,
-        status,
-        sessionTitle: typeof sessionTitle === 'string' ? sessionTitle.trim() || null : null,
-        createdAt: createdAt instanceof Timestamp ? createdAt.toDate() : null,
-        lateMinutes,
-        amount,
-      });
-    }
+        const { fromCache } = snapshot.metadata;
+        const records: (FineRecord & { sessionId: string })[] = [];
+        for (const fine of snapshot.docs) {
+          const {
+            studentId: ownerId, sessionId, status, orderId, sessionTitle, createdAt, lateMinutes, amount, currency,
+          } = fine.data();
+          if (ownerId !== uid || typeof sessionId !== 'string' || !sessionId
+            || sessionId.includes('/') || sessionId === '.' || sessionId === '..'
+            || fine.id !== `${sessionId}_${uid}` || !isFineStatus(status)
+            || typeof lateMinutes !== 'number' || !Number.isSafeInteger(lateMinutes) || lateMinutes <= 0
+            || typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount <= 0
+            || currency !== 'IDR') {
+            onChange({ ok: false, error: { code: 'SERVICE_UNAVAILABLE', retryable: false } });
+            return;
+          }
+          records.push({
+            id: fine.id,
+            sessionId,
+            status,
+            orderId: typeof orderId === 'string' && orderId ? orderId : null,
+            sessionTitle: typeof sessionTitle === 'string' ? sessionTitle.trim() || null : null,
+            createdAt: createdAt instanceof Timestamp ? createdAt.toDate() : null,
+            lateMinutes,
+            amount,
+          });
+        }
 
-    const fines = await Promise.all(records.map(async ({ sessionId, ...record }) => ({
-      ...record,
-      session: await readFineSession(sessionId),
-    })));
-    if (auth.currentUser !== user) {
-      return { ok: false, error: { code: 'UNAUTHENTICATED', retryable: false } };
-    }
-
-    fines.sort((a, b) => {
-      const aTime = (a.session?.startsAt ?? a.createdAt)?.getTime() ?? -Infinity;
-      const bTime = (b.session?.startsAt ?? b.createdAt)?.getTime() ?? -Infinity;
-      return bTime - aTime || a.id.localeCompare(b.id);
-    });
-    return { ok: true, data: fines };
+        void Promise.all(records.map(async ({ sessionId, ...record }) => {
+          let session = sessionReads.get(sessionId);
+          if (!session && !fromCache) {
+            session = readFineSession(sessionId);
+            sessionReads.set(sessionId, session);
+          }
+          return { ...record, session: session ? await session : null };
+        })).then((fines) => {
+          if (revision !== snapshotRevision || auth.currentUser !== user) return;
+          fines.sort((a, b) => {
+            const aTime = (a.session?.startsAt ?? a.createdAt)?.getTime() ?? -Infinity;
+            const bTime = (b.session?.startsAt ?? b.createdAt)?.getTime() ?? -Infinity;
+            return bTime - aTime || a.id.localeCompare(b.id);
+          });
+          onChange({ ok: true, data: { fines, fromCache } });
+        });
+      },
+      (error) => {
+        revision += 1;
+        onChange(readError(error));
+      },
+    );
+    return () => {
+      revision += 1;
+      unsubscribe();
+    };
   } catch (error) {
-    if (error instanceof FirebaseError) {
-      switch (error.code) {
-        case 'unauthenticated':
-          return { ok: false, error: { code: 'UNAUTHENTICATED', retryable: false } };
-        case 'permission-denied':
-          return { ok: false, error: { code: 'FORBIDDEN', retryable: false } };
-        case 'deadline-exceeded':
-        case 'unavailable':
-          return { ok: false, error: { code: 'NETWORK_ERROR', retryable: true } };
-      }
-    }
-    return { ok: false, error: { code: 'SERVICE_UNAVAILABLE', retryable: true } };
+    onChange(readError(error));
+    return () => undefined;
   }
 }

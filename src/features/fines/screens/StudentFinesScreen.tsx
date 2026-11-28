@@ -1,47 +1,26 @@
 import { router } from 'expo-router';
 import { openBrowserAsync, WebBrowserResultType } from 'expo-web-browser';
-import { useEffect, useRef, useState } from 'react';
-import { FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AsyncState } from '@/components/common/AsyncState';
-import { StatusBadge } from '@/components/common/StatusBadge';
-import { ExternalLink } from '@/components/external-link';
 import { createPaymentCheckout, type PaymentCheckout } from '@/features/payments/paymentCheckoutService';
+import type { PaymentOrder } from '@/features/payments/paymentStatusService';
+import { usePaymentStatusChecks } from '@/features/payments/usePaymentStatusChecks';
 import { getFirebaseAuth } from '@/lib/firebase/client';
 import { useApp } from '@/state/AppContext';
-import { colors, radius, spacing } from '@/theme';
+import { colors, spacing } from '@/theme';
 import type { Result } from '@/types';
 import { getErrorMessage } from '@/utils/errors';
 
-import { getStudentFines, type StudentFine } from '../studentFinesService';
+import { StudentFineCard } from '../components/StudentFineCard';
+import { subscribeStudentFines, type StudentFinesSnapshot } from '../studentFinesService';
 
 type CheckoutState =
   | { kind: 'creating'; fineId: string }
-  | { kind: 'ready'; payment: PaymentCheckout }
+  | { kind: 'ready' | 'opened'; payment: PaymentCheckout }
   | { kind: 'error'; fineId: string; message: string };
-
-const statusLabels: Record<StudentFine['status'], string> = {
-  unpaid: 'Belum dibayar',
-  pending: 'pending', // The shared badge displays “Menunggu”.
-  paid: 'Lunas',
-  failed: 'Pembayaran gagal',
-};
-
-const rupiahFormatter = new Intl.NumberFormat('id-ID', {
-  style: 'currency',
-  currency: 'IDR',
-  maximumFractionDigits: 0,
-});
-
-function formatFineDate(fine: StudentFine): string {
-  const sessionDate = fine.session?.startsAt;
-  if (sessionDate) return sessionDate.toLocaleDateString('id-ID', { dateStyle: 'long' });
-  if (fine.createdAt) {
-    return `Tagihan dibuat ${fine.createdAt.toLocaleDateString('id-ID', { dateStyle: 'long' })}`;
-  }
-  return 'Tanggal tidak tersedia';
-}
 
 export default function StudentFinesScreen() {
   const { currentUser } = useApp();
@@ -52,19 +31,35 @@ export default function StudentFinesScreen() {
 
 function StudentFinesList({ studentId }: { studentId: string }) {
   const [attempt, setAttempt] = useState(0);
-  const [result, setResult] = useState<Result<StudentFine[]> | null>(null);
+  const [result, setResult] = useState<Result<StudentFinesSnapshot> | null>(null);
   const [checkout, setCheckout] = useState<CheckoutState | null>(null);
   const activeCheckout = useRef<string | null>(null);
+  const browserOrder = useRef<PaymentOrder | null>(null);
+  const { checks, checkStatus } = usePaymentStatusChecks(studentId);
+
+  const reconcileReturnedOrder = useCallback(() => {
+    const order = browserOrder.current;
+    if (!order) return;
+    browserOrder.current = null;
+    setCheckout((previous) => previous?.kind === 'ready' && previous.payment.orderId === order.orderId
+      ? { kind: 'opened', payment: previous.payment } : previous);
+    void checkStatus(order);
+  }, [checkStatus]);
 
   useEffect(() => {
-    let active = true;
-    void getStudentFines(studentId).then((fines) => {
-      if (active) setResult(fines);
-    });
-    return () => { active = false; };
+    return subscribeStudentFines(studentId, setResult);
   }, [attempt, studentId]);
 
-  useEffect(() => () => { activeCheckout.current = null; }, []);
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') reconcileReturnedOrder();
+    });
+    return () => {
+      subscription?.remove();
+      activeCheckout.current = null;
+      browserOrder.current = null;
+    };
+  }, [reconcileReturnedOrder]);
 
   function reload() {
     setResult(null);
@@ -79,7 +74,7 @@ function StudentFinesList({ studentId }: { studentId: string }) {
     }
   }
 
-  async function payFine(fineId: string) {
+  async function payFine(fineId: string, orderId: string | null) {
     if (activeCheckout.current !== null) return;
     activeCheckout.current = fineId;
     setCheckout({ kind: 'creating', fineId });
@@ -100,25 +95,37 @@ function StudentFinesList({ studentId }: { studentId: string }) {
         return;
       }
       if (!response.ok) {
-        const message = response.error.code === 'NOT_FOUND'
-          ? 'Tagihan denda tidak ditemukan.'
-          : getErrorMessage(response.error.code);
+        const code = response.error.code;
+        if (code === 'CONFLICT' && orderId) void checkStatus({ fineId, orderId });
+        const message = code === 'NOT_FOUND' ? 'Tagihan denda tidak ditemukan.'
+          : code === 'CONFLICT' ? 'Pembayaran sedang diproses atau tagihan telah berubah.'
+          : getErrorMessage(code);
         setCheckout({ kind: 'error', fineId, message });
         return;
       }
 
-      if (Platform.OS !== 'web') {
-        failureMessage = 'Halaman pembayaran tidak dapat dibuka.';
-        const browser = await openBrowserAsync(response.data.redirectUrl);
-        if (browser.type === WebBrowserResultType.LOCKED) throw new Error(failureMessage);
+      const payment = response.data;
+      if (Platform.OS === 'web') {
+        setCheckout({ kind: 'ready', payment });
+        return;
       }
+
+      failureMessage = 'Halaman pembayaran tidak dapat dibuka.';
+      browserOrder.current = { fineId, orderId: payment.orderId };
+      const browser = await openBrowserAsync(payment.redirectUrl);
+      if (browser.type === WebBrowserResultType.LOCKED) throw new Error(failureMessage);
 
       if (activeCheckout.current === fineId) {
         setCheckout(auth.currentUser === user
-          ? { kind: 'ready', payment: response.data }
+          ? { kind: 'opened', payment }
           : { kind: 'error', fineId, message: getErrorMessage('UNAUTHENTICATED') });
+        // On Android the promise resolves at launch. AppState handles the return.
+        if (browser.type === WebBrowserResultType.CANCEL || browser.type === WebBrowserResultType.DISMISS) {
+          reconcileReturnedOrder();
+        }
       }
     } catch {
+      if (browserOrder.current?.fineId === fineId) browserOrder.current = null;
       if (activeCheckout.current === fineId) {
         setCheckout({ kind: 'error', fineId, message: failureMessage });
       }
@@ -127,9 +134,11 @@ function StudentFinesList({ studentId }: { studentId: string }) {
     }
   }
 
+  const snapshot = result?.ok ? result.data : null;
+  const fromCache = snapshot?.fromCache ?? false;
   const status = !result ? 'loading'
     : !result.ok ? 'error'
-    : result.data.length === 0 ? 'empty' : 'ready';
+    : result.data.fines.length === 0 ? 'empty' : 'ready';
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -154,60 +163,41 @@ function StudentFinesList({ studentId }: { studentId: string }) {
       <AsyncState
         status={status}
         error={result?.ok === false ? result.error : null}
+        fromCache={fromCache}
         onRetry={reload}
-        emptyTitle="Belum ada tagihan denda"
-        emptyMessage="Tagihan keterlambatan Anda akan muncul di sini."
+        emptyTitle={fromCache ? 'Tagihan belum dapat diperiksa' : 'Belum ada tagihan denda'}
+        emptyMessage={fromCache ? 'Periksa koneksi internet untuk memuat tagihan.' : 'Tagihan keterlambatan Anda akan muncul di sini.'}
       >
         <FlatList
-          data={result?.ok ? result.data : []}
+          data={snapshot?.fines ?? []}
           keyExtractor={(fine) => fine.id}
           contentContainerStyle={styles.list}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           renderItem={({ item }) => {
-            const payment = checkout?.kind === 'ready' && checkout.payment.fineId === item.id
-              ? checkout.payment : null;
-            const creating = checkout?.kind === 'creating';
-            const creatingForThisFine = creating && checkout.fineId === item.id;
-            const error = checkout?.kind === 'error' && checkout.fineId === item.id ? checkout.message : null;
+            const payment = (checkout?.kind === 'ready' || checkout?.kind === 'opened')
+              && checkout.payment.fineId === item.id ? checkout.payment : null;
+            const orderId = item.orderId ?? payment?.orderId ?? null;
+            const checkoutBusy = checkout?.kind === 'creating';
+            const checkoutError = checkout?.kind === 'error' && checkout.fineId === item.id ? checkout.message : null;
 
             return (
-              <View style={styles.card}>
-                <Text style={styles.sessionTitle}>
-                  {item.sessionTitle ?? item.session?.title ?? 'Judul sesi tidak tersedia'}
-                </Text>
-                <Text style={styles.body}>{formatFineDate(item)}</Text>
-                <Text style={styles.body}>Terlambat {item.lateMinutes} menit</Text>
-                <Text style={styles.amount}>{rupiahFormatter.format(item.amount)}</Text>
-                <StatusBadge status={statusLabels[item.status]} size="sm" />
-                {payment && (
-                  <>
-                    <Text style={styles.body}>Nomor pesanan {payment.orderId}</Text>
-                    {Platform.OS === 'web' && (
-                      <ExternalLink
-                        href={payment.redirectUrl}
-                        rel="noopener noreferrer"
-                        style={[styles.payButton, styles.payButtonText, styles.payLink]}
-                      >
-                        Buka Halaman Pembayaran
-                      </ExternalLink>
-                    )}
-                  </>
-                )}
-                {item.status === 'unpaid' && !payment && (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityState={{ disabled: creating, busy: creatingForThisFine }}
-                    disabled={creating}
-                    onPress={() => { void payFine(item.id); }}
-                    style={({ pressed }) => [styles.payButton, (creating || pressed) && styles.pressed]}
-                  >
-                    <Text style={styles.payButtonText}>
-                      {creatingForThisFine ? 'Menyiapkan pembayaran…' : 'Bayar Denda'}
-                    </Text>
-                  </Pressable>
-                )}
-                {error && <Text accessibilityRole="alert" style={styles.checkoutError}>{error}</Text>}
-              </View>
+              <StudentFineCard
+                key={orderId ?? item.id}
+                fine={item}
+                studentId={studentId}
+                orderId={orderId}
+                checkoutLink={checkout?.kind === 'ready' && payment?.orderId === orderId ? payment : null}
+                checkoutError={checkoutError}
+                creating={checkoutBusy && checkout.fineId === item.id}
+                checkoutBusy={checkoutBusy}
+                fromCache={fromCache}
+                check={orderId ? checks.get(orderId) : undefined}
+                onPay={() => { void payFine(item.id, orderId); }}
+                onOpenCheckout={(opening) => {
+                  browserOrder.current = { fineId: opening.fineId, orderId: opening.orderId };
+                }}
+                onCheckStatus={() => { if (orderId) void checkStatus({ fineId: item.id, orderId }); }}
+              />
             );
           }}
         />
@@ -241,26 +231,4 @@ const styles = StyleSheet.create({
   body: { color: colors.textMuted, fontSize: 14, lineHeight: 20 },
   list: { padding: spacing.md, paddingBottom: spacing.xl },
   separator: { height: spacing.sm },
-  card: {
-    gap: spacing.sm,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surface,
-  },
-  sessionTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  amount: { color: colors.text, fontSize: 18, fontWeight: '700' },
-  payButton: {
-    alignSelf: 'flex-start',
-    justifyContent: 'center',
-    minHeight: 44,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
-    backgroundColor: colors.primary,
-  },
-  payButtonText: { color: colors.surface, fontSize: 14, fontWeight: '700' },
-  payLink: { lineHeight: 28 },
-  checkoutError: { color: colors.dangerText, fontSize: 14, lineHeight: 20 },
 });
