@@ -52,6 +52,12 @@ service cloud.firestore {
       return value is string && value.trim().size() >= minimum && value.size() <= maximum;
     }
 
+    function validAttendancePolicy(data) {
+      return data.gracePeriodMinutes is int && data.gracePeriodMinutes >= 0
+        && data.gracePeriodMinutes <= 9007199254740991
+        && data.fineAmount is int && data.fineAmount > 0 && data.fineAmount <= 9007199254740991;
+    }
+
     match /deviceTokens/{tokenId} {
       allow read, write: if false;
     }
@@ -121,22 +127,34 @@ service cloud.firestore {
           && validText(data.course, 1, 200) && validText(data.timeZone, 1, 100);
       }
 
+      function canCreateClass(data) {
+        let fields = ['name', 'code', 'course', 'timeZone', 'assistantId', 'isArchived', 'createdAt', 'updatedAt'];
+        return (isCoordinator() && hasExactFields(data, fields.concat(['gracePeriodMinutes', 'fineAmount']))
+            && validAttendancePolicy(data))
+          || (hasRole('assistant') && data.assistantId == request.auth.uid && hasExactFields(data, fields));
+      }
+
+      function canUpdateClass(data) {
+        let changed = data.diff(resource.data).affectedKeys();
+        let fields = ['name', 'code', 'course', 'timeZone', 'assistantId', 'isArchived', 'updatedAt'];
+        let policyFields = ['gracePeriodMinutes', 'fineAmount'];
+        return (isCoordinator() && changed.hasOnly(fields.concat(policyFields))
+            && (!changed.hasAny(policyFields) || validAttendancePolicy(data)))
+          || (hasRole('assistant') && resource.data.assistantId == request.auth.uid
+            && data.assistantId == request.auth.uid && changed.hasOnly(fields));
+      }
+
       allow get: if isCoordinator()
         || (hasRole('assistant') && resource.data.assistantId == request.auth.uid)
         || (isStudent() && isActiveMember(classId));
       allow list: if isCoordinator()
         || (hasRole('assistant') && resource.data.assistantId == request.auth.uid);
-      allow create: if (isCoordinator() || (hasRole('assistant') && request.resource.data.assistantId == request.auth.uid))
-        && hasExactFields(request.resource.data,
-          ['name', 'code', 'course', 'timeZone', 'assistantId', 'isArchived', 'createdAt', 'updatedAt'])
+      allow create: if canCreateClass(request.resource.data)
         && request.resource.data.isArchived == false
         && request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time
         && validClassDetails(request.resource.data);
-      allow update: if (isCoordinator() || (hasRole('assistant') && resource.data.assistantId == request.auth.uid
-          && request.resource.data.assistantId == request.auth.uid))
+      allow update: if canUpdateClass(request.resource.data)
         && resource.data.isArchived == false && request.resource.data.isArchived is bool
-        && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['name', 'code', 'course', 'timeZone', 'assistantId', 'isArchived', 'updatedAt'])
         && request.resource.data.updatedAt == request.time && validClassDetails(request.resource.data);
     }
 
@@ -182,6 +200,13 @@ service cloud.firestore {
     }
 
     match /sessions/{sessionId} {
+      function matchesClassAttendancePolicy(data) {
+        let course = getAfter(/databases/$(database)/documents/classes/$(data.classId)).data;
+        return course.assistantId == request.auth.uid && course.isArchived == false
+          && validAttendancePolicy(data)
+          && data.gracePeriodMinutes == course.gracePeriodMinutes && data.fineAmount == course.fineAmount;
+      }
+
       function validSessionDetails(data) {
         return validText(data.title, 1, 200) && validText(data.room, 1, 200)
           && validText(data.timeZone, 1, 100)
@@ -217,11 +242,11 @@ service cloud.firestore {
         || (isStudent() && isActiveMember(resource.data.classId));
       allow create: if hasRole('assistant')
         && hasExactFields(request.resource.data, ['classId', 'assistantId', 'title', 'room', 'startsAt',
-          'endsAt', 'timeZone', 'status', 'isArchived', 'openedAt', 'closedAt', 'createdAt', 'updatedAt'])
+          'endsAt', 'timeZone', 'gracePeriodMinutes', 'fineAmount', 'status', 'isArchived',
+          'openedAt', 'closedAt', 'createdAt', 'updatedAt'])
         && isDocumentId(request.resource.data.classId)
         && request.resource.data.assistantId == request.auth.uid
-        && classData(request.resource.data.classId).assistantId == request.auth.uid
-        && classIsActiveAfterWrite(request.resource.data.classId)
+        && matchesClassAttendancePolicy(request.resource.data)
         && request.resource.data.status == 'not_open' && request.resource.data.isArchived == false
         && request.resource.data.openedAt == null && request.resource.data.closedAt == null
         && request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time
