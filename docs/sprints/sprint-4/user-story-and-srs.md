@@ -58,15 +58,15 @@ Pada Sprint 4, aplikasi disempurnakan dengan memisahkan kewenangan **Asisten Lab
 
 | Kode SRS | User Story |
 | :--- | :--- |
-| `S4-SRS-11` | Sebagai Aslab, saya ingin menambah, melihat, mengubah, dan menonaktifkan data laboratorium beserta nama, mata kuliah terkait, deskripsi lokasi, dan koordinatnya di Firestore agar seluruh lab terkelola rapi. |
-| `S4-SRS-12` | Sebagai Aslab, saya ingin mengatur radius validasi presensi, durasi *grace period* keterlambatan, dan nominal denda tetap pada setiap laboratorium agar kebijakan presensi dan denda tersinkronisasi dengan backend check-in. |
-| `S4-SRS-13` | Sebagai Aslab, saya ingin mengunduh tiga file template CSV/spreadsheet terpisah untuk bulk insert laboratorium, praktikan, dan asprak agar pengisian data massal sesuai format. |
+| `S4-SRS-11` | Sebagai Aslab, saya ingin menambah, melihat, mengubah, dan menonaktifkan data ruang laboratorium fisik (`laboratories`) beserta nama, deskripsi, kapasitas, `geotagId`, `geoPoint`, dan `radiusMeters` agar 1 ruang fisik dapat digunakan oleh berbagai mata kuliah. |
+| `S4-SRS-12` | Sebagai Aslab, saya ingin mengatur ruang lab default (`labId`), durasi *grace period* keterlambatan (`gracePeriodMinutes`), dan nominal denda tetap (`fineAmount`) pada setiap kelas praktikum (`classes`) agar kebijakan keterlambatan & denda melekat pada mata kuliah/kelas terkait dan di-snapshot ke sesi. |
+| `S4-SRS-13` | Sebagai Aslab, saya ingin mengunduh tiga file template CSV/spreadsheet terpisah untuk bulk insert kelas/grup lab per mata kuliah, praktikan ke kelas, dan asprak ke kelas agar pengisian data massal sesuai format. |
 | `S4-SRS-14` | Sebagai Aslab, saya ingin melihat setiap baris data hasil unggah bulk insert dalam daftar `ScrollView` interaktif agar dapat menerima/menolak baris (accept/deny), mengubah data, dan melengkapi kolom kosong dengan validasi sebelum disimpan. |
-| `S4-SRS-15` | Sebagai Aslab, saya ingin melakukan single dan bulk insert untuk membuat sejumlah laboratorium sekaligus berdasarkan satu mata kuliah secara terpisah agar penyiapan banyak lab menjadi cepat. |
-| `S4-SRS-16` | Sebagai Aslab, saya ingin melakukan single dan bulk insert data praktikan ke laboratorium tertentu secara terpisah dengan deteksi duplikasi dan validasi akun terdaftar. |
-| `S4-SRS-17` | Sebagai Aslab, saya ingin melakukan single dan bulk insert data asprak ke laboratorium tertentu secara terpisah agar penugasan asprak per lab tertata rapi. |
-| `S4-SRS-18` | Sebagai Aslab, saya ingin memindahkan praktikan dari satu laboratorium ke laboratorium lainnya tanpa memindahkan jadwal praktikum atau menghapus riwayat presensi, izin, maupun denda lama. |
-| `S4-SRS-19` | Sebagai Aslab, saya ingin memindahkan penugasan Aslab atau Asprak antar laboratorium tanpa memindahkan jadwal praktikum agar rotasi pengampu berjalan fleksibel. |
+| `S4-SRS-15` | Sebagai Aslab, saya ingin melakukan single dan bulk insert untuk membuat sejumlah kelas/grup laboratorium (`classes`) sekaligus berdasarkan satu mata kuliah (`course`) lengkap dengan tautan ruang fisik (`labId`), *grace period*, dan denda secara terpisah. |
+| `S4-SRS-16` | Sebagai Aslab, saya ingin melakukan single dan bulk insert data praktikan (`memberships`) ke kelas/grup laboratorium tertentu secara terpisah dengan deteksi duplikasi dan validasi akun terdaftar. |
+| `S4-SRS-17` | Sebagai Aslab, saya ingin melakukan single dan bulk insert penugasan asprak (`assistantId`) ke kelas/grup laboratorium tertentu secara terpisah agar penugasan asprak tertata rapi. |
+| `S4-SRS-18` | Sebagai Aslab, saya ingin memindahkan praktikan dari satu kelas/grup laboratorium ke kelas/grup lainnya tanpa memindahkan jadwal praktikum atau menghapus riwayat presensi, izin, maupun denda lama. |
+| `S4-SRS-19` | Sebagai Aslab, saya ingin memindahkan penugasan Aslab atau Asprak antar kelas/grup laboratorium tanpa memindahkan jadwal praktikum agar rotasi pengampu berjalan fleksibel. |
 | `S4-SRS-20` | Sebagai Aslab, saya ingin perubahan koordinat dan radius laboratorium langsung tersinkronisasi ke peta interaktif (`MapsScreen`) serta proses batch commit menampilkan ringkasan hasil tanpa duplikasi. |
 
 ### Porsi 3 — Hanif Ihsanul Huda (`S4-SRS-21` – `S4-SRS-30`)

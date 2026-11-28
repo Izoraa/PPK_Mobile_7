@@ -66,22 +66,24 @@ Seluruh aturan berikut bersifat **mengikat** pada UI, service, backend API, dan 
    * **Asprak (`assistant`)**: **Hanya** melihat kelas/jadwal/sesi yang menjadi tanggung jawabnya, membuka/menutup sesi, menerbitkan QR presensi, memantau kehadiran & keterlambatan, serta memeriksa/memutuskan pengajuan izin praktikan kelasnya. **Asprak dilarang mengelola distribusi praktikan maupun konfigurasi laboratorium global.**
    * **Praktikan (`student`)**: Melihat jadwal & detail sesi kelasnya, melakukan presensi QR + lokasi, melihat peta & aktivitas lab, mengajukan & memantau izin, melihat tagihan denda, membayar via Midtrans Sandbox, serta melihat riwayat presensi & riwayat pembayaran miliknya sendiri.
 
-### B. Manajemen Laboratorium, Bulk Insert & Perpindahan (Baru di Sprint 4)
-4. **Konfigurasi Kebijakan per Laboratorium:**
-   * Setiap laboratorium menyimpan identitas, mata kuliah terkait, lokasi, koordinat (`latitude`, `longitude`), **cakupan radius presensi (`radiusMeters`)**, **durasi toleransi keterlambatan (`gracePeriodMinutes`)**, dan **nominal denda tetap (`fineAmount`)**.
-   * Satu sumber kebenaran lokasi & kebijakan: Peta (Maps), validasi lokasi presensi, dan perhitungan denda membaca dokumen laboratorium kanonik yang sama (tanpa hardcode berbeda antar modul).
+### B. Pemisahan Ruang Lab Fisik vs Kelas Praktikum, Bulk Insert & Perpindahan (Baru di Sprint 4)
+4. **Pemisahan Entitas Ruang Fisik (`laboratories`) vs Kelas/Grup Praktikum (`classes`):**
+   * **`laboratories/{labId}` (Tempat / Ruang Fisik & Geotag):** Murni menyimpan data fisik & lokasi ruangan: `name`, `description`, `capacity`, `geotagId` (`A`/`B`/`C`/`D`), `geoPoint` (`latitude`, `longitude`), **cakupan radius presensi (`radiusMeters`)**, dan `isActive`. **Satu ruang lab fisik bebas digunakan oleh banyak mata kuliah/kelas berbeda** (tidak menyimpan `course`, `gracePeriodMinutes`, maupun `fineAmount`).
+   * **`classes/{classId}` (Kelas / Grup Praktikum per Mata Kuliah):** Menyimpan `name`, `code`, **`course`** (1 mata kuliah), **`labId`** (ruang lab fisik default di `laboratories`), `assistantId` (Asprak pengampu), **`gracePeriodMinutes`** (durasi toleransi keterlambatan kebijakan kelas/matkul), dan **`fineAmount`** (nominal denda tetap IDR kebijakan kelas/matkul).
+   * **`sessions/{sessionId}` (Snapshot Kebijakan):** Saat sesi dibuat, `gracePeriodMinutes` dan `fineAmount` disalin (*snapshot*) dari `classes/{classId}` (serta merujuk ruang fisik `labId`) agar perubahan kebijakan kelas di kemudian hari tidak mengubah perhitungan historis sesi yang sudah berjalan/selesai.
+   * Satu sumber kebenaran: Peta (Maps) & validasi GPS membaca `laboratories/{labId}`, sedangkan perhitungan keterlambatan & denda membaca `sessions/{sessionId}` (snapshot dari `classes/{classId}`).
 5. **Pemisahan 3 Fitur Bulk / Single Insert:**
    * Tersedia **3 alur bulk/single insert yang terpisah** (bukan satu file gabungan):
-     1. Bulk / Single Insert **Laboratorium** berdasarkan satu mata kuliah.
-     2. Bulk / Single Insert **Praktikan** ke laboratorium tertentu.
-     3. Bulk / Single Insert **Asprak** ke laboratorium tertentu.
+     1. Bulk / Single Insert **Kelas/Grup Praktikum (`classes`)** sekaligus berdasarkan satu **mata kuliah (`course`)**, masing-masing menautkan ruang fisik (`labId`), `gracePeriodMinutes`, dan `fineAmount`.
+     2. Bulk / Single Insert **Praktikan (`memberships`)** ke kelas/grup lab tertentu.
+     3. Bulk / Single Insert **Asprak (`assistantId`)** ke kelas/grup lab tertentu.
    * Masing-masing dari ketiga alur menyediakan **downloadable file template** (CSV/spreadsheet).
 6. **Staging Interaktif (`ScrollView`) Sebelum Simpan:**
    * Setiap baris data dari file bulk wajib dirender sebagai daftar kartu di dalam `ScrollView` yang dapat diatur Aslab sebelum commit: **Accept / Deny** per baris, **ubah/edit** data, dan **melengkapi kolom kosong**. Hanya baris berstatus *accepted* & valid yang dikirim ke database.
 7. **Aturan Perpindahan (Transfer):**
-   * Mendukung pemindahan **Praktikan** antar laboratorium dan pemindahan **Aslab/Asprak** antar laboratorium.
-   * **Tidak ada fitur perpindahan jadwal praktikum** — jadwal/sesi tetap melekat pada kelas/laboratorium asalnya.
-   * Pemindahan praktikan menonaktifkan keanggotaan lama tanpa menghapus catatan historis presensi, izin, atau denda pada laboratorium sebelumnya.
+   * Mendukung pemindahan **Praktikan** antar kelas/grup lab (`classes`) dan pemindahan penugasan **Aslab/Asprak** antar kelas/grup lab.
+   * **Tidak ada fitur perpindahan jadwal praktikum** — jadwal/sesi (`sessions`) tetap melekat pada kelas asalnya.
+   * Pemindahan praktikan menonaktifkan keanggotaan (`memberships`) lama tanpa menghapus catatan historis presensi, izin, atau denda pada kelas sebelumnya.
 
 ### C. Siklus Hidup Sesi, QR Code & Presensi Berbasis Lokasi
 8. **Transisi Status Sesi Satu Arah:**
@@ -146,10 +148,10 @@ Seluruh aturan berikut bersifat **mengikat** pada UI, service, backend API, dan 
 
 ```text
 users/{uid}
-laboratories/{labId}                              # Kanonik lokasi, koordinat, radius, grace period & denda
-classes/{classId}                                 # Kelas praktikum terikat ke lab & asprak
-memberships/{classId}_{studentId}                 # Keanggotaan praktikan pada kelas/lab
-sessions/{sessionId}                              # Jadwal & status sesi praktikum
+laboratories/{labId}                              # Murni ruang fisik & geotag (koordinat, radius, kapasitas)
+classes/{classId}                                 # Kelas/grup praktikum per 1 course + labId + gracePeriod & fineAmount
+memberships/{classId}_{studentId}                 # Keanggotaan praktikan pada kelas
+sessions/{sessionId}                              # Jadwal sesi + snapshot gracePeriodMinutes & fineAmount dari kelas
 sessions/{sessionId}/participations/{studentId}   # Partisipasi unik: attendance | leave
 fines/{sessionId}_{studentId}                     # [BARU S4] Tagihan denda (maks 1 per kejadian terlambat)
 paymentTransactions/{orderId}                     # [BARU S4] Riwayat transaksi Midtrans Sandbox
@@ -162,10 +164,10 @@ notificationJobs/{jobId}                          # Antrean push notification wo
 | Koleksi | Field Wajib & Penambahan Sprint 4 |
 | :--- | :--- |
 | **`users/{uid}`** | `uid`, `name`, `email`, `studentNumber: string \| null`, `role: 'student' \| 'assistant' \| 'coordinator'`, `requestedRole`, `createdAt`, `updatedAt`. |
-| **`laboratories/{labId}`** | `name`, `course` *(S4)*, `description`, `capacity`, `latitude`, `longitude`, `radiusMeters`, **`gracePeriodMinutes: number`** *(S4, default mis. 15)*, **`fineAmount: number`** *(S4, nominal IDR tetap)*, `geotagCode: 'A'\|'B'\|'C'\|'D'\|string`, `isActive`, `createdAt`, `updatedAt`. |
-| **`classes/{classId}`** | `name`, `code`, `course`, `labId` *(relasi ke lab)*, `timeZone` (`Asia/Jakarta`), `assistantId`, `aslabId` *(opsional/owner coordinator)*, `isArchived`, `createdAt`, `updatedAt`. |
-| **`memberships/{classId}_{studentId}`** | `classId`, `labId` *(S4)*, `studentId`, `assistantId`, `studentName`, `studentNumber`, `isActive`, `transferredFromClassId?: string \| null` *(S4 audit transfer)*, `createdAt`, `updatedAt`. |
-| **`sessions/{sessionId}`** | `classId`, `labId`, `assistantId`, `title`, `room`, `startsAt`, `endsAt`, `timeZone`, `gracePeriodMinutes` *(snapshot/override kebijakan lab)*, `fineAmount` *(snapshot kebijakan lab)*, `status: 'not_open' \| 'open' \| 'closed'`, `isArchived`, `openedAt`, `closedAt`, `createdAt`, `updatedAt`. |
+| **`laboratories/{labId}`** *(Ruang Fisik)* | `name`, `description`, `capacity`, `geotagId: 'A'\|'B'\|'C'\|'D'\|string`, `geoPoint: GeoPoint` *(latitude, longitude)*, `radiusMeters: number`, `isActive`, `createdAt`, `updatedAt`. *(Tidak menyimpan `course`, `gracePeriodMinutes`, atau `fineAmount` agar 1 ruang fisik bebas dipakai banyak mata kuliah).* |
+| **`classes/{classId}`** *(Kelas / Grup Praktikum)* | `name`, `code`, `course` *(1 mata kuliah)*, **`labId: string`** *(S4 — ruang fisik default di `laboratories`)*, **`gracePeriodMinutes: number`** *(S4 — durasi toleransi keterlambatan, mis. default 15)*, **`fineAmount: number`** *(S4 — nominal denda tetap IDR)*, `timeZone` (`Asia/Jakarta`), `assistantId`, `aslabId` *(opsional)*, `isArchived`, `createdAt`, `updatedAt`. |
+| **`memberships/{classId}_{studentId}`** | `classId`, `studentId`, `assistantId`, `studentName`, `studentNumber`, `isActive`, `transferredFromClassId?: string \| null` *(S4 audit transfer antar kelas)*, `createdAt`, `updatedAt`. |
+| **`sessions/{sessionId}`** | `classId`, `labId` *(ruang fisik sesi, default dari `classes.labId`)*, `assistantId`, `title`, `room`, `startsAt`, `endsAt`, `timeZone`, **`gracePeriodMinutes: number`** *(S4 — snapshot dari `classes.gracePeriodMinutes`)*, **`fineAmount: number`** *(S4 — snapshot dari `classes.fineAmount`)*, `status: 'not_open' \| 'open' \| 'closed'`, `isArchived`, `openedAt`, `closedAt`, `createdAt`, `updatedAt`. |
 | **`sessions/{sessionId}/participations/{studentId}`** | **Shared:** `sessionId`, `classId`, `labId`, `assistantId`, `studentId`, `studentName`, `studentNumber`, `kind: 'attendance' \| 'leave'`, `createdAt`, `updatedAt`.<br>**Attendance:** `checkedInAt`, `locationId`, `validationMethod: 'qr_location'`, **`attendanceStatus: 'on_time' \| 'late'`** *(S4)*, **`lateMinutes: number`** *(S4)*, **`fineId: string \| null`** *(S4)*.<br>**Leave:** `reason`, `status: 'pending' \| 'approved' \| 'rejected'`, `reviewedBy`, `reviewedAt`, `reviewNote`, **`absenceType: 'excused_absence' \| null`** *(S4 saat approved)*, **`fineExempt: boolean`** *(S4, `true` saat approved)*, `ai: { status, category, sentiment: 'positive' \| 'neutral' \| 'negative' \| null, sentimentScore: number \| null, sentimentSummary: string \| null, confidence, modelVersion, classifiedAt, errorCode, requestId, startedAt, attemptCount }`. |
 | **`fines/{sessionId}_{studentId}`** *(Baru S4)* | `id`, `studentId`, `studentName`, `studentNumber`, `sessionId`, `sessionTitle`, `classId`, `labId`, `labName`, `participationId`, `amount: number`, `currency: 'IDR'`, `lateMinutes: number`, `status: 'unpaid' \| 'pending' \| 'paid' \| 'failed'`, `latestOrderId: string \| null`, `paidAt: Timestamp \| null`, `createdAt`, `updatedAt`. |
 | **`paymentTransactions/{orderId}`** *(Baru S4)* | `orderId`, `fineId`, `studentId`, `sessionId`, `sessionTitle`, `labId`, `amount: number`, `currency: 'IDR'`, `provider: 'midtrans_sandbox'`, `snapToken: string \| null`, `redirectUrl: string \| null`, `paymentType: string \| null` *(dari webhook Midtrans)*, `midtransTransactionId: string \| null`, `midtransTransactionStatus: string \| null`, `status: 'pending' \| 'success' \| 'failed'`, `createdAt`, `paidAt: Timestamp \| null`, `updatedAt`. |
@@ -197,8 +199,8 @@ Semua request terautentikasi memakai header `Authorization: Bearer <Firebase ID 
 | Resource | Belum Login | Praktikan (`student`) | Asprak (`assistant`) | Aslab (`coordinator`) | Backend Admin SDK |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `users/{uid}` | Ditolak | Baca & buat profil awal sendiri (`role: student`) | Baca profil sendiri & daftar student terbatas | Baca semua user; ACC promosi `student`↔`assistant` | Akses penuh terverifikasi |
-| `laboratories/{labId}` | Ditolak | Baca (untuk Maps & validasi) | Baca (tidak boleh ubah konfigurasi lab) | **CRUD penuh** (nama, koordinat, radius, grace period, denda, bulk insert) | Validasi check-in & fine |
-| `classes/{classId}` | Ditolak | Baca kelas yang diikuti aktif | Baca kelas miliknya sendiri (tidak ubah distribusi) | **CRUD, bulk insert, transfer Asprak/Aslab** | Validasi sesi & relasi |
+| `laboratories/{labId}` | Ditolak | Baca (untuk Maps & validasi) | Baca (tidak boleh ubah konfigurasi ruang) | **CRUD ruang fisik** (nama, deskripsi, kapasitas, geotagId, geoPoint, radiusMeters) | Validasi lokasi check-in |
+| `classes/{classId}` | Ditolak | Baca kelas yang diikuti aktif | Baca kelas miliknya sendiri (tidak ubah distribusi/kebijakan denda) | **CRUD kelas, set `gracePeriodMinutes` & `fineAmount`, bulk insert per course, transfer Asprak/Aslab** | Validasi sesi, grace period & denda |
 | `memberships` | Ditolak | Baca milik sendiri | Baca anggota kelas miliknya saja *(read-only)* | **Single/Bulk insert & transfer praktikan antar lab** | Validasi keanggotaan |
 | `sessions/{sessionId}` | Ditolak | Baca sesi kelasnya | **CRUD, buka & tutup sesi miliknya** | Baca seluruh sesi (Dashboard & riwayat) | Validasi check-in & notif |
 | `participations` | Ditolak | Baca milik sendiri; create `leave` awal (`pending`) | Baca rekap sesi miliknya; review izin via API | Baca rekap lintas lab untuk Dashboard | Create `attendance`, update `leave` review & `ai` |
@@ -228,7 +230,7 @@ Semua request terautentikasi memakai header `Authorization: Bearer <Firebase ID 
 
 | ID Uji | Skenario Pengujian | Hasil yang Diharapkan | Pemilik |
 | :--- | :--- | :--- | :--- |
-| **S4-AT-01** | Aslab mengatur koordinat, radius, grace period (mis. 15 mnt), dan denda tetap (mis. Rp10.000) pada Lab A | Tersimpan di Firestore, tampil di Maps, dan langsung dipakai backend saat check-in | Hasta + Maulana |
+| **S4-AT-01** | Aslab mengatur koordinat & radius pada Ruang Lab (`laboratories`), serta *grace period* (mis. 15 mnt) & nominal denda tetap (mis. Rp10.000) pada Kelas Praktikum (`classes`) | Tersimpan terpisah rapi di Firestore, radius tampil di Maps, dan snapshot kebijakan kelas langsung dipakai backend saat check-in | Hasta + Maulana |
 | **S4-AT-02** | Aslab mengunduh 3 template CSV terpisah (Lab, Praktikan, Asprak) | Ketiga file template terunduh dengan format kolom yang benar & terpisah | Hasta |
 | **S4-AT-03** | Aslab mengunggah bulk file → review di `ScrollView` → deny 1 baris, edit/isi kolom kosong 1 baris, accept sisanya → submit | Hanya baris *accepted* & valid yang tersimpan ke Firestore; baris *denied* tidak masuk | Hasta |
 | **S4-AT-04** | Aslab memindahkan Praktikan dari Lab A ke Lab B, dan memindahkan Asprak antar lab | Keanggotaan/penugasan berpindah tanpa memindahkan jadwal dan tanpa menghapus riwayat lama | Hasta |

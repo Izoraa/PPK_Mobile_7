@@ -92,15 +92,15 @@
 | `S4-SRS-08` | Checkout Midtrans | Alur pembayaran Midtrans Sandbox di aplikasi via WebView / in-app browser | Maulana | 🚧 |
 | `S4-SRS-09` | Status Pembayaran | Pembaruan status `pending`/`success`/`failed` berbasis verifikasi server + coba bayar ulang | Maulana | 🚧 |
 | `S4-SRS-10` | Riwayat Pembayaran | Riwayat transaksi & pembayaran persisten di Firestore (tetap tersedia setelah restart) | Maulana | 🚧 |
-| `S4-SRS-11` | Manajemen Lab Aslab | CRUD data laboratorium (nama, mata kuliah, lokasi, koordinat, status aktif) oleh Aslab | Hasta | 🚧 |
-| `S4-SRS-12` | Kebijakan Lab | Pengaturan radius lokasi presensi, durasi *grace period*, & nominal denda tetap per lab | Hasta | 🚧 |
-| `S4-SRS-13` | Template Bulk | 3 file template unduhan terpisah untuk bulk insert Lab, Praktikan, dan Asprak | Hasta | 🚧 |
+| `S4-SRS-11` | Manajemen Ruang Lab | CRUD ruang lab fisik (`laboratories`: nama, deskripsi, kapasitas, `geotagId`, `geoPoint`, `radiusMeters`) | Hasta | 🚧 |
+| `S4-SRS-12` | Kebijakan Kelas | Pengaturan ruang default (`labId`), *grace period* (`gracePeriodMinutes`), & denda tetap (`fineAmount`) di `classes` | Hasta | 🚧 |
+| `S4-SRS-13` | Template Bulk | 3 file template unduhan terpisah untuk bulk insert Kelas/Lab per Matkul, Praktikan, dan Asprak | Hasta | 🚧 |
 | `S4-SRS-14` | Staging `ScrollView` | Tampilan preview per baris dalam `ScrollView` (Accept/Deny, edit/update, & isi sel kosong) | Hasta | 🚧 |
-| `S4-SRS-15` | Bulk/Single Lab | Single & bulk insert banyak laboratorium sekaligus berdasarkan satu mata kuliah (terpisah) | Hasta | 🚧 |
-| `S4-SRS-16` | Bulk/Single Praktikan | Single & bulk insert data praktikan ke laboratorium tertentu (terpisah) | Hasta | 🚧 |
-| `S4-SRS-17` | Bulk/Single Asprak | Single & bulk insert data asprak ke laboratorium tertentu (terpisah) | Hasta | 🚧 |
-| `S4-SRS-18` | Pindah Praktikan | Memindahkan praktikan antar lab tanpa memindah jadwal atau menghapus riwayat lama | Hasta | 🚧 |
-| `S4-SRS-19` | Pindah Aslab/Asprak | Memindahkan penugasan Aslab/Asprak antar lab tanpa memindah jadwal praktikum | Hasta | 🚧 |
+| `S4-SRS-15` | Bulk/Single Kelas Lab | Single & bulk insert banyak kelas/grup lab (`classes`) sekaligus berdasarkan satu mata kuliah (terpisah) | Hasta | 🚧 |
+| `S4-SRS-16` | Bulk/Single Praktikan | Single & bulk insert data praktikan (`memberships`) ke kelas/grup lab tertentu (terpisah) | Hasta | 🚧 |
+| `S4-SRS-17` | Bulk/Single Asprak | Single & bulk insert penugasan asprak ke kelas/grup lab tertentu (terpisah) | Hasta | 🚧 |
+| `S4-SRS-18` | Pindah Praktikan | Memindahkan praktikan antar kelas/grup lab tanpa memindah jadwal atau menghapus riwayat lama | Hasta | 🚧 |
+| `S4-SRS-19` | Pindah Aslab/Asprak | Memindahkan penugasan Aslab/Asprak antar kelas/grup lab tanpa memindah jadwal praktikum | Hasta | 🚧 |
 | `S4-SRS-20` | Sinkronisasi Maps & Batch | Sinkronisasi koordinat/radius ke `MapsScreen`, laporan hasil batch, & pencegahan duplikasi | Hasta | 🚧 |
 | `S4-SRS-21` | KPI Dashboard Aslab | Ringkasan real-time jumlah lab, jumlah praktikan, dan status kegiatan tiap lab dari Firestore | Hanif | 🚧 |
 | `S4-SRS-22` | Filter Periode | Filter **Hari, Minggu, dan Bulan** untuk jadwal, riwayat kegiatan, dan keuangan denda | Hanif | 🚧 |
@@ -311,12 +311,12 @@ npm run test:emulator
 ## 7. Database Seeder & Data Uji (Tahap Akhir Sprint 4)
 
 > 🚧 **Status: Ditunda hingga akhir integrasi Sprint 4.**  
-> Skrip seeder database **sengaja disusun paling akhir setelah seluruh 4 programmer menyelesaikan merge ke `integration/sprint-4`** agar seluruh skema akhir koleksi Firestore (`users`, `laboratories` + `gracePeriodMinutes`/`fineAmount`, `classes`, `memberships`, `sessions`, `participations` + `ai.sentiment`, `fines`, dan `paymentTransactions`) sudah 100% stabil dan tidak perlu dirombak ulang.
+> Skrip seeder database **sengaja disusun paling akhir setelah seluruh 4 programmer menyelesaikan merge ke `integration/sprint-4`** agar seluruh skema akhir koleksi Firestore (`users`, `laboratories` [ruang fisik & geotag], `classes` [course, `labId`, `gracePeriodMinutes`, `fineAmount`], `memberships`, `sessions`, `participations` + `ai.sentiment`, `fines`, dan `paymentTransactions`) sudah 100% stabil dan tidak perlu dirombak ulang.
 
 **Rencana Cakupan Seeder Final (`scripts/seed-demo-data.*`):**
 * [ ] Akun uji default untuk ketiga peran: **1 Aslab (`coordinator`)**, **2 Asprak (`assistant`)**, dan **3 Praktikan (`student`)** *(kredensial demo dicatat terpisah pada panduan UAT, tidak di-hardcode secret produksi)*.
-* [ ] 4 data laboratorium kanonik lengkap dengan koordinat geotag, radius presensi, durasi *grace period*, dan nominal denda tetap.
-* [ ] Sampel kelas, keanggotaan aktif, sesi `not_open` / `open` / `closed`, riwayat presensi (`on_time` & `late`), contoh tagihan denda (`unpaid` & `paid`), serta contoh pengajuan izin + hasil analisis sentimen AI.
+* [ ] 4 data ruang laboratorium fisik kanonik (`laboratories`) lengkap dengan `geotagId`, `geoPoint`, dan `radiusMeters`.
+* [ ] Sampel kelas (`classes` dengan `course`, `labId`, `gracePeriodMinutes`, & `fineAmount`), keanggotaan aktif, sesi `not_open` / `open` / `closed`, riwayat presensi (`on_time` & `late`), contoh tagihan denda (`unpaid` & `paid`), serta contoh pengajuan izin + hasil analisis sentimen AI.
 * [ ] 3 file contoh CSV bulk insert (Lab, Praktikan, Asprak) untuk demonstrasi cepat fitur *bulk insert* Aslab.
 
 ---
